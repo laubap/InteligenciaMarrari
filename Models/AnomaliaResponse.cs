@@ -13,6 +13,7 @@ public class AnomaliaResponse
     public float Score { get; set; }
 
     public string Mensagem { get; set; } = "";
+    public FeedbackSemelhanteDto? FeedbackSemelhante { get; set; }
 
     public ResumoAnomaliaDto Resumo { get; set; } = new();
     public PerfilComportamentalDto Perfil { get; set; } = new();
@@ -21,6 +22,7 @@ public class AnomaliaResponse
     public RiscoProcessoDto Risco { get; set; } = new();
     public TendenciasDto Tendencias { get; set; } = new();
     public ProcessoDto? Processo { get; set; }
+  
 }
 
 // Dados resumidos sobre a detecção da anomalia.

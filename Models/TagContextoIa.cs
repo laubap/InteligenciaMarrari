@@ -15,7 +15,6 @@ public class TagContextoIa
 
     // Listas são serializadas em JSON para armazenamento.
     public string? Impactos { get; set; }
-    public string? TagsRelacionadas { get; set; }
     public string? ModosOperacao { get; set; }
     public string? CausasProvaveis { get; set; }
     public string? AcoesRecomendadas { get; set; }

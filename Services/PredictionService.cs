@@ -1,9 +1,6 @@
 using System.Text.Json;
 
 // Serviço principal de detecção de anomalias.
-// Ele valida configuração e perfil da tag, calcula limites e score,
-// analisa dependências, risco e tendências, monta a mensagem de retorno
-// e persiste o histórico da detecção.
 public class PredictionService
 {
     private readonly AppDbContext _context;
@@ -15,6 +12,8 @@ public class PredictionService
     private readonly TendenciaValorService _tendenciaValorService;
     private readonly InterpretacaoDependenciasService _interpretacaoDependenciasService;
     private readonly ProcessoAnaliseService _processoAnaliseService;
+    private readonly BridgeValorAtualService _bridgeValorAtualService;
+    private readonly FeedbackAnomaliaAnaliseService _feedbackAnomaliaAnaliseService;
 
     public PredictionService(
         AppDbContext context,
@@ -25,7 +24,9 @@ public class PredictionService
         TendenciaRiscoService tendenciaRiscoService,
         TendenciaValorService tendenciaValorService,
         InterpretacaoDependenciasService interpretacaoDependenciasService,
-        ProcessoAnaliseService processoAnaliseService)
+        ProcessoAnaliseService processoAnaliseService,
+        BridgeValorAtualService bridgeValorAtualService,
+        FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService)
     {
         _context = context;
         _analiseRelacionadasService = analiseRelacionadasService;
@@ -36,6 +37,8 @@ public class PredictionService
         _tendenciaValorService = tendenciaValorService;
         _interpretacaoDependenciasService = interpretacaoDependenciasService;
         _processoAnaliseService = processoAnaliseService;
+        _bridgeValorAtualService = bridgeValorAtualService;
+        _feedbackAnomaliaAnaliseService = feedbackAnomaliaAnaliseService;
     }
 
     public async Task<AnomaliaResponse> Detectar(AnomaliaRequest request)
@@ -109,20 +112,23 @@ public class PredictionService
             contexto?.TipoRepresentacao ?? "perfil-comportamental"
         );
 
-        var mensagem = MontarMensagem(
+        var analiseFeedbacks = _feedbackAnomaliaAnaliseService.GerarAnaliseFeedbacks(
+            request.ClienteId,
+            request.TagName,
+            score,
+            request.Valor
+        );
+
+        var mensagem = MontarMensagemCliente(
             request,
-            perfil,
             contexto,
             ehAnomalia,
-            limiteInferior,
-            limiteSuperior,
             score,
-            analiseRelacionadas,
             riscoProcesso,
-            fatoresRisco,
-            tendenciaRisco,
             tendenciaValor
         );
+
+
 
         _historicoService.Registrar(
             request.ClienteId,
@@ -150,6 +156,8 @@ public class PredictionService
 
             Mensagem = mensagem,
 
+            FeedbackSemelhante = analiseFeedbacks,
+
             Resumo = new ResumoAnomaliaDto
             {
                 Status = ehAnomalia ? "Anomalia detectada" : "Comportamento normal",
@@ -172,7 +180,6 @@ public class PredictionService
                 Equipamento = contexto.Equipamento,
                 Area = contexto.Area,
                 ObservacaoModoOperacao = contexto.ObservacaoModoOperacao,
-
                 Impactos = LerLista(contexto.Impactos),
                 CausasProvaveis = LerLista(contexto.CausasProvaveis),
                 AcoesRecomendadas = LerLista(contexto.AcoesRecomendadas),
@@ -180,177 +187,102 @@ public class PredictionService
             },
 
             Processo = processo == null
-            ? null
-            : new ProcessoDto
-            {
-                Nome = processo.Nome,
-                Descricao = processo.Descricao,
-                Area = processo.Area,
-                Criticidade = processo.Criticidade,
-                Objetivo = processo.Objetivo,
-                CondicaoNormal = processo.CondicaoNormal,
-                ConsequenciasFalha = processo.ConsequenciasFalha,
-                ProcedimentoRecomendado = processo.ProcedimentoRecomendado
-            },
+                ? null
+                : new ProcessoDto
+                {
+                    Nome = processo.Nome,
+                    Descricao = processo.Descricao,
+                    Area = processo.Area,
+                    Criticidade = processo.Criticidade,
+                    Objetivo = processo.Objetivo,
+                    CondicaoNormal = processo.CondicaoNormal,
+                    ConsequenciasFalha = processo.ConsequenciasFalha,
+                    ProcedimentoRecomendado = processo.ProcedimentoRecomendado
+                },
 
             Dependencias = analiseRelacionadas.Resultados.Select(item => new DependenciaAnalisadaDto
             {
                 TagName = item.TagName,
                 Descricao = item.Descricao,
-
                 ValorAtual = item.ValorAtual,
                 Media = item.Media,
                 LimiteInferior = item.LimiteInferior,
                 LimiteSuperior = item.LimiteSuperior,
-
                 EhAnomalia = item.EhAnomalia,
                 Status = item.EhAnomalia ? "anômala" : "normal",
-
                 TipoRelacao = item.TipoRelacao,
                 Impacto = item.Impacto,
                 Criticidade = item.Criticidade,
                 Equipamento = item.Equipamento,
                 Area = item.Area,
+                Interpretacao = _interpretacaoDependenciasService.Interpretar(item, contexto)
+            }).ToList(),
 
-                Interpretacao = _interpretacaoDependenciasService.Interpretar(item, contexto)}).ToList(),
-                Risco = new RiscoProcessoDto
-                {
-                    Score = riscoProcesso.ScoreRisco,
-                    Classificacao = riscoProcesso.Classificacao,
-                    Mensagem = riscoProcesso.Mensagem,
-                    Fatores = fatoresRisco
-                },
+            Risco = new RiscoProcessoDto
+            {
+                Score = riscoProcesso.ScoreRisco,
+                Classificacao = riscoProcesso.Classificacao,
+                Mensagem = riscoProcesso.Mensagem,
+                Fatores = fatoresRisco
+            },
 
-                Tendencias = new TendenciasDto
-                {
-                        TendenciaRisco = tendenciaRisco.Tendencia,
-                        MensagemTendenciaRisco = tendenciaRisco.Mensagem,
-
-                        TendenciaValor = tendenciaValor.Tendencia,
-                        MensagemTendenciaValor = tendenciaValor.Mensagem
-                },
+            Tendencias = new TendenciasDto
+            {
+                TendenciaRisco = tendenciaRisco.Tendencia,
+                MensagemTendenciaRisco = tendenciaRisco.Mensagem,
+                TendenciaValor = tendenciaValor.Tendencia,
+                MensagemTendenciaValor = tendenciaValor.Mensagem
+            },
         };
     }
 
-    private string MontarMensagem(
-        AnomaliaRequest request,
-        TagPerfilIa perfil,
-        TagContextoIa? contexto,
-        bool ehAnomalia,
-        double limiteInferior,
-        double limiteSuperior,
-        double score,
-        AnaliseRelacionadasResultado analiseRelacionadas,
-        ResultadoRiscoProcesso riscoProcesso,
-        List<string> fatoresRisco,
-        ResultadoTendenciaRisco tendenciaRisco,
-        ResultadoTendenciaValor tendenciaValor)
+    public async Task<AnomaliaResponse> DetectarValorAtual(string clienteId, string tagName)
     {
-        var nomeTag =
-            !string.IsNullOrWhiteSpace(contexto?.Descricao)
-                ? $"{request.TagName} ({contexto.Descricao})"
-                : request.TagName;
+        var valores = await _bridgeValorAtualService.BuscarValoresAtuais(
+            new List<string> { tagName }
+        );
 
-        var mensagem = ehAnomalia
-            ? $"Anomalia detectada na tag {nomeTag}. O valor {request.Valor} está fora do perfil comportamental esperado."
-            : $"Comportamento normal na tag {nomeTag}. O valor {request.Valor} está dentro do perfil esperado.";
+        var valorAtual = valores.FirstOrDefault(x =>
+            string.Equals(x.TagName, tagName, StringComparison.OrdinalIgnoreCase));
 
-        mensagem += $" Média histórica: {perfil.Media:F2}.";
-        mensagem += $" Limite esperado: {limiteInferior:F2} até {limiteSuperior:F2}.";
-        mensagem += $" Score: {score:F2}.";
+        if (valorAtual == null || !valorAtual.Encontrado)
+            throw new Exception($"Valor atual da tag {tagName} não encontrado no Bridge.");
 
-        if (contexto == null)
+        
+
+        var request = new AnomaliaRequest
         {
-            mensagem += " Nenhum contexto operacional foi cadastrado para esta tag.";
-        }
-        else
-        {
-            if (!string.IsNullOrWhiteSpace(contexto.Criticidade))
-                mensagem += $" Criticidade: {contexto.Criticidade}.";
-
-            var impactos = LerLista(contexto.Impactos);
-            if (impactos.Any())
-                mensagem += $" Possíveis impactos: {string.Join(", ", impactos)}.";
-
-            var causas = LerLista(contexto.CausasProvaveis);
-            if (ehAnomalia && causas.Any())
-                mensagem += $" Causas prováveis informadas: {string.Join(", ", causas)}.";
-
-            var acoes = LerLista(contexto.AcoesRecomendadas);
-            if (ehAnomalia && acoes.Any())
-                mensagem += $" Ações recomendadas: {string.Join(", ", acoes)}.";
-
-            var modos = LerLista(contexto.ModosOperacao);
-            if (modos.Any())
-                mensagem += $" Modos de operação relevantes: {string.Join(", ", modos)}.";
-
-            if (!string.IsNullOrWhiteSpace(contexto.Equipamento))
-                mensagem += $" Equipamento: {contexto.Equipamento}.";
-
-            if (!string.IsNullOrWhiteSpace(contexto.Area))
-                mensagem += $" Área: {contexto.Area}.";
-
-            if (!string.IsNullOrWhiteSpace(contexto.ObservacaoModoOperacao))
-                mensagem += $" Observação operacional: {contexto.ObservacaoModoOperacao}.";
-        }
-
-        mensagem += $" Análise de tags relacionadas: {analiseRelacionadas.Resumo}";
-
-        foreach (var item in analiseRelacionadas.Resultados)
-        {
-            var interpretacao =
-            _interpretacaoDependenciasService.Interpretar(item, contexto);
-
-            mensagem += $" [{item.TagName}";
-
-            if (item.PossuiContexto && !string.IsNullOrWhiteSpace(item.Descricao))
-                mensagem += $" ({item.Descricao})";
-
-            mensagem += $": valor atual {item.ValorAtual:F2}, média {item.Media:F2}, limite {item.LimiteInferior:F2} até {item.LimiteSuperior:F2}, status: {(item.EhAnomalia ? "anômala" : "normal")}.";
-
-            if (!string.IsNullOrWhiteSpace(item.TipoRelacao))
-                mensagem += $" Relação: {item.TipoRelacao}.";
-
-            if (!string.IsNullOrWhiteSpace(item.Impacto))
-                mensagem += $" Impacto: {item.Impacto}.";
-
-            if (item.PossuiContexto)
-            {
-                if (!string.IsNullOrWhiteSpace(item.Criticidade))
-                    mensagem += $" Criticidade: {item.Criticidade}.";
-
-                if (!string.IsNullOrWhiteSpace(item.Equipamento))
-                    mensagem += $" Equipamento: {item.Equipamento}.";
-
-                if (!string.IsNullOrWhiteSpace(item.Area))
-                    mensagem += $" Área: {item.Area}.";
-            }
-
-            mensagem += $" Interpretação: {interpretacao}]";
-        }
-
-        mensagem += $" Risco do processo: {riscoProcesso.ScoreRisco}/100.";
-        mensagem += $" Classificação do risco: {riscoProcesso.Classificacao}.";
-        mensagem += $" {riscoProcesso.Mensagem}";
-
-        if (fatoresRisco.Any())
-        {
-            mensagem += " Fatores que contribuíram para o risco: ";
-
-            foreach (var fator in fatoresRisco)
-            {
-                mensagem += $" [{fator}]";
-            }
-        }
-
-        mensagem += $" Tendência do risco: {tendenciaRisco.Tendencia}.";
-        mensagem += $" {tendenciaRisco.Mensagem}";
-        mensagem += $" Tendência do valor da tag: {tendenciaValor.Tendencia}.";
-        mensagem += $" {tendenciaValor.Mensagem}";
-
-        return mensagem;
+            ClienteId = clienteId,
+            TagName = tagName,
+            Valor = (float)valorAtual.Valor
+        };
+        return await Detectar(request);
+        
     }
 
+private string MontarMensagemCliente(
+    AnomaliaRequest request,
+    TagContextoIa? contexto,
+    bool ehAnomalia,
+    double score,
+    ResultadoRiscoProcesso riscoProcesso,
+    ResultadoTendenciaValor tendenciaValor)
+{
+    var descricaoTag = !string.IsNullOrWhiteSpace(contexto?.Descricao)
+        ? contexto.Descricao
+        : request.TagName;
+
+    if (!ehAnomalia)
+    {
+        return $"{descricaoTag} está operando dentro do comportamento esperado. Nenhuma ação imediata é necessária.";
+    }
+
+    var risco = !string.IsNullOrWhiteSpace(riscoProcesso.Classificacao)
+        ? riscoProcesso.Classificacao
+        : "não classificado";
+
+    return $"{descricaoTag} apresentou comportamento fora do padrão esperado. Risco: {risco}. Recomenda-se verificar a condição operacional da tag.";
+}
     private List<string> LerLista(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -362,7 +294,11 @@ public class PredictionService
         }
         catch
         {
-            return new List<string>();
+            return json
+                .Split(';', ',')
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
         }
     }
 }

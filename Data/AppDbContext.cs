@@ -31,6 +31,8 @@ public class AppDbContext : DbContext
 
     public DbSet<ProcessoEquipamentoIa> ProcessoEquipamentosIa { get; set; } = null!;
 
+    public DbSet<FeedbackAnomaliaIa> FeedbackAnomaliasIa { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
     base.OnModelCreating(modelBuilder);

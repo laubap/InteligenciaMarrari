@@ -57,6 +57,21 @@ public class ProcessoDashboardController : ControllerBase
                 resumo = analise.Resumo,
                 interpretacao = analise.Interpretacao,
 
+                tags = analise.Tags
+                    .Select(x => new
+                    {
+                        x.TagName,
+                        x.Descricao,
+                        x.PapelDaTag,
+                        x.Criticidade,
+                        x.Status,
+                        x.Score,
+                        x.Mensagem,
+                        x.EhAnomalia
+                    })
+                    .ToList(),
+
+
                 tagsCriticas = analise.Tags
                     .Where(x =>
                         x.EhAnomalia ||

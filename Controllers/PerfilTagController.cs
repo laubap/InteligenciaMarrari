@@ -170,6 +170,101 @@ public class PerfilTagController : ControllerBase
     });
 }
 
+[HttpGet("visao-cliente")]
+public IActionResult ListarTagsVisaoCliente()
+{
+    var tags = _context.PerfisIa
+        .OrderBy(x => x.ClienteId)
+        .ThenBy(x => x.TagName)
+        .Select(perfil => new
+        {
+            perfil.Id,
+            perfil.ClienteId,
+            perfil.TagName,
+
+            perfilTreinado = true,
+            monitoramentoIa = true,
+
+            ultimoValor = _context.AnomaliasDetectadas
+                .Where(a =>
+                    a.ClienteId == perfil.ClienteId &&
+                    a.TagName == perfil.TagName)
+                .OrderByDescending(a => a.DataDeteccao)
+                .Select(a => (double?)a.ValorRecebido)
+                .FirstOrDefault(),
+
+            status = _context.AnomaliasDetectadas
+                .Where(a =>
+                    a.ClienteId == perfil.ClienteId &&
+                    a.TagName == perfil.TagName)
+                .OrderByDescending(a => a.DataDeteccao)
+                .Select(a =>
+                    a.EhAnomalia
+                        ? "anomala"
+                        : "normal")
+                .FirstOrDefault() ?? "sem_analise",
+
+            mensagemIA = _context.AnomaliasDetectadas
+                .Where(a =>
+                    a.ClienteId == perfil.ClienteId &&
+                    a.TagName == perfil.TagName)
+                .OrderByDescending(a => a.DataDeteccao)
+                .Select(a => a.Mensagem)
+                .FirstOrDefault() ?? "Tag treinada, mas ainda sem análise recente.",
+
+            ultimaAnalise = _context.AnomaliasDetectadas
+                .Where(a =>
+                    a.ClienteId == perfil.ClienteId &&
+                    a.TagName == perfil.TagName)
+                .OrderByDescending(a => a.DataDeteccao)
+                .Select(a => (DateTime?)a.DataDeteccao)
+                .FirstOrDefault(),
+
+            equipamento = _context.EquipamentoTagsIa
+                .Where(e =>
+                    e.ClienteId == perfil.ClienteId &&
+                    e.TagName == perfil.TagName)
+                .Select(e => e.EquipamentoIa != null ? e.EquipamentoIa.Nome : null)
+                .FirstOrDefault(),
+
+            processo = _context.ProcessoTagsIa
+                .Where(p =>
+                    p.TagName == perfil.TagName)
+                .Select(p => p.ProcessoIa != null ? p.ProcessoIa.Nome : null)
+                .FirstOrDefault(),
+
+            descricao = _context.TagsContextoIa
+                .Where(c =>
+                    c.ClienteId == perfil.ClienteId &&
+                    c.TagName == perfil.TagName)
+                .Select(c => c.Descricao)
+                .FirstOrDefault(),
+
+            criticidade = _context.TagsContextoIa
+                .Where(c =>
+                    c.ClienteId == perfil.ClienteId &&
+                    c.TagName == perfil.TagName)
+                .Select(c => c.Criticidade)
+                .FirstOrDefault(),
+
+            impactos = _context.TagsContextoIa
+                .Where(c =>
+                    c.ClienteId == perfil.ClienteId &&
+                    c.TagName == perfil.TagName)
+                .Select(c => c.Impactos)
+                .FirstOrDefault(),
+
+            acoesRecomendadas = _context.TagsContextoIa
+                .Where(c =>
+                    c.ClienteId == perfil.ClienteId &&
+                    c.TagName == perfil.TagName)
+                .Select(c => c.AcoesRecomendadas)
+                .FirstOrDefault()
+        })
+        .ToList();
+
+    return Ok(tags);
+}
 }
 
 public class TreinarPerfilRequest

@@ -41,6 +41,8 @@ builder.Services.AddScoped<ProcessoHealthScoreService>();
 builder.Services.AddScoped<InterpretacaoProcessoService>();
 builder.Services.AddScoped<FailurePredictionService>();
 builder.Services.AddScoped<EquipamentoInteligenciaService>();
+builder.Services.AddHostedService<MonitoramentoTagsService>();
+builder.Services.AddScoped<FeedbackAnomaliaAnaliseService>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();

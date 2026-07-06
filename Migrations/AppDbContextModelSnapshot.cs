@@ -203,6 +203,41 @@ namespace IAApi.Migrations
                     b.ToTable("EquipamentoTagsIa");
                 });
 
+            modelBuilder.Entity("FeedbackAnomaliaIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AcaoTomada")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AnomaliaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataRegistro")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Motivo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TagName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FeedbackAnomaliasIa");
+                });
+
             modelBuilder.Entity("ProcessoEquipamentoIa", b =>
                 {
                     b.Property<int>("Id")
@@ -355,9 +390,6 @@ namespace IAApi.Migrations
 
                     b.Property<string>("TagName")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TagsRelacionadas")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TipoRepresentacao")

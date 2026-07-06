@@ -7,11 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.ML" Version="5.0.0" />
     <PackageReference Include="protobuf-net.ServiceModel" Version="3.2.52" />
@@ -22,9 +22,9 @@
   </ItemGroup>
 
   <ItemGroup>
-  <Reference Include="Marrari.PowerServer">
-    <HintPath>Lib\Marrari.PowerServer.dll</HintPath>
-  </Reference>
-</ItemGroup>
+    <Reference Include="Marrari.PowerServer">
+      <HintPath>Lib\Marrari.PowerServer.dll</HintPath>
+    </Reference>
+  </ItemGroup>
 
 </Project>
