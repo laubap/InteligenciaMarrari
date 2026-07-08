@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 [ApiController]
 [Route("api/anomalias")]
@@ -32,7 +33,7 @@ public class FeedbackAnomaliaController : ControllerBase
             AnomaliaId = anomalia.Id,
             ClienteId = anomalia.ClienteId,
             TagName = anomalia.TagName,
-            Motivo = request.Motivo,
+            MotivoAnomaliaIAId = request.MotivoAnomaliaIAId,
             Descricao = request.Descricao,
             AcaoTomada = request.AcaoTomada,
             DataRegistro = DateTime.Now
@@ -47,15 +48,48 @@ public class FeedbackAnomaliaController : ControllerBase
             feedback.Id,
             feedback.AnomaliaId,
             feedback.TagName,
-            feedback.Motivo,
             feedback.DataRegistro
         });
+    }
+
+    [HttpGet("{anomaliaId}/feedback")]
+    public async Task<IActionResult> BuscarFeedbacks(int anomaliaId)
+    {
+        var feedbacks = await _context.FeedbackAnomaliasIa
+            .Include(x => x.MotivoAnomaliaIA)
+                .ThenInclude(x => x.CategoriaFalhaIA)
+            .Where(x => x.AnomaliaId == anomaliaId)
+            .OrderByDescending(x => x.DataRegistro)
+            .Select(x => new
+            {
+                x.Id,
+                x.AnomaliaId,
+                x.TagName,
+
+                CategoriaFalha =
+                    x.MotivoAnomaliaIA != null &&
+                    x.MotivoAnomaliaIA.CategoriaFalhaIA != null
+                        ? x.MotivoAnomaliaIA.CategoriaFalhaIA.Nome
+                        : null,
+
+                TipoFalha =
+                    x.MotivoAnomaliaIA != null
+                        ? x.MotivoAnomaliaIA.Nome
+                        : null,
+
+                x.Descricao,
+                x.AcaoTomada,
+                x.DataRegistro
+            })
+            .ToListAsync();
+
+        return Ok(feedbacks);
     }
 }
 
 public class FeedbackAnomaliaRequest
 {
-    public string Motivo { get; set; } = "";
+    public int MotivoAnomaliaIAId { get; set; }
     public string? Descricao { get; set; }
     public string? AcaoTomada { get; set; }
 }

@@ -16,6 +16,39 @@ namespace IAApi.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
 
+            modelBuilder.Entity("AcaoRecomendadaIA", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataAtualizacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MotivoAnomaliaIAId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MotivoAnomaliaIAId");
+
+                    b.ToTable("AcoesRecomendadasIA");
+                });
+
             modelBuilder.Entity("AnomaliaDependenciaDetectada", b =>
                 {
                     b.Property<int>("Id")
@@ -119,6 +152,76 @@ namespace IAApi.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AnomaliasDetectadas");
+                });
+
+            modelBuilder.Entity("CategoriaFalhaIA", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataAtualizacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CategoriasFalhaIA");
+                });
+
+            modelBuilder.Entity("ConfiguracaoIA", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AprendizadoAtivo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ConfiancaMinima")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("DataAtualizacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("HorasHistorico")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("NotificacaoEmail")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("NotificacaoPopup")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Sensibilidade")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ConfiguracoesIA");
                 });
 
             modelBuilder.Entity("EquipamentoIa", b =>
@@ -225,9 +328,8 @@ namespace IAApi.Migrations
                     b.Property<string>("Descricao")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Motivo")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.Property<int?>("MotivoAnomaliaIAId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TagName")
                         .IsRequired()
@@ -235,7 +337,45 @@ namespace IAApi.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("MotivoAnomaliaIAId");
+
                     b.ToTable("FeedbackAnomaliasIa");
+                });
+
+            modelBuilder.Entity("MotivoAnomaliaIA", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("CategoriaFalhaIAId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataAtualizacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoriaFalhaIAId");
+
+                    b.ToTable("MotivosAnomaliaIA");
                 });
 
             modelBuilder.Entity("ProcessoEquipamentoIa", b =>
@@ -529,6 +669,17 @@ namespace IAApi.Migrations
                     b.ToTable("PerfisIa");
                 });
 
+            modelBuilder.Entity("AcaoRecomendadaIA", b =>
+                {
+                    b.HasOne("MotivoAnomaliaIA", "MotivoAnomaliaIA")
+                        .WithMany("AcoesRecomendadas")
+                        .HasForeignKey("MotivoAnomaliaIAId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MotivoAnomaliaIA");
+                });
+
             modelBuilder.Entity("AnomaliaDependenciaDetectada", b =>
                 {
                     b.HasOne("AnomaliaDetectada", "AnomaliaDetectada")
@@ -549,6 +700,24 @@ namespace IAApi.Migrations
                         .IsRequired();
 
                     b.Navigation("EquipamentoIa");
+                });
+
+            modelBuilder.Entity("FeedbackAnomaliaIa", b =>
+                {
+                    b.HasOne("MotivoAnomaliaIA", "MotivoAnomaliaIA")
+                        .WithMany()
+                        .HasForeignKey("MotivoAnomaliaIAId");
+
+                    b.Navigation("MotivoAnomaliaIA");
+                });
+
+            modelBuilder.Entity("MotivoAnomaliaIA", b =>
+                {
+                    b.HasOne("CategoriaFalhaIA", "CategoriaFalhaIA")
+                        .WithMany("Motivos")
+                        .HasForeignKey("CategoriaFalhaIAId");
+
+                    b.Navigation("CategoriaFalhaIA");
                 });
 
             modelBuilder.Entity("ProcessoEquipamentoIa", b =>
@@ -586,11 +755,21 @@ namespace IAApi.Migrations
                     b.Navigation("Dependencias");
                 });
 
+            modelBuilder.Entity("CategoriaFalhaIA", b =>
+                {
+                    b.Navigation("Motivos");
+                });
+
             modelBuilder.Entity("EquipamentoIa", b =>
                 {
                     b.Navigation("Processos");
 
                     b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("MotivoAnomaliaIA", b =>
+                {
+                    b.Navigation("AcoesRecomendadas");
                 });
 
             modelBuilder.Entity("ProcessoIa", b =>

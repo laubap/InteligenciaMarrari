@@ -16,17 +16,22 @@ public class ConhecimentoIaController : ControllerBase
     public async Task<IActionResult> Obter()
     {
         var totalAnomalias = await _context.AnomaliasDetectadas.CountAsync();
-        var totalFeedbacks = await _context.FeedbackAnomaliasIa.CountAsync();
 
-        var tiposFalhaAprendidos = await _context.FeedbackAnomaliasIa
-            .Where(x => !string.IsNullOrWhiteSpace(x.Motivo))
-            .Select(x => x.Motivo)
+        var feedbacks = await _context.FeedbackAnomaliasIa
+            .Include(x => x.MotivoAnomaliaIA)
+            .ToListAsync();
+
+        var totalFeedbacks = feedbacks.Count;
+
+        var tiposFalhaAprendidos = feedbacks
+            .Where(x => x.MotivoAnomaliaIA != null)
+            .Select(x => x.MotivoAnomaliaIA!.Nome)
             .Distinct()
-            .CountAsync();
+            .Count();
 
-        var principaisMotivos = await _context.FeedbackAnomaliasIa
-            .Where(x => !string.IsNullOrWhiteSpace(x.Motivo))
-            .GroupBy(x => x.Motivo)
+        var principaisMotivos = feedbacks
+            .Where(x => x.MotivoAnomaliaIA != null)
+            .GroupBy(x => x.MotivoAnomaliaIA!.Nome)
             .Select(x => new
             {
                 motivo = x.Key,
@@ -34,7 +39,7 @@ public class ConhecimentoIaController : ControllerBase
             })
             .OrderByDescending(x => x.total)
             .Take(5)
-            .ToListAsync();
+            .ToList();
 
         var tagsComMaisAnomalias = await _context.AnomaliasDetectadas
             .GroupBy(x => x.TagName)
@@ -68,26 +73,31 @@ public class ConhecimentoIaController : ControllerBase
             .OrderByDescending(x => x.total)
             .ToListAsync();
 
-        var ultimosFeedbacks = await _context.FeedbackAnomaliasIa
+        var ultimosFeedbacks = feedbacks
             .OrderByDescending(x => x.DataRegistro)
             .Take(5)
             .Select(x => new
             {
                 x.Id,
                 x.TagName,
-                x.Motivo,
+                motivo = x.MotivoAnomaliaIA?.Nome ?? "Motivo não informado",
+                categoria = x.MotivoAnomaliaIA?.CategoriaFalhaIA?.Nome,
                 x.Descricao,
                 x.AcaoTomada,
                 x.DataRegistro
             })
-            .ToListAsync();
+            .ToList();
 
         var percentualFeedback =
             totalAnomalias == 0
                 ? 0
                 : Math.Round((double)totalFeedbacks / totalAnomalias * 100, 1);
 
-        var confiancaIa = CalcularConfiancaIa(totalAnomalias, totalFeedbacks, tiposFalhaAprendidos);
+        var confiancaIa = CalcularConfiancaIa(
+            totalAnomalias,
+            totalFeedbacks,
+            tiposFalhaAprendidos
+        );
 
         return Ok(new
         {

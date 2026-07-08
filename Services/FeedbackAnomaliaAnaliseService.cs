@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 public class FeedbackAnomaliaAnaliseService
 {
     private readonly AppDbContext _context;
@@ -13,21 +15,27 @@ public class FeedbackAnomaliaAnaliseService
         double score,
         double valorAtual)
     {
-        var feedbacks = (
-            from feedback in _context.FeedbackAnomaliasIa
-            join anomalia in _context.AnomaliasDetectadas
-                on feedback.AnomaliaId equals anomalia.Id
-            where feedback.ClienteId == clienteId
-                  && feedback.TagName == tagName
-            select new
-            {
-                feedback.Motivo,
-                feedback.Descricao,
-                feedback.AcaoTomada,
-                anomalia.Score,
-                Valor = anomalia.ValorRecebido
-            }
-        ).ToList();
+        var feedbacks = _context.FeedbackAnomaliasIa
+            .Include(x => x.MotivoAnomaliaIA)
+            .Join(
+                _context.AnomaliasDetectadas,
+                feedback => feedback.AnomaliaId,
+                anomalia => anomalia.Id,
+                (feedback, anomalia) => new
+                {
+                    feedback.ClienteId,
+                    feedback.TagName,
+                    Motivo = feedback.MotivoAnomaliaIA != null
+                        ? feedback.MotivoAnomaliaIA.Nome
+                        : "Motivo não informado",
+                    feedback.Descricao,
+                    feedback.AcaoTomada,
+                    anomalia.Score,
+                    Valor = anomalia.ValorRecebido
+                }
+            )
+            .Where(x => x.ClienteId == clienteId && x.TagName == tagName)
+            .ToList();
 
         if (feedbacks.Count == 0)
             return null;
@@ -68,11 +76,13 @@ public class FeedbackAnomaliaAnaliseService
             .Replace("falha sensor", "falha de sensor");
     }
 }
-
 public class FeedbackSemelhanteDto
 {
     public int TotalOcorrencias { get; set; }
+
     public string MotivoMaisComum { get; set; } = "";
+
     public double Percentual { get; set; }
+
     public string Mensagem { get; set; } = "";
 }

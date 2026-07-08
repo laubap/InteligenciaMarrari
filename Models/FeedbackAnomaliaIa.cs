@@ -7,7 +7,9 @@ public class FeedbackAnomaliaIa
     public string ClienteId { get; set; } = "";
     public string TagName { get; set; } = "";
 
-    public string Motivo { get; set; } = "";
+    public int? MotivoAnomaliaIAId { get; set; }
+
+    public MotivoAnomaliaIA? MotivoAnomaliaIA { get; set; }
     public string? Descricao { get; set; }
     public string? AcaoTomada { get; set; }
 

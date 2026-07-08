@@ -33,6 +33,14 @@ public class AppDbContext : DbContext
 
     public DbSet<FeedbackAnomaliaIa> FeedbackAnomaliasIa { get; set; }
 
+    public DbSet<ConfiguracaoIA> ConfiguracoesIA { get; set; }
+
+    public DbSet<MotivoAnomaliaIA> MotivosAnomaliaIA { get; set; }
+
+    public DbSet<AcaoRecomendadaIA> AcoesRecomendadasIA { get; set; }
+
+    public DbSet<CategoriaFalhaIA> CategoriasFalhaIA { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
     base.OnModelCreating(modelBuilder);
