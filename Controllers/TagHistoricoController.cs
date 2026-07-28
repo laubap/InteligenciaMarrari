@@ -6,36 +6,80 @@ public class TagHistoricoController : ControllerBase
 {
     private readonly IHistoricoService _historicoService;
 
-    public TagHistoricoController(IHistoricoService historicoService)
+    public TagHistoricoController(
+        IHistoricoService historicoService)
     {
         _historicoService = historicoService;
     }
 
-    [HttpGet]
+    [HttpGet("{clienteId}/{tagName}")]
     public IActionResult BuscarHistorico(
-        [FromQuery] string tagName,
+        string clienteId,
+        string tagName,
         [FromQuery] int horas = 6)
     {
         try
         {
+            const string tipoTag = "perfil-comportamental";
+
             var historico = _historicoService
-                .BuscarHistorico(tagName, "perfil-comportamental")
-                .Where(x => !float.IsNaN(x.Valor))
+                .BuscarHistorico(
+                    clienteId,
+                    tagName,
+                    tipoTag)
+                .Where(x =>
+                    !float.IsNaN(x.Valor) &&
+                    !float.IsInfinity(x.Valor))
                 .OrderBy(x => x.DataHora)
                 .ToList();
 
-            var inicio = DateTime.Now.AddHours(-horas);
+            if (historico.Count == 0)
+            {
+                return NotFound(new
+                {
+                    erro = "Nenhum histórico encontrado para esta tag."
+                });
+            }
+
+            var inicio =
+                DateTime.Now.AddHours(-horas);
 
             var leituras = historico
-                .Where(x => x.DataHora >= inicio)
+                .Where(x =>
+                    x.DataHora >= inicio)
                 .Select(x => new
                 {
-                    x.DataHora,
-                    Valor = x.Valor
+                    clienteId,
+                    tagName,
+                    dataHora = x.DataHora,
+                    valor = x.Valor
                 })
                 .ToList();
 
-            return Ok(leituras);
+            // Caso não existam leituras nas últimas horas,
+            // devolve as últimas 20 disponíveis.
+            if (leituras.Count == 0)
+            {
+                leituras = historico
+                    .TakeLast(20)
+                    .Select(x => new
+                    {
+                        clienteId,
+                        tagName,
+                        dataHora = x.DataHora,
+                        valor = x.Valor
+                    })
+                    .ToList();
+            }
+
+            return Ok(new
+            {
+                clienteId,
+                tagName,
+                horas,
+                quantidadeLeituras = leituras.Count,
+                historico = leituras
+            });
         }
         catch (Exception ex)
         {

@@ -12,12 +12,14 @@ public class TendenciaValorService
 
     // Analisa a tendência de valor para a tag e o tipo de tag informados.
     public ResultadoTendenciaValor Analisar(
+        string clienteId,
         string tagName,
         string tipoTag)
     {
         var historico = _historicoService.BuscarHistorico(
-            tagName,
-            tipoTag
+            clienteId,
+        tagName,
+        tipoTag
         );
 
         var dados = historico

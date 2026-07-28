@@ -132,6 +132,9 @@ namespace IAApi.Migrations
                     b.Property<int>("ScoreRiscoProcesso")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("TagName")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -318,6 +321,15 @@ namespace IAApi.Migrations
                     b.Property<int>("AnomaliaId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("AvaliacaoAcao")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AvaliacaoCausa")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AvaliacaoDeteccao")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ClienteId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -340,6 +352,101 @@ namespace IAApi.Migrations
                     b.HasIndex("MotivoAnomaliaIAId");
 
                     b.ToTable("FeedbackAnomaliasIa");
+                });
+
+            modelBuilder.Entity("JanelaTreinamentoTagIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataAtualizacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCadastro")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataHoraFim")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataHoraInicio")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModoOperacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TagName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "TagName", "DataHoraInicio", "DataHoraFim");
+
+                    b.ToTable("JanelasTreinamentoTagsIa");
+                });
+
+            modelBuilder.Entity("ModeloTagIaStatus", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataFimTreinamento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataInicioTreinamento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataMarcadoDesatualizado")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataUltimoTreinamento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HashJanelasTreinamento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("QuantidadePontosTreinamento")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TagName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TipoModelo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UltimoErro")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Versao")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "TagName", "TipoModelo")
+                        .IsUnique();
+
+                    b.ToTable("ModelosTagsIaStatus");
                 });
 
             modelBuilder.Entity("MotivoAnomaliaIA", b =>

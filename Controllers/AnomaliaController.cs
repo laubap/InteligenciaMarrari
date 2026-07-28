@@ -20,20 +20,40 @@ public class AnomaliaController : ControllerBase
         _feedbackAnomaliaAnaliseService = feedbackAnomaliaAnaliseService;
     }
 
-    [HttpPost("tag")]
-    public async Task<IActionResult> DetectarTag([FromBody] AnomaliaRequest request)
+[HttpPost("tag")]
+public async Task<IActionResult> DetectarTag([FromBody] AnomaliaRequest request)
+{
+    try
     {
-        try
-        {
-            var resposta = await _predictionService.Detectar(request);
-            return Ok(resposta);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { erro = ex.Message });
-        }
-    }
+        Console.WriteLine("===== REQUEST =====");
+        Console.WriteLine($"Cliente: '{request.ClienteId}'");
+        Console.WriteLine($"Tag: '{request.TagName}'");
 
+        var resposta = await _predictionService.Detectar(request);
+
+        Console.WriteLine("=========== JSON DA RESPOSTA ===========");
+Console.WriteLine(
+    JsonSerializer.Serialize(
+        resposta,
+        new JsonSerializerOptions
+        {
+            WriteIndented = true
+        }));
+Console.WriteLine("========================================");
+
+        return Ok(resposta);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.ToString());
+
+        return BadRequest(new
+        {
+            erro = ex.Message,
+            stack = ex.ToString()
+        });
+    }
+}
     [HttpPost("tag/valor-atual")]
     public async Task<IActionResult> DetectarTagValorAtual([FromBody] AnomaliaValorAtualRequest request)
     {

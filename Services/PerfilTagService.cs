@@ -22,7 +22,7 @@ public class PerfilTagService
     // amplitude, percentual de zeros, variação média e picos.
     public TagPerfilIa TreinarPerfil(string clienteId, string tagName)
     {
-        var historico = _historicoService.BuscarHistorico(tagName, "");
+        var historico = _historicoService.BuscarHistorico(tagName, "", clienteId);
 
         if (historico == null || historico.Count < 10)
             throw new Exception("Histórico insuficiente para treinar o perfil da tag.");

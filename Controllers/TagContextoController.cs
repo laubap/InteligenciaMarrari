@@ -1,3 +1,4 @@
+using IAApi.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -5,62 +6,113 @@ using System.Text.Json;
 [Route("api/tags/contexto")]
 public class TagContextoController : ControllerBase
 {
-    private readonly AppDbContext _context;
+    private readonly TagContextoIaService _tagContextoService;
 
-    public TagContextoController(AppDbContext context)
+    public TagContextoController(
+        TagContextoIaService tagContextoService)
     {
-        _context = context;
+        _tagContextoService = tagContextoService;
     }
 
     [HttpPost]
-    public IActionResult SalvarContexto([FromBody] TagContextoRequest request)
+    public async Task<IActionResult> SalvarContexto(
+        [FromBody] TagContextoRequest request,
+        CancellationToken cancellationToken)
     {
-        var contexto = _context.TagsContextoIa
-            .FirstOrDefault(x =>
-                x.ClienteId == request.ClienteId &&
-                x.TagName == request.TagName);
+        try
+        {
+            var contexto = await _tagContextoService.SalvarAsync(
+                request,
+                cancellationToken);
+
+            return Ok(new
+            {
+                mensagem = "Contexto da tag salvo com sucesso.",
+                contexto.ClienteId,
+                contexto.TagName,
+                contexto.ContextoCompleto,
+                contexto.DataCriacao,
+                contexto.DataAtualizacao
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new
+            {
+                mensagem = ex.Message
+            });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ObterContexto(
+        [FromQuery] string clienteId,
+        [FromQuery] string tagName,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(clienteId) ||
+            string.IsNullOrWhiteSpace(tagName))
+        {
+            return BadRequest(new
+            {
+                mensagem = "ClienteId e TagName são obrigatórios."
+            });
+        }
+
+        var contexto = await _tagContextoService.ObterAsync(
+            clienteId,
+            tagName,
+            cancellationToken);
 
         if (contexto == null)
         {
-            contexto = new TagContextoIa
+            return NotFound(new
             {
-                ClienteId = request.ClienteId,
-                TagName = request.TagName,
-                DataCriacao = DateTime.Now
-            };
-
-            _context.TagsContextoIa.Add(contexto);
+                mensagem = "Contexto da tag não encontrado.",
+                clienteId,
+                tagName
+            });
         }
-
-        contexto.TipoRepresentacao = request.TipoRepresentacao;
-        contexto.Descricao = request.Descricao;
-        contexto.Criticidade = request.Criticidade;
-        contexto.Equipamento = request.Equipamento;
-        contexto.Area = request.Area;
-        contexto.ObservacaoModoOperacao = request.ObservacaoModoOperacao;
-
-        contexto.Impactos = JsonSerializer.Serialize(request.Impactos ?? new List<string>());
-        contexto.ModosOperacao = JsonSerializer.Serialize(request.ModosOperacao ?? new List<string>());
-        contexto.CausasProvaveis = JsonSerializer.Serialize(request.CausasProvaveis ?? new List<string>());
-        contexto.AcoesRecomendadas = JsonSerializer.Serialize(request.AcoesRecomendadas ?? new List<string>());
-
-        contexto.ContextoCompleto =
-            !string.IsNullOrWhiteSpace(request.Descricao) &&
-            !string.IsNullOrWhiteSpace(request.Criticidade);
-
-        contexto.DataAtualizacao = DateTime.Now;
-
-        _context.SaveChanges();
 
         return Ok(new
         {
-            mensagem = "Contexto da tag salvo com sucesso.",
+            contexto.Id,
             contexto.ClienteId,
             contexto.TagName,
+            contexto.TipoRepresentacao,
+            contexto.Descricao,
+            contexto.Criticidade,
+
+            Impactos = DesserializarLista(contexto.Impactos),
+            ModosOperacao = DesserializarLista(contexto.ModosOperacao),
+            CausasProvaveis = DesserializarLista(contexto.CausasProvaveis),
+            AcoesRecomendadas = DesserializarLista(contexto.AcoesRecomendadas),
+
+            contexto.Equipamento,
+            contexto.Area,
+            contexto.ObservacaoModoOperacao,
             contexto.ContextoCompleto,
             contexto.DataCriacao,
             contexto.DataAtualizacao
         });
+    }
+
+    private static List<string> DesserializarLista(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new List<string>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json)
+                   ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
+        }
     }
 }
 

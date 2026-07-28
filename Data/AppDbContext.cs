@@ -41,6 +41,12 @@ public class AppDbContext : DbContext
 
     public DbSet<CategoriaFalhaIA> CategoriasFalhaIA { get; set; }
 
+    public DbSet<JanelaTreinamentoTagIa>
+    JanelasTreinamentoTagsIa { get; set; }
+
+    public DbSet<ModeloTagIaStatus>
+    ModelosTagsIaStatus { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
     base.OnModelCreating(modelBuilder);
@@ -103,6 +109,24 @@ public class AppDbContext : DbContext
         x.EquipamentoIaId
     })
     .IsUnique();
+
+    modelBuilder.Entity<ModeloTagIaStatus>()
+    .HasIndex(x => new
+    {
+        x.ClienteId,
+        x.TagName,
+        x.TipoModelo
+    })
+    .IsUnique();
+
+modelBuilder.Entity<JanelaTreinamentoTagIa>()
+    .HasIndex(x => new
+    {
+        x.ClienteId,
+        x.TagName,
+        x.DataHoraInicio,
+        x.DataHoraFim
+    });
 
 }
 }

@@ -1,8 +1,18 @@
-// Interface que define um contrato para serviços de histórico de tags.
-// Qualquer implementação deve fornecer um método para buscar o histórico de
-// leituras de uma tag e retornar uma lista de LeituraBruta.
+// Interface responsável pelo acesso ao histórico das tags.
 public interface IHistoricoService
 {
-    // Retorna o histórico bruto de leituras para a tag informada.
-    List<LeituraBruta> BuscarHistorico(string tagName, string TipoTag);
+    // Busca o histórico recente configurado no appsettings.json.
+    List<LeituraBruta> BuscarHistorico(
+        string clienteId,
+        string tagName,
+        string tipoTag
+    );
+
+    // Busca o histórico correspondente a um intervalo específico.
+    List<LeituraBruta> BuscarHistoricoPorPeriodo(
+        string clienteId,
+        string tagName,
+        DateTime inicio,
+        DateTime fim
+    );
 }

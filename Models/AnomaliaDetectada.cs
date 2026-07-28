@@ -44,6 +44,9 @@ public class AnomaliaDetectada
     // Tendência do valor da tag ao longo do tempo.
     public string? TendenciaValor { get; set; }
 
+    public StatusAnomalia Status { get; set; } =
+    StatusAnomalia.Pendente;
+
     // Data e hora em que a anomalia foi detectada.
     public DateTime DataDeteccao { get; set; } = DateTime.Now;
 }

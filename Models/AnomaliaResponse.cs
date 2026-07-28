@@ -1,7 +1,8 @@
 // Modelo de resposta usado quando uma anomalia é detectada.
 // Contém informações de identificação da tag, resultado da detecção,
 // resumo, perfil comportamental, contexto operacional, dependências,
-// risco de processo, tendências e dados do processo associado.
+// risco de processo, tendências, detectores executados, interpretação
+// da anomalia e dados do processo associado.
 public class AnomaliaResponse
 {
     public string ClienteId { get; set; } = "";
@@ -10,6 +11,8 @@ public class AnomaliaResponse
 
     // Indica se o valor recebido foi classificado como anomalia.
     public bool EhAnomalia { get; set; }
+
+    // Score final do ensemble.
     public float Score { get; set; }
 
     public string Mensagem { get; set; } = "";
@@ -18,11 +21,71 @@ public class AnomaliaResponse
     public ResumoAnomaliaDto Resumo { get; set; } = new();
     public PerfilComportamentalDto Perfil { get; set; } = new();
     public ContextoOperacionalDto? Contexto { get; set; }
+
+    // Interpretação técnica gerada a partir do resultado do ensemble
+    // e do contexto operacional cadastrado para a tag.
+    public InterpretacaoAnomaliaDto? Interpretacao { get; set; }
+
     public List<DependenciaAnalisadaDto> Dependencias { get; set; } = new();
+
     public RiscoProcessoDto Risco { get; set; } = new();
     public TendenciasDto Tendencias { get; set; } = new();
     public ProcessoDto? Processo { get; set; }
-  
+
+    // Resultado individual de cada detector executado pelo ensemble.
+    public List<DetectorExecutadoDto> Detectores { get; set; } = new();
+}
+
+// Resultado da interpretação da anomalia.
+// Inicialmente será preenchido pelo serviço baseado em regras.
+// Futuramente poderá ser preenchido pelo LLM sem alterar o contrato da API.
+public class InterpretacaoAnomaliaDto
+{
+    public string Resumo { get; set; } = "";
+
+    public string InterpretacaoTecnica { get; set; } = "";
+
+    public List<string> Evidencias { get; set; } = new();
+
+    public List<string> PossiveisCausas { get; set; } = new();
+
+    public List<string> Recomendacoes { get; set; } = new();
+
+    public string Severidade { get; set; } = "";
+
+    // Indica se a interpretação foi produzida por um modelo de linguagem.
+    public bool GeradoPorLlm { get; set; }
+
+    // Nome do serviço, estratégia ou modelo utilizado.
+    public string ModeloUtilizado { get; set; } = "";
+
+    public DateTime DataGeracao { get; set; }
+}
+
+// Resultado individual de um detector de anomalias.
+public class DetectorExecutadoDto
+{
+    public string Nome { get; set; } = "";
+
+    // Indica se o detector possuía dados suficientes para executar.
+    public bool Aplicavel { get; set; }
+
+    // Indica se esse detector individual votou como anomalia.
+    public bool VotouAnomalia { get; set; }
+
+    // Score normalizado entre 0 e 100.
+    public double ScoreNormalizado { get; set; }
+
+    // Score original produzido pelo detector.
+    public double ScoreOriginal { get; set; }
+
+    // Peso do detector dentro do ensemble.
+    public double Peso { get; set; }
+
+    public string Explicacao { get; set; } = "";
+
+    // Métricas específicas do detector.
+    public Dictionary<string, double> Metricas { get; set; } = new();
 }
 
 // Dados resumidos sobre a detecção da anomalia.
@@ -109,10 +172,7 @@ public class ProcessoDto
     public string? Criticidade { get; set; }
 
     public string? Objetivo { get; set; }
-
     public string? CondicaoNormal { get; set; }
-
     public string? ConsequenciasFalha { get; set; }
-
     public string? ProcedimentoRecomendado { get; set; }
 }
