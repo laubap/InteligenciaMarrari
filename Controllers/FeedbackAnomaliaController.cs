@@ -19,6 +19,7 @@ public class FeedbackAnomaliaController : ControllerBase
     {
         var anomalia = await _context.AnomaliasDetectadas
         .Where(x =>
+            x.EhAnomalia &&
             x.Status != StatusAnomalia.Descartada)
             .FirstOrDefaultAsync(x => x.Id == anomaliaId);
 

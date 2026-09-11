@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-// Controller para gerenciar processos no sistema de IA.
-// Permite criar/atualizar processos e listar processos por cliente.
 [ApiController]
 [Route("api/processos")]
 public class ProcessoIaController : ControllerBase
@@ -15,9 +13,6 @@ public class ProcessoIaController : ControllerBase
     }
 
     [HttpPost]
-    // Endpoint: POST /api/processos
-    // Cria ou atualiza um processo para o cliente informado.
-    // Se o processo existir, atualiza seus dados e tags; caso contrário, cria novo.
     public IActionResult Salvar([FromBody] ProcessoIaRequest request)
     {
         var processo = _context.ProcessosIa
@@ -47,26 +42,92 @@ public class ProcessoIaController : ControllerBase
         processo.ProcedimentoRecomendado = request.ProcedimentoRecomendado;
         processo.DataAtualizacao = DateTime.Now;
 
-        _context.SaveChanges();
+        using var transaction = _context.Database.BeginTransaction();
 
-        var tagsAtuais = _context.ProcessoTagsIa
-            .Where(x => x.ProcessoIaId == processo.Id)
-            .ToList();
-
-        _context.ProcessoTagsIa.RemoveRange(tagsAtuais);
-
-        foreach (var tag in request.Tags ?? new List<ProcessoTagRequest>())
+        try
         {
-            _context.ProcessoTagsIa.Add(new ProcessoTagIa
-            {
-                ProcessoIaId = processo.Id,
-                ClienteId = request.ClienteId,
-                TagName = tag.TagName,
-                PapelDaTag = tag.PapelDaTag
-            });
-        }
+            _context.SaveChanges();
 
-        _context.SaveChanges();
+            var tagsSolicitadas =
+                request.Tags ?? new List<ProcessoTagRequest>();
+
+            var duplicadasNoMesmoProcesso =
+                tagsSolicitadas
+                    .Where(x => !string.IsNullOrWhiteSpace(x.TagName))
+                    .GroupBy(
+                        x => x.TagName.Trim(),
+                        StringComparer.OrdinalIgnoreCase)
+                    .Where(x => x.Count() > 1)
+                    .Select(x => x.Key)
+                    .ToList();
+
+            if (duplicadasNoMesmoProcesso.Count > 0)
+            {
+                transaction.Rollback();
+
+                return BadRequest(new
+                {
+                    erro =
+                        "A mesma tag não pode ser enviada mais de uma vez no mesmo processo.",
+                    tags = duplicadasNoMesmoProcesso
+                });
+            }
+
+            var tagsAtuais = _context.ProcessoTagsIa
+                .Where(x => x.ProcessoIaId == processo.Id)
+                .ToList();
+
+            _context.ProcessoTagsIa.RemoveRange(tagsAtuais);
+            _context.SaveChanges();
+
+            foreach (var tag in tagsSolicitadas)
+            {
+                var tagName = tag.TagName?.Trim() ?? "";
+
+                if (string.IsNullOrWhiteSpace(tagName))
+                {
+                    transaction.Rollback();
+
+                    return BadRequest(new
+                    {
+                        erro = "O nome da tag é obrigatório."
+                    });
+                }
+
+                if (tag.Principal)
+                {
+                    var principaisAnteriores =
+                        _context.ProcessoTagsIa
+                            .Where(x =>
+                                x.ClienteId == request.ClienteId &&
+                                x.TagName == tagName &&
+                                x.Principal)
+                            .ToList();
+
+                    foreach (var anterior in principaisAnteriores)
+                    {
+                        anterior.Principal = false;
+                    }
+                }
+
+                _context.ProcessoTagsIa.Add(new ProcessoTagIa
+                {
+                    ProcessoIaId = processo.Id,
+                    ClienteId = request.ClienteId,
+                    TagName = tagName,
+                    PapelDaTag = tag.PapelDaTag,
+                    Principal = tag.Principal
+                });
+            }
+
+            _context.SaveChanges();
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
 
         return Ok(new
         {
@@ -79,8 +140,6 @@ public class ProcessoIaController : ControllerBase
     }
 
     [HttpGet("{clienteId}")]
-    // Endpoint: GET /api/processos/{clienteId}
-    // Retorna os processos cadastrados para um cliente, incluindo as tags associadas.
     public IActionResult ListarPorCliente(string clienteId)
     {
         var processos = _context.ProcessosIa
@@ -94,7 +153,6 @@ public class ProcessoIaController : ControllerBase
 
 public class ProcessoIaRequest
 {
-    // Payload usado para criar ou atualizar um processo de IA.
     public string ClienteId { get; set; } = "";
     public string Nome { get; set; } = "";
 
@@ -111,7 +169,8 @@ public class ProcessoIaRequest
 
 public class ProcessoTagRequest
 {
-    // Dados de uma tag associada ao processo.
     public string TagName { get; set; } = "";
     public string? PapelDaTag { get; set; }
+
+    public bool Principal { get; set; }
 }

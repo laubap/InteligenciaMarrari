@@ -47,6 +47,16 @@ public class IsolationForestDetector : IAnomalyDetector
         SemaphoreSlim
     > LocksCarregamento = new();
 
+    /// <summary>
+    /// Cacheia combinações de cliente/tag para as quais nenhum
+    /// modelo foi encontrado. Isso evita procurar o mesmo arquivo
+    /// inexistente a cada nova leitura.
+    /// </summary>
+    private static readonly ConcurrentDictionary<
+        string,
+        byte
+    > ModelosInexistentes = new();
+
     public IsolationForestDetector(
         IOptions<IsolationForestOptions> options,
         IsolationForestFeatureExtractor featureExtractor,
@@ -99,6 +109,44 @@ public class IsolationForestDetector : IAnomalyDetector
         {
             return CriarResultadoNaoAplicavel(
                 "A tag não foi informada para o Isolation Forest."
+            );
+        }
+
+        /*
+         * Verifica a existência do modelo antes de preparar/copiar o
+         * histórico. No benchmark sem modelos treinados, isso evita
+         * milhares de operações LINQ por leitura.
+         */
+        ModeloIsolationCarregado? modeloCarregado;
+
+        try
+        {
+            modeloCarregado = ObterModelo(
+                input.ClienteId.Trim(),
+                input.TagName.Trim()
+            );
+        }
+        catch (InvalidOperationException ex)
+        {
+            return CriarResultadoNaoAplicavel(
+                $"O Isolation Forest não pôde ser executado: {ex.Message}"
+            );
+        }
+        catch (Exception ex)
+        {
+            return CriarResultadoNaoAplicavel(
+                $"Falha ao executar o Isolation Forest: {ex.Message}"
+            );
+        }
+
+        if (modeloCarregado == null)
+        {
+            return CriarResultadoNaoAplicavel(
+                $"Não existe modelo Isolation Forest treinado " +
+                $"para o cliente '{input.ClienteId.Trim()}' " +
+                $"e a tag '{input.TagName.Trim()}'. " +
+                $"Execute o endpoint de treinamento antes " +
+                $"de utilizar este detector."
             );
         }
 
@@ -155,29 +203,21 @@ public class IsolationForestDetector : IAnomalyDetector
                 DesvioPadraoHistorico =
                     input.DesvioPadraoHistorico,
 
+                VariacaoMinimaRelevante =
+                    input.VariacaoMinimaRelevante,
+
+                ConfiancaVariacaoMinima =
+                    input.ConfiancaVariacaoMinima,
+
+                VariacaoMinimaDefinidaPeloCliente =
+                    input.VariacaoMinimaDefinidaPeloCliente,
+
                 Historico =
                     historicoValido
             };
 
         try
         {
-            var modeloCarregado =
-                ObterModelo(
-                    inputPreparado.ClienteId,
-                    inputPreparado.TagName
-                );
-
-            if (modeloCarregado == null)
-            {
-                return CriarResultadoNaoAplicavel(
-                    $"Não existe modelo Isolation Forest treinado " +
-                    $"para o cliente '{inputPreparado.ClienteId}' " +
-                    $"e a tag '{inputPreparado.TagName}'. " +
-                    $"Execute o endpoint de treinamento antes " +
-                    $"de utilizar este detector."
-                );
-            }
-
             var featureAtual =
                 _featureExtractor.ExtrairAtual(
                     inputPreparado,
@@ -370,6 +410,16 @@ public class IsolationForestDetector : IAnomalyDetector
             );
 
         /*
+         * Se já foi confirmado que não existe modelo para esta
+         * combinação de cliente e tag, não tenta acessar o disco
+         * novamente.
+         */
+        if (ModelosInexistentes.ContainsKey(chave))
+        {
+            return null;
+        }
+
+        /*
          * Primeiro tenta reutilizar o modelo da memória.
          */
         if (
@@ -431,9 +481,14 @@ public class IsolationForestDetector : IAnomalyDetector
 
             if (snapshot == null)
             {
-                Console.WriteLine(
-                    $"Nenhum modelo Isolation Forest encontrado: " +
-                    $"{clienteId}/{tagName}"
+                /*
+                 * Registra a ausência em memória para que as próximas
+                 * leituras da mesma tag não tentem carregar novamente
+                 * um arquivo que já sabemos que não existe.
+                 */
+                ModelosInexistentes.TryAdd(
+                    chave,
+                    0
                 );
 
                 return null;
@@ -476,6 +531,15 @@ public class IsolationForestDetector : IAnomalyDetector
 
             CacheModelos[chave] =
                 novoCache;
+
+            /*
+             * Caso a ausência desse modelo tenha sido cacheada antes,
+             * remove a marcação agora que um snapshot válido existe.
+             */
+            ModelosInexistentes.TryRemove(
+                chave,
+                out _
+            );
 
             Console.WriteLine(
                 $"Isolation Forest carregado do disco: " +
@@ -562,7 +626,7 @@ public class IsolationForestDetector : IAnomalyDetector
             );
         }
 
-        if (snapshot.FeatureWindowSize <= 0)
+        if (snapshot.FeatureWindowSize < 3)
         {
             throw new InvalidOperationException(
                 "O tamanho da janela de características do modelo " +
@@ -571,9 +635,9 @@ public class IsolationForestDetector : IAnomalyDetector
         }
 
         if (
-            !double.IsFinite(
-                snapshot.AnomalyThreshold
-            )
+            !double.IsFinite(snapshot.AnomalyThreshold) ||
+            snapshot.AnomalyThreshold <= 0 ||
+            snapshot.AnomalyThreshold >= 1
         )
         {
             throw new InvalidOperationException(
@@ -636,9 +700,9 @@ public class IsolationForestDetector : IAnomalyDetector
         }
 
         if (
-            !double.IsFinite(
-                cache.AnomalyThreshold
-            )
+            !double.IsFinite(cache.AnomalyThreshold) ||
+            cache.AnomalyThreshold <= 0 ||
+            cache.AnomalyThreshold >= 1
         )
         {
             return false;
@@ -826,6 +890,15 @@ public class IsolationForestDetector : IAnomalyDetector
             out _
         );
 
+        /*
+         * Permite que a próxima detecção tente carregar novamente
+         * o modelo, inclusive após um novo treinamento.
+         */
+        ModelosInexistentes.TryRemove(
+            chave,
+            out _
+        );
+
         Console.WriteLine(
             $"Modelo Isolation Forest removido do cache: " +
             $"{clienteId}/{tagName}"
@@ -840,6 +913,7 @@ public class IsolationForestDetector : IAnomalyDetector
     public static void LimparCache()
     {
         CacheModelos.Clear();
+        ModelosInexistentes.Clear();
 
         Console.WriteLine(
             "Cache do Isolation Forest foi limpo."

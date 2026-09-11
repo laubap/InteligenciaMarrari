@@ -4,146 +4,236 @@ namespace IAApi.Services.AnomalyDetection;
 
 public class LevelShiftDetector : IAnomalyDetector
 {
+    private const int MinimumPointsPerWindow = 3;
+
     private readonly AnomalyDetectionOptions _options;
 
-    public LevelShiftDetector(
-        IOptions<AnomalyDetectionOptions> options)
+    public LevelShiftDetector(IOptions<AnomalyDetectionOptions> options)
     {
         _options = options.Value;
     }
 
     public string Nome => "Mudança de patamar";
-
     public double Peso => _options.LevelShiftWeight;
 
     public DetectorResult Detectar(DetectorInput input)
     {
-        var serie = input.Historico
-            .OrderBy(x => x.DataHora)
-            .Select(x => x.Valor)
-            .Where(double.IsFinite)
-            .ToList();
+        ArgumentNullException.ThrowIfNull(input);
 
-        serie.Add(input.ValorAtual);
+        var cadenciaMediana =
+            input.Contexto.IntervaloMedianoMinutos;
 
-        var totalNecessario =
-            _options.LevelShiftPreviousWindow +
-            _options.LevelShiftRecentWindow;
-
-        if (serie.Count < totalNecessario)
+        if (cadenciaMediana <= 0 || !double.IsFinite(cadenciaMediana))
         {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao =
-                    $"São necessários pelo menos {totalNecessario} pontos."
-            };
+            return NaoAplicavel(
+                "Não foi possível determinar a cadência da tag.");
         }
 
-        var recentes = serie
-            .TakeLast(
-                _options.LevelShiftRecentWindow
-            )
-            .ToArray();
+        var previousMinutes =
+            Math.Max(1, _options.LevelShiftPreviousWindow);
 
-        var anteriores = serie
-            .Skip(
-                serie.Count -
-                totalNecessario
-            )
-            .Take(
-                _options.LevelShiftPreviousWindow
-            )
-            .ToArray();
+        var recentMinutes =
+            Math.Max(1, _options.LevelShiftRecentWindow);
+
+        var fimRecente = input.DataHoraAtual;
+        var inicioRecente = fimRecente.AddMinutes(-recentMinutes);
+        var inicioAnterior = inicioRecente.AddMinutes(-previousMinutes);
+
+        var anteriores =
+            input.Historico
+                .Where(p =>
+                    p.DataHora >= inicioAnterior &&
+                    p.DataHora < inicioRecente)
+                .Select(p => p.Valor)
+                .ToArray();
+
+        var recentes =
+            input.Historico
+                .Where(p =>
+                    p.DataHora >= inicioRecente &&
+                    p.DataHora <= fimRecente)
+                .Select(p => p.Valor)
+                .ToList();
+
+        recentes.Add(input.ValorAtual);
+
+        if (anteriores.Length < MinimumPointsPerWindow ||
+            recentes.Count < MinimumPointsPerWindow)
+        {
+            return NaoAplicavel(
+                $"Janelas temporais insuficientes. " +
+                $"Anterior={anteriores.Length} ponto(s), " +
+                $"recente={recentes.Count} ponto(s).");
+        }
 
         var medianaAnterior =
             DetectorMath.Median(anteriores);
 
         var medianaRecente =
-            DetectorMath.Median(recentes);
+            DetectorMath.Median(recentes.ToArray());
 
-        var escalaAnterior =
+        var escalaAnteriorOriginal =
             DetectorMath.EscalaRobusta(anteriores);
 
-        if (escalaAnterior <= 0)
+        var protecao =
+            BaselineProtectionProfile.Build(input, medianaAnterior);
+
+        var escalaAnterior =
+            protecao.ResolveEffectiveScale(
+                escalaAnteriorOriginal,
+                _options.LevelShiftThreshold);
+
+        if (escalaAnterior <= 0 || !double.IsFinite(escalaAnterior))
         {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao =
-                    "A janela anterior não apresenta dispersão suficiente."
-            };
+            return NaoAplicavel(
+                "A janela anterior não possui escala suficiente.");
         }
 
-        var diferenca =
-            medianaRecente - medianaAnterior;
+        var diferenca = medianaRecente - medianaAnterior;
+        var diferencaAbsoluta = Math.Abs(diferenca);
+
+        var dentroDeadband =
+            protecao.Deadband > 0 &&
+            diferencaAbsoluta <= protecao.Deadband;
+
+        var scoreMudancaBruto =
+            diferencaAbsoluta / escalaAnterior;
 
         var scoreMudanca =
-            Math.Abs(diferenca) /
-            escalaAnterior;
+            dentroDeadband ? 0 : scoreMudancaBruto;
 
         var direcao = Math.Sign(diferenca);
+        var consistentes = 0;
 
-        var consistentes = recentes.Count(valor =>
-            direcao > 0
-                ? valor > medianaAnterior
-                : valor < medianaAnterior
-        );
+        if (direcao != 0)
+        {
+            foreach (var valor in recentes)
+            {
+                if (direcao > 0
+                        ? valor > medianaAnterior
+                        : valor < medianaAnterior)
+                {
+                    consistentes++;
+                }
+            }
+        }
 
         var consistencia =
-            consistentes /
-            (double)recentes.Length;
+            consistentes / (double)recentes.Count;
 
         var componenteDeslocamento =
             Math.Clamp(
                 scoreMudanca /
-                _options.LevelShiftThreshold,
+                Math.Max(_options.LevelShiftThreshold, 1e-9),
                 0,
-                1
-            );
+                1);
 
         var scoreNormalizado =
-            (
-                componenteDeslocamento * 0.70 +
-                consistencia * 0.30
-            ) * 100;
+            dentroDeadband
+                ? 0
+                : ((componenteDeslocamento * 0.70) +
+                   (consistencia * 0.30)) *
+                  100;
+
+        var possuiGapCriticoNasJanelas =
+            HasCriticalGap(input, inicioAnterior, fimRecente);
 
         var ehAnomalia =
-            scoreMudanca >=
-                _options.LevelShiftThreshold &&
-            consistencia >=
-                _options.LevelShiftMinimumConsistency;
+            !dentroDeadband &&
+            !possuiGapCriticoNasJanelas &&
+            scoreMudanca >= _options.LevelShiftThreshold &&
+            consistencia >= _options.LevelShiftMinimumConsistency;
 
         return new DetectorResult
         {
             Aplicavel = true,
             EhAnomalia = ehAnomalia,
-
-            Score =
-                scoreMudanca,
-
-            ScoreNormalizado =
-                scoreNormalizado,
-
+            Score = scoreMudanca,
+            ScoreNormalizado = scoreNormalizado,
             Peso = Peso,
             Detector = Nome,
-
-            Explicacao = ehAnomalia
-                ? $"Foi identificada mudança persistente de patamar: mediana anterior {medianaAnterior:F2}, recente {medianaRecente:F2}."
-                : $"Não foi identificada mudança consistente de patamar.",
-
+            Explicacao = possuiGapCriticoNasJanelas
+                ? "As janelas temporais contêm um gap crítico de aquisição; a mudança de patamar não foi confirmada."
+                : dentroDeadband
+                    ? $"A diferença entre patamares ({diferencaAbsoluta:F6}) está dentro do deadband ({protecao.Deadband:F6})."
+                    : ehAnomalia
+                        ? $"Mudança temporal de patamar confirmada: mediana anterior={medianaAnterior:F4}, recente={medianaRecente:F4}."
+                        : "Não foi identificada mudança temporal consistente de patamar.",
             Metricas = new Dictionary<string, double>
             {
                 ["medianaAnterior"] = medianaAnterior,
                 ["medianaRecente"] = medianaRecente,
                 ["diferencaPatamar"] = diferenca,
                 ["scoreMudanca"] = scoreMudanca,
-                ["consistencia"] = consistencia
+                ["scoreMudancaAntesDeadband"] = scoreMudancaBruto,
+                ["consistencia"] = consistencia,
+                ["janelaAnteriorMinutos"] = previousMinutes,
+                ["janelaRecenteMinutos"] = recentMinutes,
+                ["pontosJanelaAnterior"] = anteriores.Length,
+                ["pontosJanelaRecente"] = recentes.Count,
+                ["cadenciaMedianaMinutos"] = cadenciaMediana,
+                ["deadband"] = protecao.Deadband,
+                ["possuiGapCriticoNasJanelas"] =
+                    possuiGapCriticoNasJanelas ? 1 : 0
             }
         };
     }
+
+    private static bool HasCriticalGap(
+        DetectorInput input,
+        DateTime start,
+        DateTime end)
+    {
+        var medianInterval =
+            input.QualidadeHistorico.MedianIntervalMinutes;
+
+        if (medianInterval <= 0 || !double.IsFinite(medianInterval))
+            return false;
+
+        var gapLimit =
+            input.QualidadeHistorico.CriticalGapThresholdMinutes > 0
+                ? input.QualidadeHistorico.CriticalGapThresholdMinutes
+                : medianInterval * 5.0;
+
+        DateTime? previous = null;
+
+        foreach (var point in input.Historico)
+        {
+            if (point.DataHora < start || point.DataHora > end)
+                continue;
+
+            if (previous.HasValue)
+            {
+                var gap =
+                    (point.DataHora - previous.Value).TotalMinutes;
+
+                if (gap > gapLimit)
+                    return true;
+            }
+
+            previous = point.DataHora;
+        }
+
+        if (previous.HasValue)
+        {
+            var gapToCurrent =
+                (input.DataHoraAtual - previous.Value).TotalMinutes;
+
+            if (gapToCurrent > gapLimit)
+                return true;
+        }
+
+        return false;
+    }
+
+    private DetectorResult NaoAplicavel(string explicacao) => new()
+    {
+        Aplicavel = false,
+        EhAnomalia = false,
+        Score = 0,
+        ScoreNormalizado = 0,
+        Detector = Nome,
+        Peso = Peso,
+        Explicacao = explicacao
+    };
 }

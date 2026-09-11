@@ -28,4 +28,19 @@
     </Reference>
   </ItemGroup>
 
+<ItemGroup>
+  <Compile Remove="Tools\**\*.cs" />
+  <Content Remove="Tools\**\*" />
+  <None Remove="Tools\**\*" />
+
+  <Compile Remove="IAApi.Tests\**\*.cs" />
+  <Content Remove="IAApi.Tests\**\*" />
+  <None Remove="IAApi.Tests\**\*" />
+</ItemGroup>
+
+<ItemGroup>
+  <Compile Remove="B319Check\**\*.cs" />
+   <Compile Remove="B32012ProcessCheck\**\*.cs" />
+</ItemGroup>
+
 </Project>

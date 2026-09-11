@@ -15,7 +15,7 @@ public class ConhecimentoIaController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Obter()
     {
-        var totalAnomalias = await _context.AnomaliasDetectadas.CountAsync();
+        var totalAnomalias = await _context.AnomaliasDetectadas.CountAsync(x => x.EhAnomalia);
 
         var feedbacks = await _context.FeedbackAnomaliasIa
             .Include(x => x.MotivoAnomaliaIA)
@@ -42,6 +42,7 @@ public class ConhecimentoIaController : ControllerBase
             .ToList();
 
         var tagsComMaisAnomalias = await _context.AnomaliasDetectadas
+            .Where(x => x.EhAnomalia)
             .GroupBy(x => x.TagName)
             .Select(x => new
             {
@@ -53,6 +54,7 @@ public class ConhecimentoIaController : ControllerBase
             .ToListAsync();
 
         var anomaliasPorDia = await _context.AnomaliasDetectadas
+            .Where(x => x.EhAnomalia)
             .GroupBy(x => x.DataDeteccao.Date)
             .Select(x => new
             {

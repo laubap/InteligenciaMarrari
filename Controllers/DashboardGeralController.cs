@@ -17,9 +17,10 @@ public class DashboardGeralController : ControllerBase
         var totalProcessos = _context.ProcessosIa.Count();
         var totalEquipamentos = _context.EquipamentosIa.Count();
         var totalTagsConfiguradas = _context.TagsIaConfig.Count();
-        var totalAnomalias = _context.AnomaliasDetectadas.Count();
+        var totalAnomalias = _context.AnomaliasDetectadas.Count(x => x.EhAnomalia);
 
         var ultimasAnomalias = _context.AnomaliasDetectadas
+            .Where(x => x.EhAnomalia)
             .OrderByDescending(x => x.DataDeteccao)
             .Take(5)
             .Select(x => new

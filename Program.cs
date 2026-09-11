@@ -6,8 +6,47 @@ using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services;
 using IAApi.Infrastructure.Llm.Providers;
 using IAApi.Infrastructure.Llm.Configuration;
+using IAApi.Benchmark;
+using IAApi.Benchmark.Tests;
+using IAApi.Benchmark.BehaviorProfiles;
+using IAApi.Services.AnomalyDetection.Multivariate;
+using IAApi.Benchmark.Diagnostics;
+using IAApi.Benchmark.RegimeShadow;
+using IAApi.Benchmark.RegimeShadow.DualBaseline;
+using IAApi.Benchmark.PersistenceCounterfactual;
+using IAApi.Benchmark.ExperimentalIncidents.Api;
+using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
+using IAApi.Benchmark.ExperimentalAnomalyDecisions;
+
+var persistenceTemporalExperiment = args.Any(argumento =>
+    string.Equals(argumento,
+        "--experimental-persistence-temporal-confirmation",
+        StringComparison.OrdinalIgnoreCase));
 
 var builder = WebApplication.CreateBuilder(args);
+
+// B3.24.2 / MV04
+// Execução operacional: os grupos multivariados são carregados do banco,
+// permitindo configuração por cliente/tenant.
+// Modos explícitos de laboratório/benchmark continuam usando o JSON histórico
+// para preservar a reprodutibilidade dos cenários de teste e benchmark.
+var usarGruposMultivariadosDoBenchmark =
+    args.Any(argumento =>
+        string.Equals(argumento, "--benchmark", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--benchmark-clean", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--benchmark-fast", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--benchmark-clean-fast", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--test-groups", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--test-multivariate-buffer", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--test-multivariate-dataset", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--test-multivariate-detector", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(argumento, "--train-multivariate", StringComparison.OrdinalIgnoreCase));
+
+if (persistenceTemporalExperiment)
+{
+    builder.Configuration[
+        "AnomalyDetection:ExperimentalPersistenceTemporalConfirmationEnabled"] = "true";
+}
 
 // Controllers da API
 builder.Services.AddControllers();
@@ -54,11 +93,77 @@ builder.Services.AddScoped<EquipamentoInteligenciaService>();
 builder.Services.AddScoped<FeedbackAnomaliaAnaliseService>();
 
 builder.Services.AddHostedService<MonitoramentoTagsService>();
+builder.Services.AddSingleton<EnsembleV2Simulator>();
+builder.Services.AddSingleton<AdaptiveEnsembleLaboratory>();
+builder.Services.AddSingleton<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeDecisionMetrics>();
+
+builder.Services.Configure<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeDecisionMetricsEndpointOptions>(
+    builder.Configuration.GetSection(
+        IAApi.Services.AnomalyDetection.Runtime.RuntimeDecisionMetricsEndpointOptions.SectionName)
+);
+
+builder.Services.Configure<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutReadinessOptions>(
+    builder.Configuration.GetSection(
+        IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutReadinessOptions.SectionName)
+);
+
+builder.Services.AddSingleton<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutReadinessEvaluator>();
+
+    builder.Services.AddSingleton<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotFactory>();
+
+builder.Services.AddScoped<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotService>();
+
+    builder.Services.AddScoped<
+    MultivariateCorrelationDiagnosticService>();
+
+builder.Services.Configure<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotPersistenceOptions>(
+    builder.Configuration.GetSection(
+        IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotPersistenceOptions.SectionName)
+);
+
+builder.Services.AddScoped<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutEvolutionService>();
+
+builder.Services.AddScoped<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutHistoryService>();
+
+builder.Services.AddHostedService<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotHostedService>();
 
 // Configuração dos detectores de anomalia
 builder.Services.Configure<AnomalyDetectionOptions>(
     builder.Configuration.GetSection("AnomalyDetection")
 );
+
+// B3.18 — runtime operational decision.
+// Ausência da seção mantém Enabled = false e comportamento Legacy.
+builder.Services.Configure<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeAnomalyDecisionOptions>(
+    builder.Configuration.GetSection(
+        IAApi.Services.AnomalyDetection.Runtime.RuntimeAnomalyDecisionOptions.SectionName)
+);
+
+builder.Services.AddSingleton<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeAnomalyDecisionResolver>();
+
+builder.Services.AddSingleton<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeFunctionalDecisionCandidateFactory>();
+
+builder.Services.AddSingleton<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeFunctionalDecisionStateStore>();
+
+builder.Services.AddSingleton<
+    IAApi.Services.AnomalyDetection.Runtime.RuntimeFunctionalDecisionContextProvider>();
+
+builder.Services.AddSingleton<TagBehaviorProfileResolver>();
+builder.Services.AddSingleton<DetectorApplicabilityPolicy>();
 
 builder.Services.AddScoped<
     IAnomalyDetector,
@@ -85,6 +190,14 @@ builder.Services.AddScoped<
     LevelShiftDetector>();
 
 builder.Services.AddScoped<EnsembleDetectionService>();
+
+builder.Services.AddSingleton<
+    IValidateOptions<AnomalyDetectionOptions>,
+    AnomalyDetectionOptionsValidator>();
+
+builder.Services.AddSingleton<
+    IValidateOptions<IsolationForestOptions>,
+    IsolationForestOptionsValidator>();
 
 // Isolation Forest
 builder.Services.Configure<IsolationForestOptions>(
@@ -114,12 +227,76 @@ builder.Services.Configure<OpenAiOptions>(
     builder.Configuration.GetSection("OpenAI")
 );
 
+builder.Services.AddScoped<MultivariateBufferTester>();
+builder.Services.AddScoped<MultivariateDatasetTester>();
+builder.Services.AddScoped<MultivariateDetectorTester>();
+
 // Configuração do LLM
 builder.Services.Configure<LlmOptions>(
     builder.Configuration.GetSection(
         LlmOptions.SectionName
     )
 );
+
+// Configuração do benchmark
+var benchmarkSection =
+    builder.Configuration.GetRequiredSection(
+        BenchmarkOptions.SectionName
+    );
+
+var benchmarkOptions =
+    benchmarkSection.Get<BenchmarkOptions>()
+    ?? throw new InvalidOperationException(
+        "Não foi possível carregar a configuração Benchmark."
+    );
+
+    var executarAdaptiveEnsembleLab =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--adaptive-ensemble-lab",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+    Console.WriteLine(
+    $"CleanDatabasePath carregado: " +
+    $"{benchmarkOptions.CleanDatabasePath}"
+);
+
+Console.WriteLine(
+    $"AnomalyDatabasePath carregado: " +
+    $"{benchmarkOptions.AnomalyDatabasePath}"
+);
+
+builder.Services.AddSingleton(benchmarkOptions);
+
+builder.Services.AddSingleton<SQLiteHistoricoService>(
+    _ => new SQLiteHistoricoService(
+        benchmarkOptions.HistoryWindowSize
+    )
+);
+
+builder.Services.AddScoped<BenchmarkRunner>();
+builder.Services.AddSingleton<BenchmarkEvaluator>();
+builder.Services.AddSingleton<CleanBenchmarkEvaluator>();
+builder.Services.AddSingleton<CalibrationInvestigator>();
+builder.Services.AddSingleton<CalibrationAllInvestigator>();
+builder.Services.AddSingleton<DeadbandImpactEvaluator>();
+builder.Services.AddSingleton<ResultsAnalyzer>();
+builder.Services.AddSingleton<DetectorSensitivityReport>();
+builder.Services.AddSingleton<FamilyConsensusReport>();
+builder.Services.AddSingleton<
+    FalsePositiveRootCauseAnalyzer>();
+
+// Experimental Incident API: disabled by default and strictly read-only.
+builder.Services.Configure<ExperimentalIncidentApiOptions>(
+    builder.Configuration.GetSection(ExperimentalIncidentApiOptions.SectionName));
+builder.Services.AddSingleton<IIncidentReadModelStore, InMemoryIncidentReadModelStore>();
+builder.Services.AddSingleton<IncidentReadModelSnapshotLoader>();
+builder.Services.AddSingleton<IExperimentalIncidentQueryService,
+    ExperimentalIncidentQueryService>();
+
 
 // Provedor do LM Studio no servidor
 builder.Services.AddHttpClient<
@@ -181,11 +358,1354 @@ builder.Services.AddScoped<TagContextoIaService>();
 builder.Services.AddScoped<
     AnomalyInterpretationContextBuilder>();
 
+builder.Services.AddScoped<GrupoAnaliseService>();
+
+builder.Services.AddScoped<
+    OperationalMultivariateTrainingService>();
+
+builder.Services.AddScoped<GrupoAnaliseCadastroService>();
+
+builder.Services.AddScoped<GrupoAnaliseTester>();
+
+builder.Services.AddScoped<
+    MultivariateTrainingService>();
+
+builder.Services.AddScoped<
+    MultivariateGroupBufferService>();
+
+builder.Services.AddSingleton<
+    MultivariateRuntimeStateStore>();
+
+builder.Services.AddSingleton<
+    MultivariateModelPersistenceService>();
+
+// B3.24.2 / MV08.2C — backtest histórico multivariado diagnóstico.
+// Somente leitura/análise; não altera modelo, runtime, readiness ou promoção.
+builder.Services.AddSingleton<
+    MultivariateHistoricalBacktestAnalyzer>();
+
+builder.Services.AddScoped<
+    OperationalMultivariateBacktestService>();
+
+// B3.24.2 / MV08.4B — qualificação operacional multivariada.
+// Executa avaliação técnica e de governança; não altera ApprovedGroups,
+// promoção ou RuntimeDecision.
+builder.Services.AddSingleton<
+    MultivariateOperationalQualificationEvaluator>();
+
+builder.Services.AddScoped<
+    OperationalMultivariateQualificationService>();
+
+// B3.24.2 / MV08.4D1 — armazenamento auditável das revisões
+// industriais por evento. Não participa da decisão operacional.
+builder.Services.AddScoped<
+    MultivariateIndustrialEventReviewStore>();
+
+builder.Services.AddSingleton<
+    MultivariateIndustrialReviewAssessmentService>();
+
+// B3.24.2 / MV08.4D3 — fila de revisão industrial.
+// Somente consulta/organização da evidência e das revisões persistidas.
+// Não concede autoridade operacional ao grupo.
+builder.Services.AddSingleton<
+    MultivariateIndustrialReviewQueueBuilder>();
+
+builder.Services.AddScoped<
+    IMultivariateIndustrialReviewQueueService,
+    MultivariateIndustrialReviewQueueService>();
+
+// B3.24.2 / MV07 — readiness operacional multivariado.
+// Avalia se grupo e modelo estão aptos a receber autoridade operacional.
+// Não cria anomalias por conta própria, mas funciona como gate de segurança
+// quando uma promoção multivariada é considerada.
+builder.Services.Configure<
+    MultivariateOperationalReadinessOptions>(
+    builder.Configuration.GetSection(
+        "AnomalyDetection:MultivariateOperationalReadiness"));
+
+builder.Services.AddSingleton<
+    MultivariateOperationalReadinessEvaluator>();
+
+builder.Services.AddScoped<
+    MultivariateOperationalReadinessService>();
+
+builder.Services.AddScoped<
+    MultivariateDetector>();
+
+
+// B3.24.2 / MV06 — avaliação counterfactual da decisão multivariada.
+// Permite comparar o efeito da evidência multivariada sem conceder
+// automaticamente autoridade operacional ao grupo.
+builder.Services.Configure<
+    MultivariateDecisionFusionOptions>(
+    builder.Configuration.GetSection(
+        MultivariateDecisionFusionOptions.SectionName));
+
+builder.Services.AddSingleton<
+    MultivariateDecisionCounterfactualEvaluator>();
+
+builder.Services.AddScoped<
+    MultivariateDecisionCounterfactualObserver>();
+
+// B3.24.2 / MV06.3 — promoção operacional multivariada.
+// A autoridade real possui feature flag própria, passa pelos gates
+// de segurança/readiness e permanece desligada por padrão.
+builder.Services.Configure<
+    MultivariateOperationalPromotionOptions>(
+    builder.Configuration.GetSection(
+        MultivariateOperationalPromotionOptions.SectionName));
+
+builder.Services.AddSingleton<
+    MultivariateOperationalFusionResolver>();
+
+builder.Services.AddSingleton<
+    MultivariateOperationalInterpretationFactory>();
+
+
+// B3.24.2 / MV01 — inferência multivariada operacional.
+// O coordinator executa a análise multivariada e mantém o estado necessário.
+// A autoridade sobre a decisão final não é definida aqui: ela é controlada
+// posteriormente pelas políticas de promoção, readiness e fusão operacional.
+builder.Services.AddScoped<
+    MultivariateShadowRuntimeCoordinator>();
+
+if (usarGruposMultivariadosDoBenchmark)
+{
+    builder.Services.AddScoped<
+        IGrupoAnaliseProvider,
+        JsonGrupoAnaliseProvider>();
+}
+else
+{
+    builder.Services.AddScoped<
+        IGrupoAnaliseProvider,
+        DatabaseGrupoAnaliseProvider>();
+}
+
+    builder.Services.Configure<ConfidenceEngineOptions>(
+    builder.Configuration.GetSection("ConfidenceEngine"));
+
+builder.Services.AddSingleton<ConfidenceEngine>();
+builder.Services.AddSingleton<LegacyDetectorResultV2Adapter>();
+builder.Services.AddSingleton<EvidenceBuilder>();
+builder.Services.AddSingleton<ConfidenceBenchmarkAnalyzer>();
+builder.Services.AddSingleton<ConfidenceBenchmarkReportWriter>();
+builder.Services.AddSingleton<ConfidenceEngineBenchmarkRunner>();
+
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+var experimentalIncidentApiOptions = app.Services
+    .GetRequiredService<IOptions<ExperimentalIncidentApiOptions>>().Value;
+if (experimentalIncidentApiOptions.Enabled &&
+    !string.IsNullOrWhiteSpace(experimentalIncidentApiOptions.SnapshotPath))
+{
+    try
+    {
+        var snapshotPath = Path.IsPathRooted(experimentalIncidentApiOptions.SnapshotPath)
+            ? experimentalIncidentApiOptions.SnapshotPath
+            : Path.Combine(Directory.GetCurrentDirectory(),
+                experimentalIncidentApiOptions.SnapshotPath);
+        var loader = app.Services.GetRequiredService<IncidentReadModelSnapshotLoader>();
+        var store = app.Services.GetRequiredService<IIncidentReadModelStore>();
+        var loaded = await loader.LoadAsync(snapshotPath, store);
+        app.Logger.LogInformation(
+            "Experimental Incident API loaded {IncidentCount} read models from {SnapshotPath}.",
+            loaded, snapshotPath);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex,
+            "Experimental Incident API snapshot load failed; API remains isolated and empty.");
+    }
+}
+
+var executarTesteGrupos =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--test-groups",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarTesteBufferMultivariado =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--test-multivariate-buffer",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarTesteDatasetMultivariado =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--test-multivariate-dataset",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarTesteDetectorMultivariado =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--test-multivariate-detector",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarTreinamentoMultivariado =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--train-multivariate",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarBenchmark =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--benchmark",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarBenchmarkClean =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--benchmark-clean",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarBenchmarkFast =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--benchmark-fast",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarBenchmarkCleanFast =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--benchmark-clean-fast",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var baselineDiagnosticOptions =
+    BaselineDiagnosticOptions.Parse(args);
+
+var regimeShadowOptions = RegimeShadowOptions.Parse(args);
+
+var detectorOptionsForDualBaseline = builder.Configuration
+    .GetRequiredSection("AnomalyDetection")
+    .Get<AnomalyDetectionOptions>() ?? new AnomalyDetectionOptions();
+
+var dualBaselineShadowOptions =
+    DualBaselineShadowOptions.Parse(args, detectorOptionsForDualBaseline);
+
+var behaviorProfileObservabilityOptions =
+    BenchmarkBehaviorProfileOptions.Parse(args);
+
+var persistenceCounterfactualOptions =
+    PersistenceCounterfactualOptions.Parse(args);
+
+var experimentalIncidentOptions = builder.Configuration
+    .GetSection("ExperimentalIncidentLayer")
+    .Get<IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions>()
+    ?? new IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions();
+if (IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions.Parse(args).Enabled)
+    experimentalIncidentOptions = experimentalIncidentOptions with { Enabled = true };
+
+    var experimentalAnomalyDecisionOptions =
+    ExperimentalAnomalyDecisionOptions.Parse(args);
+
+var functionalExperimentalAnomalyDecisionEnabled =
+    args.Contains(
+        "--functional-experimental-anomaly-decision",
+        StringComparer.OrdinalIgnoreCase);
+
+var functionalOperationalCanaryEnabled =
+    args.Contains(
+        "--functional-operational-canary",
+        StringComparer.OrdinalIgnoreCase);
+
+var functionalOperationalCanaryTags =
+    args
+        .Where(argumento =>
+            argumento.StartsWith(
+                "--functional-operational-canary-tag=",
+                StringComparison.OrdinalIgnoreCase))
+        .Select(argumento =>
+            argumento[
+                "--functional-operational-canary-tag=".Length..])
+        .Where(tag =>
+            !string.IsNullOrWhiteSpace(tag))
+        .ToHashSet(
+            StringComparer.OrdinalIgnoreCase);
+
+var functionalOperationalCanaryWindows =
+    args
+        .Where(argumento =>
+            argumento.StartsWith(
+                "--functional-operational-canary-window=",
+                StringComparison.OrdinalIgnoreCase))
+        .Select(argumento =>
+            argumento[
+                "--functional-operational-canary-window=".Length..])
+        .Select(valor =>
+            int.TryParse(valor, out var janela)
+                ? janela
+                : (int?)null)
+        .Where(janela =>
+            janela.HasValue)
+        .Select(janela =>
+            janela!.Value)
+        .ToHashSet();
+
+var functionalOperationalCanaryOptions =
+    new FunctionalOperationalCanaryOptions
+    {
+        Enabled =
+            functionalOperationalCanaryEnabled,
+        AllowedTags =
+            functionalOperationalCanaryTags,
+        AllowedFastWindows =
+            functionalOperationalCanaryWindows
+    };
+
+if (baselineDiagnosticOptions.Enabled &&
+    !executarBenchmarkCleanFast)
+{
+    throw new InvalidOperationException(
+        "--b2-baseline-diagnostics só pode ser usado com " +
+        "--benchmark-clean-fast.");
+}
+
+if (regimeShadowOptions.Enabled && !executarBenchmarkCleanFast &&
+    !(regimeShadowOptions.DecisionCounterfactualEnabled && executarBenchmarkFast))
+    throw new InvalidOperationException("--regime-shadow só pode ser usado com --benchmark-clean-fast.");
+
+if (dualBaselineShadowOptions.Enabled &&
+    (!regimeShadowOptions.Enabled ||
+     (!dualBaselineShadowOptions.DecisionCounterfactualEnabled &&
+      (!executarBenchmarkCleanFast ||
+       !regimeShadowOptions.Tags.Contains(DualBaselineShadowOptions.ReferenceTag))) ||
+     (dualBaselineShadowOptions.DecisionCounterfactualEnabled &&
+      !executarBenchmarkCleanFast && !executarBenchmarkFast)))
+{
+    throw new InvalidOperationException(
+        "--dual-baseline-shadow exige --benchmark-clean-fast --regime-shadow " +
+        "--regime-shadow-tags=DRYCHAMBER04.MATERIAL_TEMPERATURE.");
+}
+
+if (experimentalAnomalyDecisionOptions.Enabled &&
+    (!executarBenchmarkCleanFast && !executarBenchmarkFast))
+{
+    throw new InvalidOperationException(
+        "--experimental-anomaly-decision só pode ser usado com " +
+        "--benchmark-clean-fast ou --benchmark-fast.");
+}
+
+if (experimentalAnomalyDecisionOptions.Enabled &&
+    !dualBaselineShadowOptions.DecisionCounterfactualEnabled)
+{
+    throw new InvalidOperationException(
+        "--experimental-anomaly-decision exige o " +
+        "--dual-baseline-decision-counterfactual.");
+}
+
+if (experimentalAnomalyDecisionOptions.Enabled &&
+    !experimentalIncidentOptions.Enabled)
+{
+    throw new InvalidOperationException(
+        "--experimental-anomaly-decision exige " +
+        "--experimental-incident-layer.");
+}
+
+if (functionalExperimentalAnomalyDecisionEnabled &&
+    !experimentalAnomalyDecisionOptions.Enabled)
+{
+    Console.WriteLine(
+        "ERRO: --functional-experimental-anomaly-decision requer " +
+        "--experimental-anomaly-decision.");
+
+    return;
+}
+
+if (functionalOperationalCanaryEnabled &&
+    !functionalExperimentalAnomalyDecisionEnabled)
+{
+    Console.WriteLine(
+        "ERRO: --functional-operational-canary requer " +
+        "--functional-experimental-anomaly-decision.");
+
+    return;
+}
+
+if (functionalOperationalCanaryEnabled &&
+    (functionalOperationalCanaryTags.Count == 0 ||
+     functionalOperationalCanaryWindows.Count == 0))
+{
+    Console.WriteLine(
+        "ERRO: o canário operacional exige pelo menos uma tag e " +
+        "uma janela FAST explícitas.");
+
+    Console.WriteLine(
+        "Exemplo: --functional-operational-canary " +
+        "--functional-operational-canary-window=1 " +
+        "--functional-operational-canary-tag=WEATHER.COOLING_DEGREE_INDEX");
+
+    return;
+}
+
+if (behaviorProfileObservabilityOptions.Enabled &&
+    !executarBenchmarkCleanFast)
+{
+    throw new InvalidOperationException(
+        "--tag-profile-observability so pode ser usado com " +
+        "--benchmark-clean-fast.");
+}
+
+if (persistenceCounterfactualOptions.Enabled && !executarBenchmarkFast)
+{
+    throw new InvalidOperationException(
+        "--persistence-counterfactual so pode ser usado com --benchmark-fast.");
+}
+
+if (persistenceTemporalExperiment &&
+    !executarBenchmarkFast &&
+    !executarBenchmarkCleanFast)
+{
+    throw new InvalidOperationException(
+        "--experimental-persistence-temporal-confirmation so pode ser usado " +
+        "com --benchmark-fast ou --benchmark-clean-fast.");
+}
+
+var indiceEvaluate = Array.FindIndex(
+    args,
+    argumento => string.Equals(
+        argumento,
+        "--evaluate",
+        StringComparison.OrdinalIgnoreCase
+    )
+);
+
+var executarAvaliacao = indiceEvaluate >= 0;
+
+var indiceEvaluateFunctionalOracle = Array.FindIndex(
+    args,
+    argumento => string.Equals(
+        argumento,
+        "--evaluate-functional-oracle",
+        StringComparison.OrdinalIgnoreCase
+    )
+);
+
+var executarAvaliacaoFunctionalOracle =
+    indiceEvaluateFunctionalOracle >= 0;
+
+var indiceEvaluateClean = Array.FindIndex(
+    args,
+    argumento => string.Equals(
+        argumento,
+        "--evaluate-clean",
+        StringComparison.OrdinalIgnoreCase
+    )
+);
+
+var executarAvaliacaoClean =
+    indiceEvaluateClean >= 0;
+
+var executarInvestigacaoCleanAll =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--investigate-clean-all",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+    var executarAvaliacaoImpactoDeadband =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--evaluate-deadband-impact",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+    var executarAnaliseCausaRaiz =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--analyze-false-positive-causes",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+    var executarAnaliseResultados =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--analyze-results",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var executarAnaliseSensibilidadeDetectores =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--analyze-detector-sensitivity",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+    var executarFamilyConsensusReport =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--family-consensus-report",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+    var executarConfidenceBenchmark =
+    args.Any(argumento =>
+        string.Equals(
+            argumento,
+            "--confidence-benchmark",
+            StringComparison.OrdinalIgnoreCase
+        )
+    );
+
+var quantidadeModosSelecionados =
+    (executarBenchmark ? 1 : 0) +
+    (executarBenchmarkClean ? 1 : 0) +
+    (executarBenchmarkFast ? 1 : 0) +
+    (executarBenchmarkCleanFast ? 1 : 0) +
+    (executarAvaliacao ? 1 : 0) +
+    (executarAvaliacaoFunctionalOracle ? 1 : 0) +
+    (executarAvaliacaoClean ? 1 : 0) +
+    (executarInvestigacaoCleanAll ? 1 : 0) +
+    (executarTesteGrupos ? 1 : 0) +
+    (executarTesteBufferMultivariado ? 1 : 0) +
+    (executarTesteDatasetMultivariado ? 1 : 0) +
+    (executarTesteDetectorMultivariado ? 1 : 0) +
+    (executarAvaliacaoImpactoDeadband ? 1 : 0) +
+    (executarAnaliseCausaRaiz ? 1 : 0) +
+    (executarAnaliseResultados ? 1 : 0) +
+    (executarAnaliseSensibilidadeDetectores ? 1 : 0) +
+    (executarAdaptiveEnsembleLab ? 1 : 0) +
+    (executarFamilyConsensusReport ? 1 : 0) +
+    (executarConfidenceBenchmark ? 1 : 0) +
+    (executarTreinamentoMultivariado ? 1 : 0);
+
+if (quantidadeModosSelecionados > 1)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "Use apenas um modo por execução: --benchmark, --benchmark-clean, --benchmark-fast, --benchmark-clean-fast, --evaluate, --evaluate-functional-oracle, --evaluate-clean, --investigate-clean-all, --test-groups, --test-multivariate-buffer, --test-multivariate-dataset, --evaluate-deadband-impact, --test-multivariate-detector, --analyze-results, --analyze-detector-sensitivity, --adaptive-ensemble-lab, --family-consensus-report, --confidence-benchmark ou --train-multivariate."
+    );
+
+    return;
+}
+
+if (executarTesteGrupos)
+{
+    using var scope =
+        app.Services.CreateScope();
+
+    var tester =
+        scope.ServiceProvider
+            .GetRequiredService<
+                GrupoAnaliseTester>();
+
+    await tester.ExecutarAsync();
+
+    return;
+}
+
+if (executarTesteBufferMultivariado)
+{
+    using var scope =
+        app.Services.CreateScope();
+
+    var tester =
+        scope.ServiceProvider
+            .GetRequiredService<
+                MultivariateBufferTester>();
+
+    await tester.ExecutarAsync();
+
+    return;
+}
+
+if (executarTesteDatasetMultivariado)
+{
+    using var scope =
+        app.Services.CreateScope();
+
+    var tester =
+        scope.ServiceProvider
+            .GetRequiredService<
+                MultivariateDatasetTester>();
+
+    await tester.ExecutarAsync();
+
+    return;
+}
+
+if (executarTesteDetectorMultivariado)
+{
+    using var scope =
+        app.Services.CreateScope();
+
+    var tester =
+        scope.ServiceProvider
+            .GetRequiredService<
+                MultivariateDetectorTester>();
+
+    await tester.ExecutarAsync();
+
+    return;
+}
+
+if (executarTreinamentoMultivariado)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de treinamento multivariado."
+    );
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var trainingService =
+        scope.ServiceProvider
+            .GetRequiredService<
+                MultivariateTrainingService>();
+
+    await trainingService.TreinarAsync();
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Treinamento multivariado concluído."
+    );
+
+    return;
+}
+
+if (executarBenchmark)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo benchmark."
+    );
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var runner =
+        scope.ServiceProvider
+            .GetRequiredService<
+                BenchmarkRunner>();
+
+    await runner.ExecutarAsync();
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Execução do benchmark concluída."
+    );
+
+    return;
+}
+
+if (executarBenchmarkClean)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo benchmark do banco limpo."
+    );
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var runner =
+        scope.ServiceProvider
+            .GetRequiredService<
+                BenchmarkRunner>();
+
+    await runner.ExecutarAsync(
+        bancoLimpo: true);
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Execução do benchmark limpo concluída."
+    );
+
+    return;
+}
+
+if (executarBenchmarkCleanFast)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo BENCHMARK FAST do banco limpo."
+    );
+
+    if (functionalExperimentalAnomalyDecisionEnabled)
+    {
+        Console.WriteLine(
+            "Functional Experimental Anomaly Decision: ENABLED");
+
+        if (functionalOperationalCanaryEnabled)
+        {
+            Console.WriteLine(
+                "Functional Operational Canary: ENABLED");
+
+            Console.WriteLine(
+                $"Canary FAST windows: " +
+                $"{string.Join(", ", functionalOperationalCanaryWindows.OrderBy(x => x))}");
+
+            Console.WriteLine(
+                $"Canary tags: " +
+                $"{string.Join(", ", functionalOperationalCanaryTags.OrderBy(x => x))}");
+        }
+    }
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var runner =
+        scope.ServiceProvider
+            .GetRequiredService<BenchmarkRunner>();
+
+await runner.ExecutarAsync(
+    bancoLimpo: true,
+    modoRapido: true,
+    baselineDiagnostics:
+        baselineDiagnosticOptions,
+    regimeShadow:
+        regimeShadowOptions,
+    dualBaselineShadow:
+        dualBaselineShadowOptions,
+    behaviorProfileObservability:
+        behaviorProfileObservabilityOptions,
+    persistenceTemporalExperiment:
+        persistenceTemporalExperiment,
+    experimentalIncident:
+        experimentalIncidentOptions,
+    experimentalAnomalyDecision:
+        experimentalAnomalyDecisionOptions,
+    functionalExperimentalAnomalyDecisionEnabled:
+        functionalExperimentalAnomalyDecisionEnabled,
+    functionalOperationalCanary:
+        functionalOperationalCanaryOptions);
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Execução do benchmark FAST limpo concluída."
+    );
+
+    return;
+}
+
+if (executarBenchmarkFast)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo BENCHMARK FAST do banco com anomalias."
+    );
+
+    if (functionalExperimentalAnomalyDecisionEnabled)
+    {
+        Console.WriteLine(
+            "Functional Experimental Anomaly Decision: ENABLED");
+
+        if (functionalOperationalCanaryEnabled)
+        {
+            Console.WriteLine(
+                "Functional Operational Canary: ENABLED");
+
+            Console.WriteLine(
+                $"Canary FAST windows: " +
+                $"{string.Join(", ", functionalOperationalCanaryWindows.OrderBy(x => x))}");
+
+            Console.WriteLine(
+                $"Canary tags: " +
+                $"{string.Join(", ", functionalOperationalCanaryTags.OrderBy(x => x))}");
+        }
+    }
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var runner =
+        scope.ServiceProvider
+            .GetRequiredService<BenchmarkRunner>();
+
+await runner.ExecutarAsync(
+    bancoLimpo: false,
+    modoRapido: true,
+    regimeShadow:
+        regimeShadowOptions,
+    dualBaselineShadow:
+        dualBaselineShadowOptions,
+    persistenceCounterfactual:
+        persistenceCounterfactualOptions,
+    persistenceTemporalExperiment:
+        persistenceTemporalExperiment,
+    experimentalIncident:
+        experimentalIncidentOptions,
+    experimentalAnomalyDecision:
+        experimentalAnomalyDecisionOptions,
+    functionalExperimentalAnomalyDecisionEnabled:
+        functionalExperimentalAnomalyDecisionEnabled,
+    functionalOperationalCanary:
+        functionalOperationalCanaryOptions);
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Execução do benchmark FAST com anomalias concluída."
+    );
+
+    return;
+}
+
+if (executarAvaliacaoImpactoDeadband)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de simulação do impacto do deadband."
+    );
+
+    var diretorioResultados =
+        Path.IsPathRooted(
+            benchmarkOptions.ResultDirectory)
+            ? benchmarkOptions.ResultDirectory
+            : Path.Combine(
+                Directory.GetCurrentDirectory(),
+                benchmarkOptions.ResultDirectory);
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var evaluator =
+        scope.ServiceProvider
+            .GetRequiredService<
+                DeadbandImpactEvaluator>();
+
+    await evaluator.EvaluateAsync(
+        benchmarkOptions,
+        diretorioResultados);
+
+    return;
+}
+
+if (executarInvestigacaoCleanAll)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de investigação completa do banco limpo."
+    );
+
+    var diretorioProjeto =
+        Directory.GetCurrentDirectory();
+
+    var diretorioResultados =
+        Path.Combine(
+            diretorioProjeto,
+            "Results"
+        );
+
+    if (!Directory.Exists(
+            diretorioResultados))
+    {
+        throw new DirectoryNotFoundException(
+            $"Diretório de resultados não encontrado: " +
+            $"{diretorioResultados}"
+        );
+    }
+
+    var arquivoDeteccoes =
+        new DirectoryInfo(
+            diretorioResultados)
+            .GetFiles(
+                "clean_detections_*.jsonl")
+            .OrderByDescending(
+                arquivo =>
+                    arquivo.LastWriteTimeUtc)
+            .FirstOrDefault();
+
+    if (arquivoDeteccoes is null)
+    {
+        throw new FileNotFoundException(
+            "Nenhum arquivo clean_detections_*.jsonl foi encontrado."
+        );
+    }
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var investigator =
+        scope.ServiceProvider
+            .GetRequiredService<
+                CalibrationAllInvestigator>();
+
+    await investigator.InvestigateAllAsync(
+        benchmarkOptions.CleanDatabasePath,
+        arquivoDeteccoes.FullName,
+        diretorioResultados
+    );
+
+    return;
+}
+
+if (executarAvaliacaoClean)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de avaliação do banco limpo."
+    );
+
+    var argumentosAvaliacaoClean = args
+        .Skip(indiceEvaluateClean + 1)
+        .ToArray();
+
+    var diretorioProjeto =
+        Directory.GetCurrentDirectory();
+
+    var diretorioResultadosPadrao =
+        Path.Combine(
+            diretorioProjeto,
+            "Results"
+        );
+
+    string detectionsPath;
+    string errorsPath;
+    string summaryPath;
+    string outputDirectory;
+
+    if (argumentosAvaliacaoClean.Length == 0)
+    {
+        if (!Directory.Exists(
+                diretorioResultadosPadrao))
+        {
+            throw new DirectoryNotFoundException(
+                $"Diretório de resultados não encontrado: " +
+                $"{diretorioResultadosPadrao}"
+            );
+        }
+
+        var arquivoDeteccoesMaisRecente =
+            new DirectoryInfo(
+                diretorioResultadosPadrao
+            )
+                .GetFiles(
+                    "clean_detections_*.jsonl"
+                )
+                .OrderByDescending(
+                    arquivo =>
+                        arquivo.LastWriteTimeUtc
+                )
+                .FirstOrDefault();
+
+        if (arquivoDeteccoesMaisRecente is null)
+        {
+            throw new FileNotFoundException(
+                $"Nenhum arquivo clean_detections_*.jsonl " +
+                $"foi encontrado em {diretorioResultadosPadrao}."
+            );
+        }
+
+        detectionsPath =
+            arquivoDeteccoesMaisRecente.FullName;
+
+        var sufixoExecucao =
+            Path.GetFileNameWithoutExtension(
+                arquivoDeteccoesMaisRecente.Name
+            )
+                .Replace(
+                    "clean_detections_",
+                    string.Empty,
+                    StringComparison.OrdinalIgnoreCase
+                );
+
+        errorsPath =
+            Path.Combine(
+                diretorioResultadosPadrao,
+                $"clean_errors_{sufixoExecucao}.jsonl"
+            );
+
+        summaryPath =
+            Path.Combine(
+                diretorioResultadosPadrao,
+                $"clean_summary_{sufixoExecucao}.json"
+            );
+
+        outputDirectory =
+            diretorioResultadosPadrao;
+    }
+    else if (argumentosAvaliacaoClean.Length == 4)
+    {
+        detectionsPath =
+            argumentosAvaliacaoClean[0];
+
+        errorsPath =
+            argumentosAvaliacaoClean[1];
+
+        summaryPath =
+            argumentosAvaliacaoClean[2];
+
+        outputDirectory =
+            argumentosAvaliacaoClean[3];
+    }
+    else
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "Uso automático:"
+        );
+        Console.WriteLine(
+            "  dotnet run -c Release --no-build -- --evaluate-clean"
+        );
+        Console.WriteLine();
+        Console.WriteLine(
+            "Uso com caminhos informados manualmente:"
+        );
+        Console.WriteLine(
+            "  dotnet run -c Release --no-build -- --evaluate-clean " +
+            "<clean_detections.jsonl> <clean_errors.jsonl> " +
+            "<clean_summary.json> <diretório-saída>"
+        );
+
+        return;
+    }
+
+    if (!File.Exists(detectionsPath))
+    {
+        throw new FileNotFoundException(
+            "Arquivo de detecções do banco limpo não encontrado.",
+            detectionsPath
+        );
+    }
+
+    if (!File.Exists(errorsPath))
+    {
+        throw new FileNotFoundException(
+            "Arquivo de erros do banco limpo não encontrado.",
+            errorsPath
+        );
+    }
+
+    if (!File.Exists(summaryPath))
+    {
+        throw new FileNotFoundException(
+            "Arquivo de resumo do banco limpo não encontrado.",
+            summaryPath
+        );
+    }
+
+    Directory.CreateDirectory(
+        outputDirectory
+    );
+
+    Console.WriteLine();
+    Console.WriteLine(
+        $"Detecções: {detectionsPath}"
+    );
+    Console.WriteLine(
+        $"Erros:     {errorsPath}"
+    );
+    Console.WriteLine(
+        $"Resumo:    {summaryPath}"
+    );
+    Console.WriteLine(
+        $"Saída:     {outputDirectory}"
+    );
+    Console.WriteLine();
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var evaluator =
+        scope.ServiceProvider
+            .GetRequiredService<
+                CleanBenchmarkEvaluator>();
+
+    await evaluator.EvaluateAsync(
+        detectionsPath,
+        errorsPath,
+        summaryPath,
+        outputDirectory
+    );
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Avaliação do banco limpo concluída. " +
+        "Confira os relatórios gerados na pasta de saída."
+    );
+
+    return;
+}
+
+if (executarAvaliacaoFunctionalOracle)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de avaliação funcional do Oracle."
+    );
+
+    var argumentos =
+        args
+            .Skip(indiceEvaluateFunctionalOracle + 1)
+            .ToArray();
+
+    if (argumentos.Length != 5)
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "Uso:"
+        );
+        Console.WriteLine(
+            "  dotnet run -c Release -- --evaluate-functional-oracle " +
+            "<oracle-expandido.json> " +
+            "<legacy-detections.jsonl> " +
+            "<operational-detections.jsonl> " +
+            "<functional-new-evidence.jsonl> " +
+            "<diretorio-saida>"
+        );
+
+        return;
+    }
+
+    var expandedOraclePath =
+        argumentos[0];
+
+    var legacyDetectionsPath =
+        argumentos[1];
+
+    var operationalDetectionsPath =
+        argumentos[2];
+
+    var functionalNewEvidencePath =
+        argumentos[3];
+
+    var outputDirectory =
+        argumentos[4];
+
+    var evaluator =
+        new FunctionalOraclePreservationEvaluator();
+
+    await evaluator.EvaluateAsync(
+        expandedOraclePath,
+        legacyDetectionsPath,
+        operationalDetectionsPath,
+        functionalNewEvidencePath,
+        outputDirectory);
+
+    return;
+}
+
+if (executarAvaliacao)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de avaliação do benchmark."
+    );
+
+    var argumentosAvaliacao = args
+        .Skip(indiceEvaluate + 1)
+        .ToArray();
+
+    var diretorioProjeto = Directory.GetCurrentDirectory();
+    var diretorioResultadosPadrao = Path.Combine(
+        diretorioProjeto,
+        "Results"
+    );
+
+    var oraclePadrao = Path.Combine(
+        diretorioProjeto,
+        "Benchmark",
+        "oracle.json"
+    );
+
+    string detectionsPath;
+    string errorsPath;
+    string oraclePath;
+    string outputDirectory;
+
+    if (argumentosAvaliacao.Length == 0)
+    {
+        if (!Directory.Exists(diretorioResultadosPadrao))
+        {
+            throw new DirectoryNotFoundException(
+                $"Diretório de resultados não encontrado: {diretorioResultadosPadrao}"
+            );
+        }
+
+        var arquivoDeteccoesMaisRecente = new DirectoryInfo(
+            diretorioResultadosPadrao
+        )
+            .GetFiles("detections_*.jsonl")
+            .OrderByDescending(arquivo => arquivo.LastWriteTimeUtc)
+            .FirstOrDefault();
+
+        if (arquivoDeteccoesMaisRecente is null)
+        {
+            throw new FileNotFoundException(
+                $"Nenhum arquivo detections_*.jsonl foi encontrado em {diretorioResultadosPadrao}."
+            );
+        }
+
+        detectionsPath = arquivoDeteccoesMaisRecente.FullName;
+
+        var sufixoExecucao = Path.GetFileNameWithoutExtension(
+            arquivoDeteccoesMaisRecente.Name
+        )
+            .Replace(
+                "detections_",
+                string.Empty,
+                StringComparison.OrdinalIgnoreCase
+            );
+
+        errorsPath = Path.Combine(
+            diretorioResultadosPadrao,
+            $"errors_{sufixoExecucao}.jsonl"
+        );
+
+        oraclePath = oraclePadrao;
+        outputDirectory = diretorioResultadosPadrao;
+    }
+    else if (argumentosAvaliacao.Length == 4)
+    {
+        detectionsPath = argumentosAvaliacao[0];
+        errorsPath = argumentosAvaliacao[1];
+        oraclePath = argumentosAvaliacao[2];
+        outputDirectory = argumentosAvaliacao[3];
+    }
+    else
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "Uso automático:"
+        );
+        Console.WriteLine(
+            "  dotnet run -c Release -- --evaluate"
+        );
+        Console.WriteLine();
+        Console.WriteLine(
+            "Uso com caminhos informados manualmente:"
+        );
+        Console.WriteLine(
+            "  dotnet run -c Release -- --evaluate <detections.jsonl> <errors.jsonl> <oracle.json> <diretório-saída>"
+        );
+
+        return;
+    }
+
+    if (!File.Exists(detectionsPath))
+    {
+        throw new FileNotFoundException(
+            "Arquivo de detecções não encontrado.",
+            detectionsPath
+        );
+    }
+
+    if (!File.Exists(errorsPath))
+    {
+        throw new FileNotFoundException(
+            "Arquivo de erros não encontrado.",
+            errorsPath
+        );
+    }
+
+    if (!File.Exists(oraclePath))
+    {
+        throw new FileNotFoundException(
+            "Arquivo oracle.json não encontrado.",
+            oraclePath
+        );
+    }
+
+    Directory.CreateDirectory(outputDirectory);
+
+    Console.WriteLine();
+    Console.WriteLine($"Detecções: {detectionsPath}");
+    Console.WriteLine($"Erros:     {errorsPath}");
+    Console.WriteLine($"Oráculo:   {oraclePath}");
+    Console.WriteLine($"Saída:     {outputDirectory}");
+    Console.WriteLine();
+
+    using var scope = app.Services.CreateScope();
+
+    var evaluator =
+        scope.ServiceProvider
+            .GetRequiredService<BenchmarkEvaluator>();
+
+    await evaluator.EvaluateAsync(
+        detectionsPath,
+        errorsPath,
+        oraclePath,
+        outputDirectory
+    );
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Avaliação concluída. Confira os relatórios gerados na pasta de saída."
+    );
+
+    return;
+
+    
+}
+
+
+
+
+if (executarAnaliseSensibilidadeDetectores)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de análise " +
+        "de sensibilidade dos detectores."
+    );
+
+    var diretorioResultados =
+        Path.IsPathRooted(
+            benchmarkOptions.ResultDirectory)
+            ? benchmarkOptions.ResultDirectory
+            : Path.Combine(
+                Directory.GetCurrentDirectory(),
+                benchmarkOptions.ResultDirectory);
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var report =
+        scope.ServiceProvider
+            .GetRequiredService<
+                DetectorSensitivityReport>();
+
+    await report.AnalyzeAsync(
+        diretorioResultados);
+
+    return;
+}
 
 // Swagger UI
 if (app.Environment.IsDevelopment())
@@ -200,4 +1720,117 @@ app.UseCors("FrontendCors");
 
 app.MapControllers();
 
+if (executarAnaliseResultados)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo de análise da pasta Results."
+    );
+
+    var diretorioResultados =
+        Path.IsPathRooted(
+            benchmarkOptions.ResultDirectory)
+            ? benchmarkOptions.ResultDirectory
+            : Path.Combine(
+                Directory.GetCurrentDirectory(),
+                benchmarkOptions.ResultDirectory);
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var analyzer =
+        scope.ServiceProvider
+            .GetRequiredService<ResultsAnalyzer>();
+
+    await analyzer.AnalyzeAsync(
+        diretorioResultados);
+
+    return;
+}
+
+
+if (executarAdaptiveEnsembleLab)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo Adaptive Ensemble Laboratory."
+    );
+
+    var diretorioResultados =
+        Path.IsPathRooted(
+            benchmarkOptions.ResultDirectory)
+            ? benchmarkOptions.ResultDirectory
+            : Path.Combine(
+                Directory.GetCurrentDirectory(),
+                benchmarkOptions.ResultDirectory);
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var laboratory =
+        scope.ServiceProvider
+            .GetRequiredService<
+                AdaptiveEnsembleLaboratory>();
+
+    await laboratory.RunAsync(
+        diretorioResultados);
+
+    return;
+}
+
+if (executarFamilyConsensusReport)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo Family Consensus Report."
+    );
+
+    var diretorioResultados =
+        Path.IsPathRooted(
+            benchmarkOptions.ResultDirectory)
+            ? benchmarkOptions.ResultDirectory
+            : Path.Combine(
+                Directory.GetCurrentDirectory(),
+                benchmarkOptions.ResultDirectory);
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var report =
+        scope.ServiceProvider
+            .GetRequiredService<FamilyConsensusReport>();
+
+    await report.RunAsync(
+        diretorioResultados);
+
+    return;
+}
+
+if (executarConfidenceBenchmark)
+{
+    Console.WriteLine();
+    Console.WriteLine(
+        "API iniciada em modo Confidence Engine Benchmark."
+    );
+
+    var diretorioResultados =
+        Path.IsPathRooted(
+            benchmarkOptions.ResultDirectory)
+            ? benchmarkOptions.ResultDirectory
+            : Path.Combine(
+                Directory.GetCurrentDirectory(),
+                benchmarkOptions.ResultDirectory);
+
+    using var scope =
+        app.Services.CreateScope();
+
+    var runner =
+        scope.ServiceProvider
+            .GetRequiredService<ConfidenceEngineBenchmarkRunner>();
+
+    await runner.RunAsync(
+        diretorioResultados);
+
+    return;
+}
 app.Run();

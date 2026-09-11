@@ -26,7 +26,7 @@ public class NotificacoesController : ControllerBase
             .Select(x => new
             {
                 x.Id,
-                Titulo = "Anomalia detectada",
+                Titulo = x.EhAnomalia ? "Anomalia detectada" : "Risco elevado",
                 Mensagem = x.Mensagem,
                 x.TagName,
                 Valor = x.ValorRecebido,

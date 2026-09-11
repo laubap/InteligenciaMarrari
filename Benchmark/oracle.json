@@ -1,0 +1,455 @@
+{
+  "name": "STRESS TEST V1 — INJECTED ANOMALIES AND EXPECTED RESULTS",
+  "fixtureLengthDays": 365,
+  "conditions": [
+    {
+      "number": 1,
+      "oracleId": "SENSOR-DRYER-AIRFLOW-SENSITIVITY",
+      "title": "Dryer airflow sensitivity loss",
+      "category": "Sensor/instrument",
+      "tags": [
+        "DRYER.AIR_FLOW_SENSOR",
+        "DRYER.AIR_FLOW_REFERENCE",
+        "DRYER.AIR_DAMPER"
+      ],
+      "startDayInclusive": 150,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 2,
+      "oracleId": "SENSOR-WATER-FLOW-STUCK",
+      "title": "Process-water flow sensor stuck",
+      "category": "Sensor/instrument",
+      "tags": [
+        "WATER.PROCESS_FLOW_SENSOR",
+        "WATER.PROCESS_FLOW_REFERENCE"
+      ],
+      "startDayInclusive": 210,
+      "endDayExclusive": 227,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 3,
+      "oracleId": "SENSOR-COMPRESSOR-VIBRATION-ABSURD",
+      "title": "Impossible compressor vibration readings",
+      "category": "Sensor/instrument",
+      "tags": [
+        "AIR.COMP1.VIBRATION"
+      ],
+      "startDayInclusive": null,
+      "endDayExclusive": null,
+      "occurrenceDays": [
+        75,
+        156,
+        287
+      ],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 4,
+      "oracleId": "SENSOR-REACTOR-TEMP-BIAS",
+      "title": "Reactor temperature bias",
+      "category": "Sensor/instrument",
+      "tags": [
+        "REACTOR.TEMPERATURE",
+        "REACTOR.TEMPERATURE_REFERENCE"
+      ],
+      "startDayInclusive": 280,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 5,
+      "oracleId": "SENSOR-WAREHOUSE-TEMPERATURE-HUMIDITY-BIAS",
+      "title": "Humidity-dependent warehouse temperature bias",
+      "category": "Sensor/instrument",
+      "tags": [
+        "WAREHOUSE.TEMPERATURE_SENSOR",
+        "WEATHER.AMBIENT_TEMPERATURE",
+        "WEATHER.RELATIVE_HUMIDITY"
+      ],
+      "startDayInclusive": 240,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 6,
+      "oracleId": "SENSOR-CHAMBER02-HUMIDITY-DRIFT",
+      "title": "Drying Chamber 02 humidity drift",
+      "category": "Sensor/instrument",
+      "tags": [
+        "DRYCHAMBER02.MATERIAL_HUMIDITY"
+      ],
+      "startDayInclusive": 190,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 7,
+      "oracleId": "SENSOR-CHAMBER04-TEMP-FLATLINE",
+      "title": "Drying Chamber 04 temperature flatline",
+      "category": "Sensor/instrument",
+      "tags": [
+        "DRYCHAMBER04.MATERIAL_TEMPERATURE"
+      ],
+      "startDayInclusive": 265,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 8,
+      "oracleId": "SENSOR-HX-COLD-OUTLET-BIAS",
+      "title": "Heat-exchanger cold-outlet inconsistency",
+      "category": "Sensor/instrument",
+      "tags": [
+        "HX.COLD_OUTLET_TEMP",
+        "HX.HOT_INLET_TEMP",
+        "HX.HOT_OUTLET_TEMP",
+        "HX.COLD_INLET_TEMP"
+      ],
+      "startDayInclusive": 0,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 9,
+      "oracleId": "DATA-WATER-CONDUCTIVITY-FAILED",
+      "title": "Process-water conductivity outage",
+      "category": "Data/configuration/accounting",
+      "tags": [
+        "WATER.CONDUCTIVITY"
+      ],
+      "startDayInclusive": 120,
+      "endDayExclusive": 150,
+      "occurrenceDays": [],
+      "missingDataCondition": true,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 10,
+      "oracleId": "DATA-REACTOR-PH-INTERMITTENT",
+      "title": "Intermittent reactor pH coverage",
+      "category": "Data/configuration/accounting",
+      "tags": [
+        "REACTOR.PH"
+      ],
+      "startDayInclusive": 200,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": true,
+      "supplemental": true,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 11,
+      "oracleId": "DATA-CHAMBER03-INTERMITTENT-READINGS",
+      "title": "Intermittent Drying Chamber 03 telemetry",
+      "category": "Data/configuration/accounting",
+      "tags": [
+        "DRYCHAMBER03.MATERIAL_TEMPERATURE",
+        "DRYCHAMBER03.MATERIAL_HUMIDITY"
+      ],
+      "startDayInclusive": 0,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": true,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 12,
+      "oracleId": "DATA-GAS-PRESSURE-SCALING",
+      "title": "Natural-gas pressure scaling error",
+      "category": "Data/configuration/accounting",
+      "tags": [
+        "NATGAS.SUPPLY_PRESSURE",
+        "NATGAS.SUPPLY_TEMP"
+      ],
+      "startDayInclusive": 205,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 13,
+      "oracleId": "DATA-INTAKE-TOTALIZER-STALL",
+      "title": "Intake-water totalizer stall",
+      "category": "Data/configuration/accounting",
+      "tags": [
+        "INTAKE.WATER_TOTALIZER",
+        "INTAKE.WATER_FLOW"
+      ],
+      "startDayInclusive": 95,
+      "endDayExclusive": 101,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 14,
+      "oracleId": "CONTROL-STEAM-RESPONSE-DEGRADATION",
+      "title": "Reactor steam-response degradation",
+      "category": "Control-response",
+      "tags": [
+        "REACTOR.STEAM_VALVE_COMMAND",
+        "REACTOR.STEAM_FLOW_RESPONSE"
+      ],
+      "startDayInclusive": 235,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 15,
+      "oracleId": "CONTROL-TANK-LEVEL-OSCILLATION",
+      "title": "Tank-level control oscillation",
+      "category": "Control-response",
+      "tags": [
+        "TANK.LEVEL",
+        "TANK.OUTLET_VALVE",
+        "TANK.INLET_FLOW"
+      ],
+      "startDayInclusive": 140,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 16,
+      "oracleId": "EQUIPMENT-CRUSHER-BEARING-WEAR",
+      "title": "Crusher drive-end bearing wear",
+      "category": "Equipment/process/product",
+      "tags": [
+        "CRUSHER.BEARING_TEMP_DE",
+        "CRUSHER.VIBRATION_DE",
+        "CRUSHER.BEARING_TEMP_NDE",
+        "CRUSHER.VIBRATION_NDE"
+      ],
+      "startDayInclusive": 245,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 17,
+      "oracleId": "EQUIPMENT-BOILER-FOULING",
+      "title": "Boiler efficiency degradation",
+      "category": "Equipment/process/product",
+      "tags": [
+        "BOILER.FUEL_FLOW",
+        "BOILER.STEAM_FLOW",
+        "BOILER.STACK_TEMP",
+        "BOILER.O2"
+      ],
+      "startDayInclusive": 215,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 18,
+      "oracleId": "EQUIPMENT-BAGHOUSE-LOADING",
+      "title": "Baghouse loading/restriction",
+      "category": "Equipment/process/product",
+      "tags": [
+        "BAGHOUSE.DP",
+        "BAGHOUSE.FAN_CURRENT",
+        "DRYER.BAGHOUSE_DP",
+        "BAGHOUSE.INLET_DP",
+        "BAGHOUSE.PULSE_COMMAND"
+      ],
+      "startDayInclusive": 172,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 19,
+      "oracleId": "PACKING-WEIGHT-REJECT-SHIFT",
+      "title": "Packing weight and reject-rate shift",
+      "category": "Equipment/process/product",
+      "tags": [
+        "PACKING.WEIGHT",
+        "PACKING.REJECT_RATE"
+      ],
+      "startDayInclusive": 300,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 20,
+      "oracleId": "EQUIPMENT-COMPRESSED-AIR-LEAK",
+      "title": "Compressed-air distribution loss",
+      "category": "Equipment/process/product",
+      "tags": [
+        "AIR.HEADER_PRESSURE",
+        "AIR.COMP1.DISCHARGE_PRESSURE"
+      ],
+      "startDayInclusive": 320,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 21,
+      "oracleId": "PRODUCT-LATE-QUALITY-DEGRADATION",
+      "title": "Late product-quality degradation",
+      "category": "Equipment/process/product",
+      "tags": [
+        "PRODUCT.QUALITY_INDEX",
+        "PRODUCT.MOISTURE",
+        "DRYER.PRODUCT_MOISTURE"
+      ],
+      "startDayInclusive": 330,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 22,
+      "oracleId": "EQUIPMENT-PELLET-BINDER-CHAIN",
+      "title": "Pellet binder restriction and downstream chain",
+      "category": "Equipment/process/product",
+      "tags": [
+        "PELLET.BINDER_PRESSURE",
+        "PELLET.BINDER_FLOW",
+        "PELLET.GRANULE_SIZE",
+        "PELLET.SCREEN_REJECT_RATE",
+        "PELLET.LINE_THROUGHPUT"
+      ],
+      "startDayInclusive": 160,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 23,
+      "oracleId": "EQUIPMENT-HYDRAULIC-FILTER-RECOVERED",
+      "title": "Recovered hydraulic-filter restriction",
+      "category": "Equipment/process/product",
+      "tags": [
+        "HYDRAULIC.FILTER_DP",
+        "HYDRAULIC.PUMP_CURRENT"
+      ],
+      "startDayInclusive": 130,
+      "endDayExclusive": 166,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 24,
+      "oracleId": "EQUIPMENT-EXHAUST-FAN-VARIANCE",
+      "title": "Exhaust-fan variance increase",
+      "category": "Equipment/process/product",
+      "tags": [
+        "EXHAUST_FAN.VIBRATION",
+        "EXHAUST_FAN.MOTOR_CURRENT"
+      ],
+      "startDayInclusive": 220,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 25,
+      "oracleId": "SCRUBBER-COMMON-MODE-FLOW-DISCREPANCY",
+      "title": "Scrubber common-mode flow discrepancy",
+      "category": "Equipment/process/product",
+      "tags": [
+        "SCRUBBER.LIQUID_FLOW_A",
+        "SCRUBBER.LIQUID_FLOW_B",
+        "SCRUBBER.PUMP_SPEED",
+        "SCRUBBER.PUMP_CURRENT"
+      ],
+      "startDayInclusive": 170,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 26,
+      "oracleId": "EQUIPMENT-THICKENER-OUTAGE-ONSET",
+      "title": "Thickener post-outage change",
+      "category": "Equipment/process/product",
+      "tags": [
+        "THICKENER.RAKE_TORQUE",
+        "THICKENER.BED_LEVEL"
+      ],
+      "startDayInclusive": 180,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    },
+    {
+      "number": 27,
+      "oracleId": "EQUIPMENT-EMISSIONS-STEP",
+      "title": "Late emissions step",
+      "category": "Equipment/process/product",
+      "tags": [
+        "BAGHOUSE.OUTLET_DUST",
+        "STACK.PARTICULATE"
+      ],
+      "startDayInclusive": 315,
+      "endDayExclusive": null,
+      "occurrenceDays": [],
+      "missingDataCondition": false,
+      "supplemental": false,
+      "expectedInterpretation": "Consulte o TXT original para a interpretação detalhada."
+    }
+  ]
+}

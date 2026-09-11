@@ -33,6 +33,10 @@ public class AnomalyDetectionOptions
     public int PersistenceMinimumPoints { get; set; } = 5;
     public double PersistenceMinimumMinutes { get; set; } = 1;
 
+    // Experimental e desligado por padrão. Quando ativo, confirmações
+    // temporais derivadas de MAD não participam da soma estatística.
+    public bool ExperimentalPersistenceTemporalConfirmationEnabled { get; set; }
+
     // Mudança de patamar.
     public int LevelShiftPreviousWindow { get; set; } = 20;
     public int LevelShiftRecentWindow { get; set; } = 10;

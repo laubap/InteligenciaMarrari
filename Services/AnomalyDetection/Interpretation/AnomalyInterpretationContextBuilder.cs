@@ -17,6 +17,7 @@ public class AnomalyInterpretationContextBuilder
         DetectorInput input,
         DetectorResult resultadoEnsemble,
         double limiteEnsemble,
+        bool ehAnomaliaOperacional,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -37,7 +38,7 @@ public class AnomalyInterpretationContextBuilder
             MediaHistorica = input.MediaHistorica,
             DesvioPadraoHistorico = input.DesvioPadraoHistorico,
 
-            EhAnomalia = resultadoEnsemble.EhAnomalia,
+            EhAnomalia = ehAnomaliaOperacional,
             ScoreNormalizado = resultadoEnsemble.ScoreNormalizado,
 
             Severidade = AnomalySeverityClassifier.Classificar(

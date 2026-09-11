@@ -13,150 +13,132 @@ public class RateOfChangeDetector : IAnomalyDetector
     }
 
     public string Nome => "Taxa de variação";
-
     public double Peso => _options.RateOfChangeWeight;
 
     public DetectorResult Detectar(DetectorInput input)
     {
-        var historico = input.Historico
-            .OrderBy(x => x.DataHora)
-            .ToArray();
+        ArgumentNullException.ThrowIfNull(input);
 
-        if (historico.Length < 3)
-        {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao = "Histórico insuficiente para calcular variação."
-            };
-        }
+        var contexto = input.Contexto;
+        var historico = contexto.Historico;
 
-        var taxasHistoricas = new List<double>();
+        if (historico.Count < 3)
+            return NaoAplicavel(
+                "Histórico insuficiente para calcular variação.");
 
-        for (var i = 1; i < historico.Length; i++)
-        {
-            var minutos = (
-                historico[i].DataHora -
-                historico[i - 1].DataHora
-            ).TotalMinutes;
+        var taxasHistoricas = contexto.TaxasHistoricas;
 
-            if (minutos <= 0)
-                continue;
+        if (taxasHistoricas.Length < 2)
+            return NaoAplicavel(
+                "Não existem intervalos temporais válidos suficientes.");
 
-            var taxa =
-                (historico[i].Valor -
-                 historico[i - 1].Valor) /
-                minutos;
+        var ultimo = contexto.UltimoPonto;
 
-            if (double.IsFinite(taxa))
-                taxasHistoricas.Add(taxa);
-        }
+        if (ultimo is null)
+            return NaoAplicavel(
+                "O histórico não possui um último ponto válido.");
 
-        if (taxasHistoricas.Count < 2)
-        {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao =
-                    "Não existem intervalos temporais válidos suficientes."
-            };
-        }
-
-        var ultimo = historico.Last();
-
-        var intervaloAtual = (
-            input.DataHoraAtual -
-            ultimo.DataHora
-        ).TotalMinutes;
+        var intervaloAtual =
+            (input.DataHoraAtual - ultimo.DataHora).TotalMinutes;
 
         if (intervaloAtual <= 0)
-        {
-            intervaloAtual =
-                DetectorMath.IntervaloMedianoMinutos(
-                    input.Historico
-                );
-        }
+            intervaloAtual = contexto.IntervaloMedianoMinutos;
 
-        if (intervaloAtual <= 0)
+        if (intervaloAtual <= 0 ||
+            !double.IsFinite(intervaloAtual))
         {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao =
-                    "Não foi possível determinar o intervalo da leitura atual."
-            };
+            return NaoAplicavel(
+                "Não foi possível determinar o intervalo da leitura atual.");
         }
 
         var taxaAtual =
-            (input.ValorAtual - ultimo.Valor) /
-            intervaloAtual;
+            (input.ValorAtual - ultimo.Valor) / intervaloAtual;
 
-        var medianaTaxas =
-            DetectorMath.Median(taxasHistoricas);
+        if (!double.IsFinite(taxaAtual))
+            return NaoAplicavel(
+                "A taxa atual calculada não é válida.");
 
-        var madTaxas =
-            DetectorMath.Mad(
-                taxasHistoricas,
-                medianaTaxas
-            );
+        var medianaTaxas = contexto.MedianaTaxas;
+        var madTaxas = contexto.MadTaxas;
+        var desvioPadraoTaxas = contexto.DesvioPadraoTaxas;
 
-        var escala = madTaxas > 0
-            ? madTaxas
-            : DetectorMath.DesvioPadrao(taxasHistoricas);
+        double scoreTaxa;
+        string metodoScore;
+        double escalaUtilizada;
 
-        if (escala <= 0)
+        if (madTaxas > 0 && double.IsFinite(madTaxas))
         {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao =
-                    "As taxas históricas não apresentam variação suficiente."
-            };
+            // Modified Z-score robusto: o fator 0.6745 pertence
+            // exclusivamente à normalização por MAD.
+            escalaUtilizada = madTaxas;
+            scoreTaxa =
+                0.6745 *
+                Math.Abs(taxaAtual - medianaTaxas) /
+                madTaxas;
+
+            metodoScore = "MAD";
+        }
+        else if (desvioPadraoTaxas > 0 &&
+                 double.IsFinite(desvioPadraoTaxas))
+        {
+            // Fallback clássico: ao usar desvio padrão não se aplica
+            // o fator 0.6745 do modified Z-score.
+            escalaUtilizada = desvioPadraoTaxas;
+            scoreTaxa =
+                Math.Abs(taxaAtual - medianaTaxas) /
+                desvioPadraoTaxas;
+
+            metodoScore = "DesvioPadrao";
+        }
+        else
+        {
+            return NaoAplicavel(
+                "As taxas históricas não apresentam variação suficiente.");
         }
 
-        var scoreTaxa =
-            0.6745 *
-            Math.Abs(taxaAtual - medianaTaxas) /
-            escala;
+        if (!double.IsFinite(scoreTaxa))
+            return NaoAplicavel(
+                "O score da taxa de variação não é numericamente válido.");
 
         var ehAnomalia =
-            scoreTaxa >=
-            _options.RateOfChangeThreshold;
+            scoreTaxa >= _options.RateOfChangeThreshold;
 
         return new DetectorResult
         {
             Aplicavel = true,
             EhAnomalia = ehAnomalia,
             Score = scoreTaxa,
-
             ScoreNormalizado =
                 DetectorMath.NormalizarPorLimite(
                     scoreTaxa,
-                    _options.RateOfChangeThreshold
-                ),
-
+                    _options.RateOfChangeThreshold),
             Peso = Peso,
             Detector = Nome,
-
             Explicacao = ehAnomalia
-                ? $"A taxa atual de {taxaAtual:F4} unidades/minuto difere significativamente da taxa histórica."
-                : $"A taxa atual de {taxaAtual:F4} unidades/minuto está dentro do padrão histórico.",
-
+                ? $"A taxa atual de {taxaAtual:F4} unidades/minuto difere significativamente da taxa histórica ({metodoScore})."
+                : $"A taxa atual de {taxaAtual:F4} unidades/minuto está dentro do padrão histórico ({metodoScore}).",
             Metricas = new Dictionary<string, double>
             {
                 ["taxaAtualPorMinuto"] = taxaAtual,
                 ["medianaTaxas"] = medianaTaxas,
                 ["madTaxas"] = madTaxas,
+                ["desvioPadraoTaxas"] = desvioPadraoTaxas,
+                ["escalaUtilizada"] = escalaUtilizada,
+                ["fallbackDesvioPadrao"] =
+                    metodoScore == "DesvioPadrao" ? 1 : 0,
                 ["scoreTaxa"] = scoreTaxa
             }
         };
     }
+
+    private DetectorResult NaoAplicavel(string explicacao) => new()
+    {
+        Aplicavel = false,
+        EhAnomalia = false,
+        Score = 0,
+        ScoreNormalizado = 0,
+        Detector = Nome,
+        Peso = Peso,
+        Explicacao = explicacao
+    };
 }

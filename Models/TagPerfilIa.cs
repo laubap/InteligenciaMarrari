@@ -1,6 +1,6 @@
 // Modelo que representa o perfil comportamental de uma tag.
-// Ele armazena estatísticas calculadas durante o treinamento do perfil para
-// identificar comportamentos esperados e anomalias.
+// Ele armazena estatísticas calculadas durante o treinamento do perfil
+// para identificar comportamentos esperados e anomalias.
 public class TagPerfilIa
 {
     public int Id { get; set; }
@@ -23,11 +23,11 @@ public class TagPerfilIa
 
     // Amplitude entre mínimo e máximo.
     public double Amplitude { get; set; }
-    
+
     // Percentual de leituras zero no histórico.
     public double PercentualZeros { get; set; }
 
-    // Variação média entre leituras.
+    // Variação média entre leituras consecutivas.
     public double VariacaoMedia { get; set; }
 
     // Quantidade de picos detectados no histórico.
@@ -38,9 +38,27 @@ public class TagPerfilIa
 
     // Total de registros efetivamente utilizados após filtros.
     public int TotalRegistrosUsados { get; set; }
-    
+
     // Quantidade de outliers removidos do histórico.
     public int TotalOutliersRemovidos { get; set; }
+
+    // Menor variação que a IA considera relevante para esta tag.
+    // Esse valor pode ser calculado automaticamente durante o treinamento.
+    public double VariacaoMinimaRelevante { get; set; }
+
+    // Valor de deadband sugerido automaticamente pela IA.
+    // Mantemos o nome técnico no código, mas na interface podemos mostrar
+    // "Variação mínima relevante".
+    public double DeadbandSugerido { get; set; }
+
+    // Confiança da sugestão automática, em percentual de 0 a 100.
+    public double ConfiancaDeadband { get; set; }
+
+    // Indica se a variação mínima foi calculada automaticamente.
+    public bool VariacaoMinimaCalculadaAutomaticamente { get; set; }
+
+    // Explicação de como a IA chegou ao valor sugerido.
+    public string? JustificativaDeadbandSugerido { get; set; }
 
     // Data em que o perfil foi treinado.
     public DateTime DataTreinamento { get; set; }

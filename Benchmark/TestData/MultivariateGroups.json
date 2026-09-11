@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "description": "Define somente agrupamentos de tags para análise multivariada. Não contém rótulos, períodos ou resultados do oráculo.",
+  "multivariateGroups": [
+    {
+      "name": "DRYER_AIRFLOW",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "DRYER.AIR_FLOW_SENSOR",
+        "DRYER.AIR_FLOW_REFERENCE",
+        "DRYER.AIR_DAMPER"
+      ]
+    },
+    {
+      "name": "WATER_PROCESS_FLOW",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "WATER.PROCESS_FLOW_SENSOR",
+        "WATER.PROCESS_FLOW_REFERENCE"
+      ]
+    },
+    {
+      "name": "REACTOR_TEMPERATURE",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "REACTOR.TEMPERATURE",
+        "REACTOR.TEMPERATURE_REFERENCE"
+      ]
+    },
+    {
+      "name": "WAREHOUSE_WEATHER",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "WAREHOUSE.TEMPERATURE_SENSOR",
+        "WAREHOUSE.HUMIDITY",
+        "WEATHER.AMBIENT_TEMPERATURE",
+        "WEATHER.RELATIVE_HUMIDITY"
+      ]
+    },
+    {
+      "name": "DRYCHAMBER02",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "DRYCHAMBER02.MATERIAL_TEMPERATURE",
+        "DRYCHAMBER02.MATERIAL_HUMIDITY"
+      ]
+    },
+    {
+      "name": "DRYCHAMBER03",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "DRYCHAMBER03.MATERIAL_TEMPERATURE",
+        "DRYCHAMBER03.MATERIAL_HUMIDITY"
+      ]
+    },
+    {
+      "name": "DRYCHAMBER04",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "DRYCHAMBER04.MATERIAL_TEMPERATURE",
+        "DRYCHAMBER04.MATERIAL_HUMIDITY"
+      ]
+    },
+    {
+      "name": "HEAT_EXCHANGER",
+      "enabled": true,
+      "minimumAvailableTags": 3,
+      "tags": [
+        "HX.COLD_OUTLET_TEMP",
+        "HX.HOT_INLET_TEMP",
+        "HX.HOT_OUTLET_TEMP",
+        "HX.COLD_INLET_TEMP"
+      ]
+    },
+    {
+      "name": "NATURAL_GAS_SUPPLY",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "NATGAS.SUPPLY_PRESSURE",
+        "NATGAS.SUPPLY_TEMP"
+      ]
+    },
+    {
+      "name": "INTAKE_WATER_ACCOUNTING",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "INTAKE.WATER_TOTALIZER",
+        "INTAKE.WATER_FLOW"
+      ]
+    },
+    {
+      "name": "REACTOR_STEAM_CONTROL",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "REACTOR.STEAM_VALVE_COMMAND",
+        "REACTOR.STEAM_FLOW_RESPONSE"
+      ]
+    },
+    {
+      "name": "TANK_CONTROL",
+      "enabled": true,
+      "minimumAvailableTags": 3,
+      "tags": [
+        "TANK.LEVEL",
+        "TANK.OUTLET_VALVE",
+        "TANK.INLET_FLOW"
+      ]
+    },
+    {
+      "name": "CRUSHER_BEARING",
+      "enabled": true,
+      "minimumAvailableTags": 3,
+      "tags": [
+        "CRUSHER.BEARING_TEMP_DE",
+        "CRUSHER.VIBRATION_DE",
+        "CRUSHER.BEARING_TEMP_NDE",
+        "CRUSHER.VIBRATION_NDE"
+      ]
+    },
+    {
+      "name": "BOILER",
+      "enabled": true,
+      "minimumAvailableTags": 3,
+      "tags": [
+        "BOILER.FUEL_FLOW",
+        "BOILER.STEAM_FLOW",
+        "BOILER.STACK_TEMP",
+        "BOILER.O2"
+      ]
+    },
+    {
+      "name": "BAGHOUSE_LOADING",
+      "enabled": true,
+      "minimumAvailableTags": 3,
+      "tags": [
+        "BAGHOUSE.DP",
+        "BAGHOUSE.FAN_CURRENT",
+        "DRYER.BAGHOUSE_DP",
+        "BAGHOUSE.INLET_DP",
+        "BAGHOUSE.PULSE_COMMAND"
+      ]
+    },
+    {
+      "name": "PACKING_QUALITY",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "PACKING.WEIGHT",
+        "PACKING.REJECT_RATE"
+      ]
+    },
+    {
+      "name": "COMPRESSED_AIR_DISTRIBUTION",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "AIR.HEADER_PRESSURE",
+        "AIR.COMP1.DISCHARGE_PRESSURE"
+      ]
+    },
+    {
+      "name": "PRODUCT_QUALITY",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "PRODUCT.QUALITY_INDEX",
+        "PRODUCT.MOISTURE",
+        "DRYER.PRODUCT_MOISTURE"
+      ]
+    },
+    {
+      "name": "PELLET_BINDER_CHAIN",
+      "enabled": true,
+      "minimumAvailableTags": 3,
+      "maxLagMinutes": 4320,
+      "tags": [
+        "PELLET.BINDER_PRESSURE",
+        "PELLET.BINDER_FLOW",
+        "PELLET.GRANULE_SIZE",
+        "PELLET.SCREEN_REJECT_RATE",
+        "PELLET.LINE_THROUGHPUT"
+      ]
+    },
+    {
+      "name": "HYDRAULIC_FILTER",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "HYDRAULIC.FILTER_DP",
+        "HYDRAULIC.PUMP_CURRENT"
+      ]
+    },
+    {
+      "name": "EXHAUST_FAN",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "EXHAUST_FAN.VIBRATION",
+        "EXHAUST_FAN.MOTOR_CURRENT"
+      ]
+    },
+    {
+      "name": "SCRUBBER",
+      "enabled": true,
+      "minimumAvailableTags": 3,
+      "tags": [
+        "SCRUBBER.LIQUID_FLOW_A",
+        "SCRUBBER.LIQUID_FLOW_B",
+        "SCRUBBER.PUMP_SPEED",
+        "SCRUBBER.PUMP_CURRENT"
+      ]
+    },
+    {
+      "name": "THICKENER",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "THICKENER.RAKE_TORQUE",
+        "THICKENER.BED_LEVEL"
+      ]
+    },
+    {
+      "name": "BAGHOUSE_EMISSIONS",
+      "enabled": true,
+      "minimumAvailableTags": 2,
+      "tags": [
+        "BAGHOUSE.OUTLET_DUST",
+        "STACK.PARTICULATE"
+      ]
+    }
+  ],
+  "univariateOrDataQualityTags": [
+    {
+      "name": "COMPRESSOR_VIBRATION_OUTLIERS",
+      "tag": "AIR.COMP1.VIBRATION",
+      "reason": "Valores isolados impossíveis; manter em detector univariado."
+    },
+    {
+      "name": "WATER_CONDUCTIVITY_COVERAGE",
+      "tag": "WATER.CONDUCTIVITY",
+      "reason": "Ausência de dados; requer detector de lacunas."
+    },
+    {
+      "name": "REACTOR_PH_COVERAGE",
+      "tag": "REACTOR.PH",
+      "reason": "Cobertura intermitente; requer detector de lacunas."
+    }
+  ]
+}

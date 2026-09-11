@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 // Modelo de resposta usado quando uma anomalia é detectada.
 // Contém informações de identificação da tag, resultado da detecção,
 // resumo, perfil comportamental, contexto operacional, dependências,
@@ -12,7 +14,8 @@ public class AnomaliaResponse
     // Indica se o valor recebido foi classificado como anomalia.
     public bool EhAnomalia { get; set; }
 
-    // Score final do ensemble.
+    // Score final do ensemble univariado.
+    // O score multivariado permanece separado em Multivariado.
     public float Score { get; set; }
 
     public string Mensagem { get; set; } = "";
@@ -22,8 +25,8 @@ public class AnomaliaResponse
     public PerfilComportamentalDto Perfil { get; set; } = new();
     public ContextoOperacionalDto? Contexto { get; set; }
 
-    // Interpretação técnica gerada a partir do resultado do ensemble
-    // e do contexto operacional cadastrado para a tag.
+    // Interpretação técnica gerada a partir da autoridade operacional
+    // responsável pela decisão final.
     public InterpretacaoAnomaliaDto? Interpretacao { get; set; }
 
     public List<DependenciaAnalisadaDto> Dependencias { get; set; } = new();
@@ -32,8 +35,45 @@ public class AnomaliaResponse
     public TendenciasDto Tendencias { get; set; } = new();
     public ProcessoDto? Processo { get; set; }
 
-    // Resultado individual de cada detector executado pelo ensemble.
+    /*
+     * B3.24.2 / MV06.3C
+     *
+     * Só é exposto quando uma evidência multivariada recebeu autoridade
+     * operacional real. Com a feature OFF, permanece null e é omitido
+     * do JSON para preservar o contrato atual da API.
+     */
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MultivariateAnomalyDto? Multivariado { get; set; }
+
+    // Resultado individual de cada detector executado pelo ensemble univariado.
     public List<DetectorExecutadoDto> Detectores { get; set; } = new();
+}
+
+// Evidência da promoção operacional multivariada.
+// Os scores multivariado e univariado permanecem explicitamente separados.
+public class MultivariateAnomalyDto
+{
+    public bool PromocaoOperacional { get; set; }
+
+    public string Origem { get; set; } = "";
+
+    public string Grupo { get; set; } = "";
+
+    public long MinuteIndex { get; set; }
+
+    public long IdadeMinutos { get; set; }
+
+    // Escala própria do detector multivariado (0–100).
+    public double ScoreNormalizado { get; set; }
+
+    public double LimiteScore { get; set; }
+
+    public double MahalanobisSquared { get; set; }
+
+    // Score original do ensemble/univariado da tag atual.
+    public double ScoreUnivariado { get; set; }
+
+    public List<string> Tags { get; set; } = new();
 }
 
 // Resultado da interpretação da anomalia.

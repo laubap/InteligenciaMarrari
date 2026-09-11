@@ -229,6 +229,7 @@ public IActionResult ListarTagsVisaoCliente()
 
             processo = _context.ProcessoTagsIa
                 .Where(p =>
+                    p.ClienteId == perfil.ClienteId &&
                     p.TagName == perfil.TagName)
                 .Select(p => p.ProcessoIa != null ? p.ProcessoIa.Nome : null)
                 .FirstOrDefault(),

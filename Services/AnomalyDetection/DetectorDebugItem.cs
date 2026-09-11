@@ -17,4 +17,15 @@ public class DetectorDebugItem
     public string Explicacao { get; set; } = "";
 
     public Dictionary<string, double> Metricas { get; set; } = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public DetectorEvidenceRole EvidenceRole { get; set; } =
+        DetectorEvidenceRole.StatisticalEvidence;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public UnderlyingEvidenceKind UnderlyingEvidenceKind { get; set; } =
+        UnderlyingEvidenceKind.Unknown;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public TemporalConfirmationSnapshot? TemporalConfirmation { get; set; }
 }

@@ -2,110 +2,137 @@
 
 ## Visão Geral
 
-A IAApi é uma API desenvolvida em .NET para detecção de anomalias em tags industriais utilizando análise comportamental baseada em histórico real de operação.
+A IAApi é uma API ASP.NET Core que monitora tags industriais, treina perfis comportamentais a partir de histórico de operação e detecta anomalias em tempo real.
 
-O sistema integra-se ao PowerServer através de um Bridge responsável pela obtenção dos dados históricos das tags. A partir desses dados, a API realiza limpeza automática de outliers, cria perfis estatísticos individuais para cada tag e utiliza esses perfis para identificar comportamentos anormais.
+O sistema consome dados de histórico de um serviço Bridge conectado ao PowerServer, processa os registros com regras estatísticas e armazena perfis em SQLite para consulta e detecção contínua.
 
----
+## Objetivos do Projeto
 
-## Arquitetura da Solução
+* Capturar histórico de tags industriais do PowerServer via Bridge.
+* Limpar leituras inválidas e filtrar outliers com método IQR.
+* Treinar perfis por cliente/tag usando estatísticas de série temporal.
+* Detectar anomalias com um ensemble de detectores de diferentes técnicas.
+* Interpretar e armazenar ocorrências de anomalia junto com contexto operacional.
 
-PowerServer
+## Arquitetura Geral
 
-↓
+1. **BridgeHistoricoService** obtém histórico do Bridge.
+2. **HistoricoLimpezaService** remove valores inválidos e outliers (IQR).
+3. **PerfilTagService** calcula estatísticas e treina o perfil da tag.
+4. **AppDbContext** persiste configurações e perfis em SQLite.
+5. **PredictionService** executa detecção de anomalia usando um ensemble de detectores.
+6. **AnomaliaController** expõe endpoints para análise e consulta de anomalias.
 
-Bridge (HTTP)
+## Tecnologias utilizadas
 
-↓
-
-IAApi
-
-↓
-
-Busca de Histórico
-
-↓
-
-Limpeza de Outliers (IQR)
-
-↓
-
-Treinamento de Perfil
-
-↓
-
-Banco SQLite
-
-↓
-
-Detecção de Anomalias
-
----
-
-## Tecnologias Utilizadas
-
-* .NET 10
-* ASP.NET Core
+* .NET 10 / ASP.NET Core
 * Entity Framework Core
 * SQLite
-* Swagger/OpenAPI
-* PowerServer
-* HTTP Listener
-* JSON
+* Swagger / OpenAPI
+* OpenAI / LLM (integração opcional)
+* `Marrari.PowerServer.dll` para integração proprietária
 
----
+## Estrutura de Pastas
 
-## Principais Funcionalidades
+* `Controllers/` - endpoints da API REST.
+* `Services/` - lógica de negócios central.
+* `Services/AnomalyDetection/` - detectores e ensemble de anomalias.
+* `Models/` - classes de dados e DTOs.
+* `Data/` - contexto EF e migrações.
+* `Benchmark/` - infraestrutura de benchmark e testes de performance.
 
-### Cadastro de Tags para Monitoramento
+## Configuração e execução
 
-Permite configurar quais tags terão monitoramento inteligente habilitado.
+### Requisitos
 
-### Busca de Histórico Real
+* .NET 10 SDK
+* Acesso ao Bridge e PowerServer
+* Biblioteca `Lib\Marrari.PowerServer.dll`
 
-Consulta o histórico diretamente do PowerServer através do Bridge.
+### Como executar
 
-### Limpeza Automática de Outliers
+1. Abra o projeto em `c:\Users\Laura Marrari\Documents\IA MARRARI\IAApi`.
+2. Execute:
+   ```bash
+   dotnet build
+   dotnet run
+   ```
+3. A aplicação cria ou usa o banco SQLite `ia_config.db` na pasta de execução.
+4. Se o Swagger estiver habilitado, acesse `/swagger` para explorar os endpoints.
 
-Remove valores extremamente fora do padrão utilizando o método IQR (Interquartile Range).
+### AppSettings principais
 
-### Treinamento de Perfil
+#### `Bridge`
 
-Cria um perfil estatístico específico para cada tag.
+* `BaseUrl` - URL base do serviço Bridge que retorna histórico de tags.
+* `HorasHistorico` - quantidade de horas de histórico padrão para consulta.
 
-Informações calculadas:
+#### `AnomalyDetection`
 
-* Média
-* Desvio padrão
-* Valor mínimo
-* Valor máximo
-* Amplitude
-* Percentual de zeros
-* Variação média
-* Quantidade de picos
-* Quantidade de outliers removidos
+* `EnsembleThreshold` - limiar do ensemble para classificar anomalia.
+* `MinHistoryPoints` - mínimo de pontos históricos exigidos.
+* Pesos de detectores:
+  * `ZScoreWeight`
+  * `MadWeight`
+  * `EwmaWeight`
+  * `RateOfChangeWeight`
+  * `PersistenceWeight`
+  * `LevelShiftWeight`
+* Parâmetros de cada detector, por exemplo:
+  * `ZScoreThreshold`
+  * `MadThreshold`
+  * `EwmaLambda`
+  * `EwmaSigmaLimit`
+  * `RateOfChangeThreshold`
+  * `PersistenceMinimumPoints`
+  * `LevelShiftPreviousWindow`
+  * `LevelShiftRecentWindow`
+  * `LevelShiftThreshold`
+  * `LevelShiftMinimumConsistency`
 
-### Retreinamento de Perfil
+#### `AnomalyDetection:IsolationForest`
 
-Atualiza o perfil da tag utilizando dados mais recentes.
+* `Weight` - peso do detector Isolation Forest no ensemble.
+* `TreeCount` - número de árvores.
+* `SampleSize` - tamanho da amostra de treinamento.
+* `MinimumHistoryPoints` - mínimo de registros para executar.
+* `FeatureWindowSize` - janela de extração de features.
+* `AnomalyThreshold` - limiar para classificar anomalia.
+* `RandomSeed` - semente determinística.
+* `NormalizationSlope` - fator de normalização.
 
-### Listagem de Perfis
+#### `Llm`
 
-Permite consultar todos os perfis treinados.
+* `Habilitado` - habilita interpretação por LLM.
+* `BaseUrl` - URL do servidor de inferência.
+* `model` - modelo a ser utilizado.
+* `Temperatura` - temperatura de geração.
+* `TimeoutSegundos` - timeout da chamada.
+* `KeepAlive` - tempo de keep-alive.
 
-### Detecção de Anomalias
+#### `OpenAI`
 
-Compara novos valores recebidos com o perfil da tag e identifica desvios significativos.
+* `Modelo` - modelo OpenAI.
+* `Habilitado` - habilita uso de OpenAI.
 
----
+#### `Benchmark`
+
+* `ClienteId` - cliente usado para benchmark.
+* `CleanDatabasePath` - caminho do banco limpo.
+* `AnomalyDatabasePath` - caminho do banco com anomalias.
+* `ResultDirectory` - pasta de saída dos resultados.
+* `StartDateUtc` - data de início do benchmark.
+* `HistoryWindowSize` - tamanho da janela histórica em minutos.
+* `MinimumHistoryPoints` - mínimo de pontos para análises.
+* `EnableLlm` - habilita uso de LLM no benchmark.
 
 ## Banco de Dados
 
-### Tabela: TagsIaConfig
+O projeto usa SQLite por padrão com `Data Source=ia_config.db`.
 
-Responsável pelas configurações das tags monitoradas.
+### Entidades principais
 
-Campos:
+#### `TagIaConfig`
 
 * Id
 * ClienteId
@@ -113,13 +140,7 @@ Campos:
 * IaAtiva
 * DataConfiguracao
 
----
-
-### Tabela: PerfisIa
-
-Armazena os perfis comportamentais treinados.
-
-Campos:
+#### `TagPerfilIa`
 
 * Id
 * ClienteId
@@ -135,68 +156,164 @@ Campos:
 * TotalRegistrosHistorico
 * TotalRegistrosUsados
 * TotalOutliersRemovidos
+* VariacaoMinimaRelevante
+* DeadbandSugerido
+* ConfiancaDeadband
+* VariacaoMinimaCalculadaAutomaticamente
+* JustificativaDeadbandSugerido
 * DataTreinamento
 
----
+#### `AnomaliaDetectada`
+
+* Id
+* ClienteId
+* TagName
+* TipoTag
+* ValorRecebido
+* Score
+* EhAnomalia
+* Mensagem
+* Criticidade
+* ScoreRiscoProcesso
+* ClassificacaoRisco
+* TendenciaRisco
+* TendenciaValor
+* Status
+* DataDeteccao
+
+### Índices e relacionamentos
+
+* `ClienteId + TagName` é único em `TagIaConfig` e `TagPerfilIa`.
+* `TagDependenciaIa` é único por `ClienteId + TagName + TagDependente`.
+* `ProcessoEquipamentoIa` vincula processos e equipamentos com relação única.
+* `ModeloTagIaStatus` é único por cliente/tag/tipo de modelo.
 
 ## Fluxo de Treinamento
 
-1. Usuário informa a tag.
-2. A API consulta o histórico no Bridge.
-3. O histórico é validado.
-4. Outliers são removidos utilizando IQR.
-5. Estatísticas do perfil são calculadas.
-6. O perfil é salvo no banco de dados.
-7. O perfil fica disponível para futuras detecções.
-
----
+1. Requisição POST em `/api/tags/treinar-perfil` ou `/api/tags/retreinar-perfil`.
+2. `PerfilTagService` chama `BridgeHistoricoService.BuscarHistorico()`.
+3. `HistoricoLimpezaService.RemoverOutliersPorIqr()` filtra valores inválidos e outliers.
+4. Calculam-se métricas estatísticas:
+   * média, mínimo, máximo, desvio padrão, amplitude
+   * percentual de zeros
+   * variação média entre leituras
+   * quantidade de picos fora de 3 desvios padrão
+5. Sugere-se deadband com base no percentil das variações.
+6. Perfil é salvo ou atualizado em `PerfisIa`.
 
 ## Fluxo de Detecção de Anomalias
 
-1. Um novo valor é recebido.
-2. A API localiza o perfil da tag.
-3. Os limites aceitáveis são calculados:
+1. Requisição POST em `/api/anomalias/tag` com `ClienteId`, `TagName`, `DataHora` e `Valor`.
+2. Verifica se existe `TagIaConfig` ativo e perfil treinado.
+3. Busca histórico recente via Bridge e normaliza leituras válidas.
+4. Cria `DetectorInput` com histórico, perfil e valor atual.
+5. O `EnsembleDetectionService` executa todos os detectores registrados.
+6. Cada detector retorna score, limite e explicação.
+7. O ensemble calcula score ponderado e decide anomalia com base em `EnsembleThreshold`.
+8. A resposta inclui perfil comportamental, contexto, dependências, risco e interpretação.
 
-Limite Inferior = Média - (3 × Desvio Padrão)
+## Endpoints principais
 
-Limite Superior = Média + (3 × Desvio Padrão)
+### Tags
 
-4. O valor recebido é comparado com os limites.
-5. A API retorna se o valor representa ou não uma anomalia.
+* `POST /api/tags/treinar-perfil`
+  * Request: `{ "ClienteId": "", "TagName": "" }`
+  * Result: perfil treinado e métricas principais.
 
----
+* `POST /api/tags/retreinar-perfil`
+  * Mesma entrada de `treinar-perfil`, faz re-treinamento.
 
-## Endpoints
+* `POST /api/tags/testar-perfil`
+  * Request: `{ "ClienteId": "", "TagName": "", "Valor": 12.34 }`
+  * Result: verifica se o valor está fora dos limites de 3 desvios padrão.
 
-### Treinar Perfil
+* `GET /api/tags/perfis`
+  * Lista todos os perfis treinados.
 
-POST
+* `GET /api/tags/visao-cliente`
+  * Consulta visão consolidada de tags com última análise e contexto.
 
-/api/tags/treinar-perfil
+### Anomalias
 
----
+* `POST /api/anomalias/tag`
+  * Request: `{ "ClienteId": "", "TagName": "", "DataHora": "2026-08-05T12:00:00Z", "Valor": 123.45 }`
+  * Result: objeto `AnomaliaResponse` com resultado de detecção e interpretação.
 
-### Retreinar Perfil
+* `POST /api/anomalias/tag/valor-atual`
+  * Request: `{ "ClienteId": "", "TagName": "" }`
+  * Result: detecta usando o valor atual obtido do Bridge em vez de um valor explícito.
 
-POST
+* `GET /api/anomalias`
+  * Retorna lista de anomalias detectadas e feedback similar.
 
-/api/tags/retreinar-perfil
+## Modelos de dados importantes
 
----
+#### `AnomaliaRequest`
 
-### Listar Perfis
+* `ClienteId`
+* `TagName`
+* `DataHora`
+* `Valor`
 
-GET
+#### `AnomaliaResponse`
 
-/api/tags/perfis
+* `ClienteId`, `TagName`, `TipoTag`
+* `EhAnomalia`
+* `Score`
+* `Mensagem`
+* `Resumo`
+* `Perfil`
+* `Contexto`
+* `Interpretacao`
+* `Dependencias`
+* `Risco`
+* `Tendencias`
+* `Processo`
+* `Detectores`
 
----
+## Detectores de anomalia
 
-### Detectar Anomalia
+O projeto registra vários detectores via DI e combina resultados:
 
-POST
+* `StatisticalDetector` (Z-Score)
+* `MadDetector`
+* `EwmaDetector`
+* `RateOfChangeDetector`
+* `PersistenceDetector`
+* `LevelShiftDetector`
+* `IsolationForestDetector`
 
-/api/anomalias/tag
+O `EnsembleDetectionService` faz a média ponderada dos scores aplicáveis e classifica a anomalia.
+
+## Serviços principais
+
+* `PerfilTagService` - treina e atualiza perfis de tags.
+* `HistoricoLimpezaService` - remove registros inválidos e outliers.
+* `BridgeHistoricoService` - busca histórico de tags do Bridge.
+* `PredictionService` - orquestra a detecção de anomalia e interpretação.
+* `MonitoramentoTagsService` - serviço hospedado para monitorar tags em segundo plano.
+
+## Observações importantes
+
+* O banco SQLite padrão é `ia_config.db`.
+* O serviço `BridgeHistoricoService` depende de `Bridge:BaseUrl` e `Bridge:HorasHistorico`.
+* A detecção de anomalias exige histórico suficiente; casos com menos de 10 pontos são rejeitados.
+* O projeto inclui benchmarking e integração opcional com LLM para interpretação.
+
+## Extensões possíveis
+
+* Adicionar mais detectores ao ensemble.
+* Implementar Swagger/OpenAPI completo para documentação automática.
+* Criar tests unitários e de integração para endpoints e detecção.
+* Parametrizar a persistência SQLite para múltiplos ambientes.
+
+## Como contribuir
+
+1. Atualize `appsettings.json` conforme o ambiente.
+2. Use `dotnet build` e `dotnet run`.
+3. Valide os endpoints com Swagger ou Postman.
+4. Ajuste pesos e thresholds em `AnomalyDetection` conforme necessidade.
+
 
 ---
 

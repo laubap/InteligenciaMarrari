@@ -1,0 +1,86 @@
+namespace IAApi.Benchmark.ExperimentalIncidents.ReadModels;
+
+public sealed record IncidentListItemDto(
+    string IncidentId,
+    string Tag,
+    int FastWindow,
+    string Status,
+    DateTime OpenedAt,
+    double DurationMinutes,
+    double FirstScore,
+    double CurrentScore,
+    long ContinuationCount,
+    long EscalationCount,
+    long CandidateMismatchCount,
+    string DataQualityStatus,
+    bool IsOpen);
+
+public sealed record IncidentDetailsDto(
+    string IncidentId,
+    string OriginatingRawAlertId,
+    string Tag,
+    int FastWindow,
+    string Lifecycle,
+    DateTime OpenedAt,
+    long OpenedMinuteIndex,
+    DateTime PromotedAt,
+    long PromotedMinuteIndex,
+    DateTime LastUpdatedAt,
+    long LastUpdatedMinuteIndex,
+    double DurationMinutes,
+    double ObservedDurationMinutes,
+    string? ActiveBaselineId,
+    string? CandidateBaselineId,
+    string RegimeEpisodeId,
+    string? CurrentCandidateId,
+    IReadOnlyList<string> CandidateIds,
+    IReadOnlyList<string> CandidateBaselineIds,
+    long CandidateAttemptCount,
+    ExperimentalDetectorSnapshot FirstDetection,
+    ExperimentalDetectorSnapshot CurrentEvidence,
+    ExperimentalDetectorSnapshot MaximumEvidence,
+    DateTime? CandidateReadyAt,
+    DateTime? StableUnresolvedAt,
+    long ContinuationCount,
+    long CandidateMismatchCount,
+    long EscalationCount,
+    long RejectCandidateCount,
+    long EwmaOnlyMismatchCount,
+    long PersistenceConfirmationCount,
+    string DataQualityStatus,
+    bool IsSuspended,
+    bool ReturnedToActive,
+    DateTime? ResolutionAt,
+    string? ClosureReason,
+    bool ExecutionBoundary,
+    bool IsOpen,
+    IReadOnlyList<IncidentMilestone> Milestones);
+
+public static class IncidentReadModelDtoMapper
+{
+    public static IncidentListItemDto ToListItem(IncidentReadModel model) => new(
+        model.IncidentId, model.Tag, model.FastWindow, model.Lifecycle,
+        model.OpenedAt, model.DurationMinutes, model.FirstDetection.Score,
+        model.CurrentEvidence.Score, model.ContinuationCount,
+        model.EscalationCount, model.CandidateMismatchCount,
+        model.DataQualityStatus.ToString(), model.IsOpen);
+
+    public static IncidentDetailsDto ToDetails(IncidentReadModel model) =>
+        new(model.IncidentId, model.OriginatingRawAlertId, model.Tag,
+            model.FastWindow, model.Lifecycle, model.OpenedAt,
+            model.OpenedMinuteIndex, model.PromotedAt, model.PromotedMinuteIndex,
+            model.LastUpdatedAt, model.LastUpdatedMinuteIndex,
+            model.DurationMinutes, model.ObservedDurationMinutes,
+            model.ActiveBaselineId, model.CandidateBaselineId,
+            model.RegimeEpisodeId, model.CurrentCandidateId,
+            model.CandidateIds, model.CandidateBaselineIds,
+            model.CandidateAttemptCount, model.FirstDetection,
+            model.CurrentEvidence, model.MaximumEvidence,
+            model.CandidateReadyAt, model.StableUnresolvedAt,
+            model.ContinuationCount, model.CandidateMismatchCount,
+            model.EscalationCount, model.RejectCandidateCount,
+            model.EwmaOnlyMismatchCount, model.PersistenceConfirmationCount,
+            model.DataQualityStatus.ToString(), model.IsSuspended,
+            model.ReturnedToActive, model.ResolutionAt, model.ClosureReason,
+            model.ExecutionBoundary, model.IsOpen, model.Milestones);
+}

@@ -122,9 +122,33 @@ namespace IAApi.Migrations
                     b.Property<bool>("EhAnomalia")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool?>("EmitNewEvidence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("LegacyEhAnomalia")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Mensagem")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<bool?>("RuntimeCandidateBaselineReady")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RuntimeDecisionReasonsJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RuntimeDecisionSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RuntimeIncidentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RuntimeRegimeState")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("RuntimeUsedLegacyFallback")
+                        .HasColumnType("INTEGER");
 
                     b.Property<double>("Score")
                         .HasColumnType("REAL");
@@ -354,6 +378,208 @@ namespace IAApi.Migrations
                     b.ToTable("FeedbackAnomaliasIa");
                 });
 
+            modelBuilder.Entity("GrupoAnaliseIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Algoritmo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MaxLagMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MinimumAvailableTags")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("PesoEnsemble")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Sensibilidade")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "Nome")
+                        .IsUnique();
+
+                    b.ToTable("GruposAnaliseIa");
+                });
+
+            modelBuilder.Entity("GrupoAnaliseTagIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GrupoAnaliseIaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TagName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GrupoAnaliseIaId", "TagName")
+                        .IsUnique();
+
+                    b.ToTable("GrupoAnaliseTagsIa");
+                });
+
+            modelBuilder.Entity("IAApi.Services.AnomalyDetection.Multivariate.MultivariateIndustrialEventReviewIa", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EvidenceReference")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GroupName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("MinuteIndex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("ModelTrainedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ModelVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ReviewedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reviewer")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceWindow")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Threshold")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "GroupName", "ReviewedAtUtc");
+
+                    b.HasIndex("ClienteId", "GroupName", "MinuteIndex", "SourceWindow", "ModelVersion", "ModelTrainedAtUtc", "Threshold")
+                        .IsUnique();
+
+                    b.ToTable("MultivariateIndustrialEventReviews", (string)null);
+                });
+
+            modelBuilder.Entity("IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AllowedClientIdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("CanaryOnly")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("CandidateMismatchRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("DataQualityUncertainRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTimeOffset?>("FirstDecisionAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("GeneratedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastDecisionAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("LegacyFallbackRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("ObservationMinutes")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("ReadyToExpand")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ReasonsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RuntimeDecisionEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("StableUnresolvedContinuationRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TotalDecisions")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GeneratedAtUtc");
+
+                    b.ToTable("RuntimeRolloutSnapshots");
+                });
+
             modelBuilder.Entity("JanelaTreinamentoTagIa", b =>
                 {
                     b.Property<int>("Id")
@@ -575,6 +801,9 @@ namespace IAApi.Migrations
                     b.Property<string>("PapelDaTag")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("Principal")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("ProcessoIaId")
                         .HasColumnType("INTEGER");
 
@@ -585,6 +814,10 @@ namespace IAApi.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ProcessoIaId");
+
+                    b.HasIndex("ClienteId", "TagName")
+                        .IsUnique()
+                        .HasFilter("\"Principal\" = 1");
 
                     b.ToTable("ProcessoTagsIa");
                 });
@@ -614,6 +847,9 @@ namespace IAApi.Migrations
                     b.Property<string>("Criticidade")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("DataAprovacaoVariacaoMinima")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("DataAtualizacao")
                         .HasColumnType("TEXT");
 
@@ -629,6 +865,9 @@ namespace IAApi.Migrations
                     b.Property<string>("Impactos")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("JustificativaVariacaoMinima")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ModosOperacao")
                         .HasColumnType("TEXT");
 
@@ -641,6 +880,12 @@ namespace IAApi.Migrations
 
                     b.Property<string>("TipoRepresentacao")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("VariacaoMinimaAprovadaPeloCliente")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("VariacaoMinimaRelevanteCliente")
+                        .HasColumnType("REAL");
 
                     b.HasKey("Id");
 
@@ -731,11 +976,20 @@ namespace IAApi.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("ConfiancaDeadband")
+                        .HasColumnType("REAL");
+
                     b.Property<DateTime>("DataTreinamento")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("DeadbandSugerido")
+                        .HasColumnType("REAL");
+
                     b.Property<double>("DesvioPadrao")
                         .HasColumnType("REAL");
+
+                    b.Property<string>("JustificativaDeadbandSugerido")
+                        .HasColumnType("TEXT");
 
                     b.Property<double>("Maximo")
                         .HasColumnType("REAL");
@@ -766,6 +1020,12 @@ namespace IAApi.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<double>("VariacaoMedia")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("VariacaoMinimaCalculadaAutomaticamente")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("VariacaoMinimaRelevante")
                         .HasColumnType("REAL");
 
                     b.HasKey("Id");
@@ -816,6 +1076,17 @@ namespace IAApi.Migrations
                         .HasForeignKey("MotivoAnomaliaIAId");
 
                     b.Navigation("MotivoAnomaliaIA");
+                });
+
+            modelBuilder.Entity("GrupoAnaliseTagIa", b =>
+                {
+                    b.HasOne("GrupoAnaliseIa", "Grupo")
+                        .WithMany("Tags")
+                        .HasForeignKey("GrupoAnaliseIaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Grupo");
                 });
 
             modelBuilder.Entity("MotivoAnomaliaIA", b =>
@@ -871,6 +1142,11 @@ namespace IAApi.Migrations
                 {
                     b.Navigation("Processos");
 
+                    b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("GrupoAnaliseIa", b =>
+                {
                     b.Navigation("Tags");
                 });
 

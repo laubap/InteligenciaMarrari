@@ -1,18 +1,21 @@
-using System.Text.Json;
+﻿using System.Text.Json;
+using Microsoft.Extensions.Options;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Interpretation;
+using IAApi.Services.AnomalyDetection.Runtime;
+using IAApi.Services.AnomalyDetection.Multivariate;
 
-// Serviço principal de detecção de anomalias.
+// ServiÃ§o principal de detecÃ§Ã£o de anomalias.
 public class PredictionService
 {
     /*
-     * Limite usado somente para classificar a severidade da interpretação.
+     * Limite usado somente para classificar a severidade da interpretaÃ§Ã£o.
      *
-     * O ensemble continua sendo o único responsável por decidir se existe
-     * ou não uma anomalia.
+     * O ensemble continua sendo o Ãºnico responsÃ¡vel por decidir se existe
+     * ou nÃ£o uma anomalia.
      *
      * Caso o limite real usado pelo EnsembleDetectionService seja diferente
-     * de 50, altere este valor para manter a classificação de severidade
+     * de 50, altere este valor para manter a classificaÃ§Ã£o de severidade
      * consistente com o ensemble.
      */
     private const double LimiteEnsembleInterpretacao = 50.0;
@@ -43,6 +46,56 @@ public class PredictionService
     private readonly IAnomalyInterpretationService
         _anomalyInterpretationService;
 
+    // B3.18 â€” ponte operacional do runtime real.
+    // O DetectorResult Legacy permanece imutÃ¡vel.
+    private readonly RuntimeAnomalyDecisionResolver
+        _runtimeDecisionResolver;
+
+    private readonly IOptions<RuntimeAnomalyDecisionOptions>
+        _runtimeDecisionOptions;
+
+    private readonly RuntimeFunctionalDecisionCandidateFactory
+        _runtimeFunctionalDecisionCandidateFactory;
+
+    private readonly RuntimeFunctionalDecisionContextProvider
+        _runtimeFunctionalDecisionContextProvider;
+
+    private readonly RuntimeDecisionMetrics
+        _runtimeDecisionMetrics;
+
+    // B3.24.2 / MV01 — caminho multivariado somente observacional.
+    // Pode ser null em testes antigos construídos manualmente.
+    private readonly MultivariateShadowRuntimeCoordinator?
+        _multivariateShadowRuntimeCoordinator;
+
+    // B3.24.2 / MV06 — observação da fusão counterfactual.
+    // Nunca altera a decisão operacional nesta etapa.
+    private readonly MultivariateDecisionCounterfactualObserver?
+        _multivariateDecisionCounterfactualObserver;
+
+    // B3.24.2 / MV06.3 — resolver da promoção operacional.
+    // Continua protegido por feature flag própria, desligada por padrão.
+    private readonly MultivariateOperationalFusionResolver?
+        _multivariateOperationalFusionResolver;
+
+    private readonly IOptions<MultivariateOperationalPromotionOptions>?
+        _multivariateOperationalPromotionOptions;
+
+    // B3.24.2 / MV06.3C — interpretação coerente quando a
+    // autoridade operacional vier do multivariado.
+    private readonly MultivariateOperationalInterpretationFactory?
+        _multivariateOperationalInterpretationFactory;
+
+    // B3.24.2 / MV07.5 — trava de readiness antes de qualquer
+    // autoridade operacional multivariada real.
+    //
+    // Mantidos opcionais para preservar testes/construções manuais antigos.
+    private readonly MultivariateOperationalReadinessService?
+        _multivariateOperationalReadinessService;
+
+    private readonly IOptions<MultivariateOperationalReadinessOptions>?
+        _multivariateOperationalReadinessOptions;
+
     public PredictionService(
         AppDbContext context,
         AnaliseRelacionadasService analiseRelacionadasService,
@@ -58,7 +111,19 @@ public class PredictionService
         EnsembleDetectionService ensembleDetectionService,
         IHistoricoService servicoHistorico,
         AnomalyInterpretationContextBuilder interpretationContextBuilder,
-        IAnomalyInterpretationService anomalyInterpretationService)
+        IAnomalyInterpretationService anomalyInterpretationService,
+        RuntimeAnomalyDecisionResolver runtimeDecisionResolver,
+        IOptions<RuntimeAnomalyDecisionOptions> runtimeDecisionOptions,
+        RuntimeFunctionalDecisionCandidateFactory runtimeFunctionalDecisionCandidateFactory,
+        RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
+        RuntimeDecisionMetrics runtimeDecisionMetrics,
+        MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
+        MultivariateDecisionCounterfactualObserver? multivariateDecisionCounterfactualObserver = null,
+        MultivariateOperationalFusionResolver? multivariateOperationalFusionResolver = null,
+        IOptions<MultivariateOperationalPromotionOptions>? multivariateOperationalPromotionOptions = null,
+        MultivariateOperationalInterpretationFactory? multivariateOperationalInterpretationFactory = null,
+        MultivariateOperationalReadinessService? multivariateOperationalReadinessService = null,
+        IOptions<MultivariateOperationalReadinessOptions>? multivariateOperationalReadinessOptions = null)
     {
         _context = context;
 
@@ -103,6 +168,42 @@ public class PredictionService
 
         _anomalyInterpretationService =
             anomalyInterpretationService;
+
+        _runtimeDecisionResolver =
+            runtimeDecisionResolver;
+
+        _runtimeDecisionOptions =
+            runtimeDecisionOptions;
+
+        _runtimeFunctionalDecisionCandidateFactory =
+            runtimeFunctionalDecisionCandidateFactory;
+
+        _runtimeFunctionalDecisionContextProvider =
+            runtimeFunctionalDecisionContextProvider;
+
+        _runtimeDecisionMetrics =
+            runtimeDecisionMetrics;
+
+        _multivariateShadowRuntimeCoordinator =
+            multivariateShadowRuntimeCoordinator;
+
+        _multivariateDecisionCounterfactualObserver =
+            multivariateDecisionCounterfactualObserver;
+
+        _multivariateOperationalFusionResolver =
+            multivariateOperationalFusionResolver;
+
+        _multivariateOperationalPromotionOptions =
+            multivariateOperationalPromotionOptions;
+
+        _multivariateOperationalInterpretationFactory =
+            multivariateOperationalInterpretationFactory;
+
+        _multivariateOperationalReadinessService =
+            multivariateOperationalReadinessService;
+
+        _multivariateOperationalReadinessOptions =
+            multivariateOperationalReadinessOptions;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -122,10 +223,42 @@ public class PredictionService
         if (config == null)
         {
             throw new Exception(
-                $"IA não configurada para a tag " +
+                $"IA nÃ£o configurada para a tag " +
                 $"{request.TagName} do cliente " +
                 $"{request.ClienteId}."
             );
+        }
+
+        /*
+         * B3.24.2 / MV01 — MULTIVARIATE SHADOW.
+         *
+         * A leitura entra no caminho multivariado assim que confirmamos
+         * que a tag está ativa. O coordinator é fail-open e não participa
+         * de EhAnomalia, Score, Risco, RuntimeDecision ou LLM.
+         *
+         * Executamos antes da exigência do perfil univariado para que uma
+         * falha posterior no caminho univariado não faça o buffer perder
+         * uma leitura multivariada válida.
+         */
+        var dataHoraAtual =
+            request.DataHora == default
+                ? DateTime.Now
+                : request.DataHora;
+
+        IReadOnlyList<MultivariateDetectionResult>
+            multivariateShadowResults =
+                Array.Empty<MultivariateDetectionResult>();
+
+        if (_multivariateShadowRuntimeCoordinator is not null)
+        {
+            multivariateShadowResults =
+                await _multivariateShadowRuntimeCoordinator
+                    .ProcessarLeituraAsync(
+                        request.ClienteId,
+                        request.TagName,
+                        dataHoraAtual,
+                        request.Valor,
+                        cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -139,8 +272,8 @@ public class PredictionService
         {
             throw new Exception(
                 $"Perfil da tag {request.TagName} " +
-                "ainda não foi treinado. Execute o " +
-                "treinamento de perfil antes da detecção."
+                "ainda nÃ£o foi treinado. Execute o " +
+                "treinamento de perfil antes da detecÃ§Ã£o."
             );
         }
 
@@ -160,11 +293,11 @@ public class PredictionService
             ?? "perfil-comportamental";
 
         /*
-         * Busca o histórico real da tag no Bridge.
+         * Busca o histÃ³rico real da tag no Bridge.
          *
-         * O segundo parâmetro existe para manter compatibilidade
+         * O segundo parÃ¢metro existe para manter compatibilidade
          * com a interface IHistoricoService. Atualmente o Bridge
-         * utiliza apenas o nome da tag para buscar o histórico.
+         * utiliza apenas o nome da tag para buscar o histÃ³rico.
          */
         var historicoBruto =
             _servicoHistorico.BuscarHistorico(
@@ -176,7 +309,7 @@ public class PredictionService
         if (historicoBruto == null)
         {
             throw new Exception(
-                $"O serviço de histórico retornou uma resposta nula " +
+                $"O serviÃ§o de histÃ³rico retornou uma resposta nula " +
                 $"para a tag '{request.TagName}'."
             );
         }
@@ -184,31 +317,114 @@ public class PredictionService
         cancellationToken.ThrowIfCancellationRequested();
 
         /*
-         * Remove leituras inválidas, elimina timestamps duplicados
-         * e ordena o histórico cronologicamente.
+         * A sanitizaÃ§Ã£o agora Ã© responsabilidade exclusiva de DetectorInput.
+         *
+         * Aqui apenas convertemos as leituras recebidas para o contrato
+         * comum. Na atribuiÃ§Ã£o de Historico serÃ£o:
+         * - removidos valores/timestamps invÃ¡lidos;
+         * - consolidados timestamps duplicados;
+         * - corrigida a ordenaÃ§Ã£o quando necessÃ¡rio;
+         * - medidos cadÃªncia e gaps.
          */
-        var historicoDetector = historicoBruto
-            .Where(leitura =>
-                leitura != null &&
-                !float.IsNaN(leitura.Valor) &&
-                !float.IsInfinity(leitura.Valor))
-            .GroupBy(leitura => leitura.DataHora)
-            .Select(grupo => grupo.Last())
-            .OrderBy(leitura => leitura.DataHora)
-            .Select(leitura => new HistoricoDetectorPoint
-            {
-                DataHora = leitura.DataHora,
-                Valor = leitura.Valor
-            })
-            .ToList();
+        var historicoRecebido =
+            historicoBruto
+                .Where(leitura =>
+                    leitura != null)
+                .Select(leitura =>
+                    new HistoricoDetectorPoint
+                    {
+                        DataHora =
+                            leitura.DataHora,
+
+                        Valor =
+                            leitura.Valor
+                    })
+                .ToList();
+
+var entradaDetector =
+    new DetectorInput
+    {
+        ClienteId =
+            request.ClienteId,
+
+        TagName =
+            request.TagName,
+
+        TipoTag =
+            tipoTag,
+
+        ValorAtual =
+            request.Valor,
+
+        DataHoraAtual =
+            dataHoraAtual,
+
+        MediaHistorica =
+            perfil.Media,
+
+        DesvioPadraoHistorico =
+            perfil.DesvioPadrao,
+
+        /*
+         * B3.24.1
+         *
+         * Preserva no runtime o deadband aprendido durante
+         * o treinamento do perfil.
+         *
+         * Sem estes campos, o BaselineProtectionProfile
+         * ignora o valor persistido e recalcula o P95
+         * diretamente do histórico da detecção.
+         */
+        VariacaoMinimaRelevante =
+            perfil.VariacaoMinimaRelevante,
+
+        ConfiancaVariacaoMinima =
+            perfil.ConfiancaDeadband,
+
+        VariacaoMinimaDefinidaPeloCliente =
+            false,
+
+        Historico =
+            historicoRecebido
+    };
+        var historicoDetector =
+            entradaDetector.Historico;
+
+        var qualidadeHistorico =
+            entradaDetector.QualidadeHistorico;
 
         Console.WriteLine("================================");
-        Console.WriteLine("HISTÓRICO PREPARADO PARA DETECÇÃO");
+        Console.WriteLine("HISTÃ“RICO PREPARADO PARA DETECÃ‡ÃƒO");
         Console.WriteLine($"Cliente: {request.ClienteId}");
         Console.WriteLine($"Tag: {request.TagName}");
         Console.WriteLine($"Tipo: {tipoTag}");
-        Console.WriteLine($"Registros brutos: {historicoBruto.Count}");
-        Console.WriteLine($"Registros válidos: {historicoDetector.Count}");
+        Console.WriteLine(
+            $"Registros recebidos: " +
+            $"{qualidadeHistorico.OriginalPoints}");
+        Console.WriteLine(
+            $"Registros vÃ¡lidos: " +
+            $"{qualidadeHistorico.ValidPoints}");
+        Console.WriteLine(
+            $"Valores invÃ¡lidos removidos: " +
+            $"{qualidadeHistorico.InvalidValues}");
+        Console.WriteLine(
+            $"Timestamps invÃ¡lidos removidos: " +
+            $"{qualidadeHistorico.InvalidTimestamps}");
+        Console.WriteLine(
+            $"Timestamps duplicados: " +
+            $"{qualidadeHistorico.DuplicateTimestamps}");
+        Console.WriteLine(
+            $"TransiÃ§Ãµes fora de ordem: " +
+            $"{qualidadeHistorico.OutOfOrderTransitions}");
+        Console.WriteLine(
+            $"CadÃªncia mediana: " +
+            $"{qualidadeHistorico.MedianIntervalMinutes:F3} min");
+        Console.WriteLine(
+            $"Maior gap: " +
+            $"{qualidadeHistorico.LargestGapMinutes:F3} min");
+        Console.WriteLine(
+            $"Gap crÃ­tico: " +
+            $"{qualidadeHistorico.HasCriticalGap}");
 
         if (historicoDetector.Count > 0)
         {
@@ -218,7 +434,7 @@ public class PredictionService
             );
 
             Console.WriteLine(
-                $"Último registro: " +
+                $"Ãšltimo registro: " +
                 $"{historicoDetector.Last().DataHora:yyyy-MM-dd HH:mm:ss}"
             );
         }
@@ -228,32 +444,17 @@ public class PredictionService
         if (historicoDetector.Count < 10)
         {
             throw new Exception(
-                $"Histórico insuficiente para analisar a tag " +
+                $"HistÃ³rico insuficiente para analisar a tag " +
                 $"'{request.TagName}'. Foram encontrados apenas " +
-                $"{historicoDetector.Count} pontos válidos."
+                $"{historicoDetector.Count} pontos vÃ¡lidos."
             );
         }
-
-        var entradaDetector = new DetectorInput
-        {
-            ClienteId = request.ClienteId,
-            TagName = request.TagName,
-            TipoTag = tipoTag,
-
-            ValorAtual = request.Valor,
-            DataHoraAtual = DateTime.Now,
-
-            MediaHistorica = perfil.Media,
-            DesvioPadraoHistorico = perfil.DesvioPadrao,
-
-            Historico = historicoDetector
-        };
 
         cancellationToken.ThrowIfCancellationRequested();
 
         /*
-         * O ensemble executa os detectores e continua sendo o único
-         * responsável pela decisão de anomalia.
+         * O ensemble executa os detectores e continua sendo o Ãºnico
+         * responsÃ¡vel pela decisÃ£o de anomalia.
          */
         var resultadoDetector =
             _ensembleDetectionService.Detectar(
@@ -261,61 +462,398 @@ public class PredictionService
             );
 
         /*
-         * Constrói o contexto consolidado para interpretação.
+         * B3.18 â€” contexto funcional REAL do runtime.
+         *
+         * Mantemos o DetectorResult Legacy imutÃ¡vel e alimentamos a mesma
+         * cadeia de regime/candidate/incidente validada no benchmark.
+         *
+         * O provider mantÃ©m estado efÃªmero por cliente/tag e devolve apenas
+         * o contexto necessÃ¡rio para a decisÃ£o funcional.
+         */
+        var runtimeFunctionalContext =
+            _runtimeFunctionalDecisionContextProvider.Evaluate(
+                entradaDetector,
+                resultadoDetector);
+
+        var runtimeFunctionalCandidate =
+            _runtimeFunctionalDecisionCandidateFactory.Create(
+                resultadoDetector,
+                runtimeFunctionalContext);
+
+        var runtimeDecision =
+            _runtimeDecisionResolver.Resolve(
+                resultadoDetector,
+                _runtimeDecisionOptions.Value,
+                request.ClienteId,
+                runtimeFunctionalCandidate);
+
+        _runtimeDecisionMetrics.Record(
+            runtimeDecision);
+
+        /*
+         * B3.24.2 / MV06.2 + MV06.3B
+         *
+         * 1) Calcula a decisão counterfactual.
+         * 2) Passa essa proposta pelo resolver operacional independente.
+         *
+         * A promoção operacional continua protegida por feature flag própria.
+         * Enquanto Enabled=false, o resolver devolve a RuntimeDecision atual
+         * sem nenhuma alteração.
+         */
+        MultivariateDecisionCounterfactual?
+            multivariateCounterfactual =
+                null;
+
+        if (_multivariateDecisionCounterfactualObserver is not null &&
+            multivariateShadowResults.Count > 0)
+        {
+            try
+            {
+                multivariateCounterfactual =
+                    _multivariateDecisionCounterfactualObserver.Observe(
+                        runtimeDecision,
+                        request.ClienteId,
+                        request.TagName,
+                        dataHoraAtual,
+                        multivariateShadowResults);
+            }
+            catch (Exception ex)
+            {
+                // Fail-open obrigatório:
+                // observabilidade multivariada jamais pode derrubar
+                // a detecção operacional existente.
+                Console.WriteLine(
+                    $"B3.24.2 MULTIVARIATE FUSION COUNTERFACTUAL FAIL-OPEN " +
+                    $"Cliente={request.ClienteId} " +
+                    $"Tag={request.TagName} " +
+                    $"Erro={ex.Message}");
+            }
+        }
+
+        MultivariateOperationalFusionResult?
+            multivariateOperationalFusion =
+                null;
+
+        if (_multivariateOperationalFusionResolver is not null &&
+            _multivariateOperationalPromotionOptions is not null &&
+            multivariateCounterfactual is not null)
+        {
+            try
+            {
+                var resolvedFusion =
+                    _multivariateOperationalFusionResolver.Resolve(
+                        runtimeDecision,
+                        multivariateCounterfactual,
+                        _multivariateOperationalPromotionOptions.Value,
+                        request.ClienteId,
+                        resultadoDetector.Score);
+
+                /*
+                 * MV06.3C + MV07.5
+                 *
+                 * Uma promoção real só pode entrar no runtime quando:
+                 * 1) existe interpretação multivariada coerente;
+                 * 2) existe evidência multivariada identificável;
+                 * 3) o grupo/modelo está READY para autoridade operacional.
+                 *
+                 * Importante:
+                 * - o resolver estável NÃO é alterado;
+                 * - feature OFF continua sem consultar readiness;
+                 * - qualquer falha de readiness preserva a RuntimeDecision
+                 *   operacional já calculada pelo caminho existente.
+                 */
+                var podeAplicarResolvedFusion =
+                    true;
+
+                var fusionLogSource =
+                    resolvedFusion.Source;
+
+                if (resolvedFusion.PromotionApplied)
+                {
+                    if (_multivariateOperationalInterpretationFactory is null ||
+                        resolvedFusion.MultivariateEvidence is null)
+                    {
+                        podeAplicarResolvedFusion =
+                            false;
+
+                        fusionLogSource =
+                            "MultivariateInterpretationUnavailable";
+
+                        Console.WriteLine(
+                            $"B3.24.2 MULTIVARIATE OPERATIONAL FUSION BLOCKED " +
+                            $"Cliente={request.ClienteId} " +
+                            $"Tag={request.TagName} " +
+                            "Reason=MultivariateInterpretationUnavailable");
+                    }
+                    else if (_multivariateOperationalReadinessService is null ||
+                             _multivariateOperationalReadinessOptions is null)
+                    {
+                        /*
+                         * Fail-closed para a NOVA autoridade multivariada:
+                         * se a trava de readiness não estiver disponível,
+                         * a promoção não entra.
+                         *
+                         * O runtime univariado existente continua funcionando.
+                         */
+                        podeAplicarResolvedFusion =
+                            false;
+
+                        fusionLogSource =
+                            "MultivariateOperationalReadinessUnavailable";
+
+                        Console.WriteLine(
+                            $"B3.24.2 MULTIVARIATE OPERATIONAL READINESS BLOCKED " +
+                            $"Cliente={request.ClienteId} " +
+                            $"Tag={request.TagName} " +
+                            $"Grupo={resolvedFusion.MultivariateEvidence.GroupName} " +
+                            "Reason=ReadinessServiceUnavailable");
+                    }
+                    else
+                    {
+                        var readiness =
+                            await _multivariateOperationalReadinessService
+                                .AvaliarAsync(
+                                    request.ClienteId,
+                                    resolvedFusion.MultivariateEvidence.GroupName,
+                                    _multivariateOperationalReadinessOptions.Value,
+                                    cancellationToken:
+                                        cancellationToken);
+
+                        if (!readiness.ReadyForOperationalAuthority)
+                        {
+                            podeAplicarResolvedFusion =
+                                false;
+
+                            fusionLogSource =
+                                "MultivariateOperationalReadinessBlocked";
+
+                            var blockers =
+                                readiness.Blockers.Count == 0
+                                    ? "-"
+                                    : string.Join(
+                                        ",",
+                                        readiness.Blockers);
+
+                            Console.WriteLine(
+                                $"B3.24.2 MULTIVARIATE OPERATIONAL READINESS BLOCKED " +
+                                $"Cliente={request.ClienteId} " +
+                                $"Tag={request.TagName} " +
+                                $"Grupo={resolvedFusion.MultivariateEvidence.GroupName} " +
+                                $"Blockers={blockers}");
+                        }
+                        else
+                        {
+                            Console.WriteLine(
+                                $"B3.24.2 MULTIVARIATE OPERATIONAL READINESS READY " +
+                                $"Cliente={request.ClienteId} " +
+                                $"Tag={request.TagName} " +
+                                $"Grupo={resolvedFusion.MultivariateEvidence.GroupName} " +
+                                $"SampleCount={readiness.ModelSampleCount}");
+                        }
+                    }
+                }
+
+                if (podeAplicarResolvedFusion)
+                {
+                    multivariateOperationalFusion =
+                        resolvedFusion;
+
+                    runtimeDecision =
+                        resolvedFusion.Decision;
+                }
+
+                Console.WriteLine(
+                    $"B3.24.2 MULTIVARIATE OPERATIONAL FUSION " +
+                    $"Cliente={request.ClienteId} " +
+                    $"Tag={request.TagName} " +
+                    $"Applied={multivariateOperationalFusion?.PromotionApplied ?? false} " +
+                    $"Source={fusionLogSource} " +
+                    $"EmitAnomaly={runtimeDecision.EmitAnomaly} " +
+                    $"EmitNewEvidence={runtimeDecision.EmitNewEvidence} " +
+                    $"UnivariateScore={resolvedFusion.UnivariateScore:F4} " +
+                    $"MultivariateScore=" +
+                    $"{resolvedFusion.MultivariateEvidence?.Score.ToString("F2") ?? "-"}");
+            }
+            catch (Exception ex)
+            {
+                /*
+                 * Fail-open da autoridade multivariada:
+                 * qualquer falha preserva a RuntimeDecision que já havia
+                 * sido calculada pelo caminho operacional existente.
+                 */
+                Console.WriteLine(
+                    $"B3.24.2 MULTIVARIATE OPERATIONAL FUSION FAIL-OPEN " +
+                    $"Cliente={request.ClienteId} " +
+                    $"Tag={request.TagName} " +
+                    $"Erro={ex.Message}");
+            }
+        }
+
+        var multivariatePromotionApplied =
+            multivariateOperationalFusion?.PromotionApplied == true;
+
+        var multivariateOperationalEvidence =
+            multivariateOperationalFusion?.MultivariateEvidence;
+
+        /*
+         * B3.19 â€” snapshot de auditoria.
+         *
+         * A decisÃ£o Legacy original, a decisÃ£o operacional e o contexto
+         * funcional sÃ£o preservados separadamente para persistÃªncia.
+         */
+        var runtimeAudit =
+            RuntimeDecisionAuditData.From(
+                runtimeDecision,
+                runtimeFunctionalContext);
+
+        /*
+         * ConstrÃ³i o contexto consolidado para interpretaÃ§Ã£o.
          *
          * Essa etapa combina:
-         * - resultado técnico do ensemble;
-         * - dados históricos;
-         * - informações operacionais cadastradas para a tag.
+         * - resultado tÃ©cnico do ensemble;
+         * - dados histÃ³ricos;
+         * - informaÃ§Ãµes operacionais cadastradas para a tag.
          */
-AnomalyInterpretationResult resultadoInterpretacao;
+AnomalyInterpretationResult? resultadoInterpretacao =
+    null;
 
-if (resultadoDetector.EhAnomalia)
+/*
+ * Se a autoridade veio do multivariado, não chamamos a interpretação
+ * univariada/LLM. A interpretação multivariada será construída logo após
+ * o cálculo de risco, pois sua severidade vem da classificação operacional.
+ */
+if (!multivariatePromotionApplied)
 {
-    var contextoInterpretacao =
-        await _interpretationContextBuilder.CriarAsync(
-            entradaDetector,
-            resultadoDetector,
-            LimiteEnsembleInterpretacao,
-            cancellationToken
-        );
-
-    resultadoInterpretacao =
-        await _anomalyInterpretationService.InterpretarAsync(
-            contextoInterpretacao,
-            cancellationToken
-        );
-}
-else
-{
-    resultadoInterpretacao = new AnomalyInterpretationResult
+    if (runtimeDecision.RequiresNewInterpretation)
     {
-        Resumo =
-            "Nenhuma anomalia foi identificada.",
+        var contextoInterpretacao =
+            await _interpretationContextBuilder.CriarAsync(
+                entradaDetector,
+                resultadoDetector,
+                LimiteEnsembleInterpretacao,
+                runtimeDecision.EmitAnomaly,
+                cancellationToken
+            );
 
-        InterpretacaoTecnica =
-            "Os detectores indicaram que o comportamento atual da tag permanece dentro do padrão esperado.",
+        resultadoInterpretacao =
+            await _anomalyInterpretationService.InterpretarAsync(
+                contextoInterpretacao,
+                cancellationToken
+            );
+    }
+    else if (runtimeDecision.IsAnomalyContinuation)
+    {
+        /*
+         * B3.22.5 V3d.2
+         *
+         * A condição continua operacionalmente anômala, porém não existe
+         * nova evidência funcional. Preservamos a anomalia na resposta,
+         * risco e persistência, mas não repetimos interpretação por LLM.
+         */
+        var contextoContinuacao =
+            await _interpretationContextBuilder.CriarAsync(
+                entradaDetector,
+                resultadoDetector,
+                LimiteEnsembleInterpretacao,
+                runtimeDecision.EmitAnomaly,
+                cancellationToken
+            );
 
-        Evidencias = new List<string>
-        {
-            "Nenhum detector identificou comportamento anômalo."
-        },
+        var increasingNoiseContinuation =
+            string.Equals(
+                runtimeDecision.Source,
+                "IncreasingNoiseContinuation",
+                StringComparison.OrdinalIgnoreCase);
 
-        PossiveisCausas = new(),
+        resultadoInterpretacao =
+            new AnomalyInterpretationResult
+            {
+                Resumo =
+                    "A anomalia permanece ativa e está em acompanhamento.",
 
-        Recomendacoes = new()
-        {
-            "Continuar monitorando normalmente."
-        },
+                InterpretacaoTecnica =
+                    increasingNoiseContinuation
+                        ? "A expansão sustentada da variabilidade permanece ativa. " +
+                          "Esta leitura representa a continuidade da mesma condição " +
+                          "já identificada, sem nova evidência funcional independente."
+                        : "A condição anômala previamente identificada permanece ativa. " +
+                          "Esta leitura é uma continuação e não representa uma nova " +
+                          "evidência funcional independente.",
 
-        Severidade = "Normal",
+                Evidencias =
+                    increasingNoiseContinuation
+                        ? new List<string>
+                        {
+                            "A evidência de aumento sustentado de variabilidade permanece ativa.",
+                            "Nenhuma nova interpretação foi iniciada para esta leitura de continuação."
+                        }
+                        : new List<string>
+                        {
+                            "A condição funcional de anomalia permanece ativa.",
+                            "Nenhuma nova interpretação foi iniciada para esta leitura de continuação."
+                        },
 
-        GeradoPorLlm = false,
+                PossiveisCausas =
+                    new(),
 
-        ModeloUtilizado = "Não utilizado",
+                Recomendacoes =
+                    new()
+                    {
+                        "Continuar acompanhando a evolução das próximas leituras."
+                    },
 
-        DataGeracao = DateTime.UtcNow
-    };
+                Severidade =
+                    contextoContinuacao.Severidade,
+
+                GeradoPorLlm =
+                    false,
+
+                ModeloUtilizado =
+                    "Continuação determinística",
+
+                DataGeracao =
+                    DateTime.UtcNow
+            };
+    }
+    else
+    {
+        resultadoInterpretacao =
+            new AnomalyInterpretationResult
+            {
+                Resumo =
+                    "Nenhuma anomalia foi identificada.",
+
+                InterpretacaoTecnica =
+                    "Os detectores indicaram que o comportamento atual da tag permanece dentro do padrão esperado.",
+
+                Evidencias =
+                    new List<string>
+                    {
+                        "Nenhum detector identificou comportamento anômalo."
+                    },
+
+                PossiveisCausas =
+                    new(),
+
+                Recomendacoes =
+                    new()
+                    {
+                        "Continuar monitorando normalmente."
+                    },
+
+                Severidade =
+                    "Normal",
+
+                GeradoPorLlm =
+                    false,
+
+                ModeloUtilizado =
+                    "Não utilizado",
+
+                DataGeracao =
+                    DateTime.UtcNow
+            };
+    }
 }
 
         var limiteInferior =
@@ -324,8 +862,15 @@ else
         var limiteSuperior =
             resultadoDetector.LimiteSuperior;
 
+        /*
+         * A partir daqui os efeitos externos usam a decisÃ£o operacional.
+         *
+         * Na etapa atual da B3.18 ela Ã© semanticamente idÃªntica ao Legacy.
+         * O valor original continua disponÃ­vel em
+         * resultadoDetector.EhAnomalia e nÃ£o Ã© alterado.
+         */
         var ehAnomalia =
-            resultadoDetector.EhAnomalia;
+            runtimeDecision.EmitAnomaly;
 
         var score =
             resultadoDetector.Score;
@@ -354,6 +899,34 @@ else
                 riscoProcesso
             );
 
+        if (multivariatePromotionApplied &&
+            multivariateOperationalEvidence is not null)
+        {
+            /*
+             * O score usado pelo RiskScoreService continua sendo o score
+             * univariado. O score 0–100 do multivariado permanece somente
+             * na evidência multivariada.
+             */
+            resultadoInterpretacao =
+                _multivariateOperationalInterpretationFactory!.Create(
+                    multivariateOperationalEvidence,
+                    score,
+                    MapearSeveridadeRisco(
+                        riscoProcesso.Classificacao));
+
+            fatoresRisco.Add(
+                $"Anomalia multivariada operacional no grupo " +
+                $"'{multivariateOperationalEvidence.GroupName}' " +
+                $"(score {multivariateOperationalEvidence.Score:F2}, " +
+                $"limite {multivariateOperationalEvidence.Threshold:F2}).");
+        }
+
+        if (resultadoInterpretacao is null)
+        {
+            throw new InvalidOperationException(
+                "Não foi possível construir a interpretação operacional.");
+        }
+
         var tendenciaRisco =
             _tendenciaRiscoService.Analisar(
                 request.ClienteId,
@@ -377,21 +950,28 @@ else
                 );
 
         /*
-         * A mensagem principal continua sendo gerada pela lógica
+         * A mensagem principal continua sendo gerada pela lÃ³gica
          * existente para preservar compatibilidade com o sistema.
          *
-         * A interpretação detalhada será retornada separadamente
+         * A interpretaÃ§Ã£o detalhada serÃ¡ retornada separadamente
          * na propriedade Interpretacao.
          */
         var mensagem =
-            MontarMensagemCliente(
-                request,
-                contexto,
-                ehAnomalia,
-                score,
-                riscoProcesso,
-                tendenciaValor
-            );
+            multivariatePromotionApplied &&
+            multivariateOperationalEvidence is not null
+                ? MontarMensagemMultivariada(
+                    request,
+                    contexto,
+                    riscoProcesso,
+                    multivariateOperationalEvidence)
+                : MontarMensagemCliente(
+                    request,
+                    contexto,
+                    ehAnomalia,
+                    score,
+                    riscoProcesso,
+                    tendenciaValor
+                );
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -408,7 +988,8 @@ else
             riscoProcesso.ScoreRisco,
             riscoProcesso.Classificacao,
             tendenciaRisco.Tendencia,
-            tendenciaValor.Tendencia
+            tendenciaValor.Tendencia,
+            runtimeAudit
         );
 
         var detectoresExecutados =
@@ -444,25 +1025,25 @@ else
                 .ToList();
 
                 Console.WriteLine();
-Console.WriteLine("========== INTERPRETAÇÃO FINAL ==========");
+Console.WriteLine("========== INTERPRETAÃ‡ÃƒO FINAL ==========");
 Console.WriteLine($"Resumo: {resultadoInterpretacao.Resumo}");
-Console.WriteLine($"Interpretação: {resultadoInterpretacao.InterpretacaoTecnica}");
+Console.WriteLine($"InterpretaÃ§Ã£o: {resultadoInterpretacao.InterpretacaoTecnica}");
 Console.WriteLine($"Severidade: {resultadoInterpretacao.Severidade}");
 Console.WriteLine($"Gerado por LLM: {resultadoInterpretacao.GeradoPorLlm}");
 
-Console.WriteLine("Evidências:");
+Console.WriteLine("EvidÃªncias:");
 foreach (var item in resultadoInterpretacao.Evidencias)
 {
     Console.WriteLine($" - {item}");
 }
 
-Console.WriteLine("Possíveis causas:");
+Console.WriteLine("PossÃ­veis causas:");
 foreach (var item in resultadoInterpretacao.PossiveisCausas)
 {
     Console.WriteLine($" - {item}");
 }
 
-Console.WriteLine("Recomendações:");
+Console.WriteLine("RecomendaÃ§Ãµes:");
 foreach (var item in resultadoInterpretacao.Recomendacoes)
 {
     Console.WriteLine($" - {item}");
@@ -644,7 +1225,7 @@ Console.WriteLine();
                                 item.EhAnomalia,
 
                             Status = item.EhAnomalia
-                                ? "anômala"
+                                ? "anÃ´mala"
                                 : "normal",
 
                             TipoRelacao =
@@ -701,6 +1282,43 @@ Console.WriteLine();
                     tendenciaValor.Mensagem
             },
 
+            Multivariado =
+                multivariatePromotionApplied &&
+                multivariateOperationalEvidence is not null
+                    ? new MultivariateAnomalyDto
+                    {
+                        PromocaoOperacional =
+                            true,
+
+                        Origem =
+                            runtimeDecision.Source,
+
+                        Grupo =
+                            multivariateOperationalEvidence.GroupName,
+
+                        MinuteIndex =
+                            multivariateOperationalEvidence.MinuteIndex,
+
+                        IdadeMinutos =
+                            multivariateOperationalEvidence.AgeMinutes,
+
+                        ScoreNormalizado =
+                            multivariateOperationalEvidence.Score,
+
+                        LimiteScore =
+                            multivariateOperationalEvidence.Threshold,
+
+                        MahalanobisSquared =
+                            multivariateOperationalEvidence.MahalanobisSquared,
+
+                        ScoreUnivariado =
+                            score,
+
+                        Tags =
+                            multivariateOperationalEvidence.Tags.ToList()
+                    }
+                    : null,
+
             Detectores =
                 detectoresExecutados
         };
@@ -737,7 +1355,7 @@ Console.WriteLine();
         {
             throw new Exception(
                 $"Valor atual da tag {tagName} " +
-                "não encontrado no Bridge."
+                "nÃ£o encontrado no Bridge."
             );
         }
 
@@ -750,13 +1368,67 @@ Console.WriteLine();
                 tagName,
 
             Valor =
-                (float)valorAtual.Valor
+                (float)valorAtual.Valor,
+
+            // B3.21.1 â€” preserva o timestamp real da leitura recebido do Bridge.
+            // Isso evita substituir o horÃ¡rio industrial da leitura pelo relÃ³gio
+            // local da API e melhora a consistÃªncia temporal de replay, gaps,
+            // cadÃªncia e decisÃµes de estabilidade do runtime.
+            DataHora =
+                valorAtual.DataHora
         };
 
         return await Detectar(
             request,
             cancellationToken
         );
+    }
+
+    private static string MapearSeveridadeRisco(
+        string? classificacao)
+    {
+        return classificacao?.Trim().ToLowerInvariant() switch
+        {
+            "critico" or "crítico" =>
+                "Crítica",
+
+            "alto" =>
+                "Alta",
+
+            "medio" or "médio" =>
+                "Média",
+
+            "baixo" =>
+                "Baixa",
+
+            _ =>
+                "Normal"
+        };
+    }
+
+    private static string MontarMensagemMultivariada(
+        AnomaliaRequest request,
+        TagContextoIa? contexto,
+        ResultadoRiscoProcesso riscoProcesso,
+        MultivariateDecisionEvidence evidence)
+    {
+        var descricaoTag =
+            !string.IsNullOrWhiteSpace(
+                contexto?.Descricao)
+                ? contexto.Descricao
+                : request.TagName;
+
+        var risco =
+            !string.IsNullOrWhiteSpace(
+                riscoProcesso.Classificacao)
+                ? riscoProcesso.Classificacao
+                : "não classificado";
+
+        return
+            $"{descricaoTag} participa de uma condição multivariada " +
+            $"anômala no grupo '{evidence.GroupName}'. " +
+            $"Risco: {risco}. Recomenda-se verificar em conjunto " +
+            "as tags participantes e o estado operacional do processo.";
     }
 
     private string MontarMensagemCliente(
@@ -776,21 +1448,21 @@ Console.WriteLine();
         if (!ehAnomalia)
         {
             return
-                $"{descricaoTag} está operando " +
+                $"{descricaoTag} estÃ¡ operando " +
                 "dentro do comportamento esperado. " +
-                "Nenhuma ação imediata é necessária.";
+                "Nenhuma aÃ§Ã£o imediata Ã© necessÃ¡ria.";
         }
 
         var risco =
             !string.IsNullOrWhiteSpace(
                 riscoProcesso.Classificacao)
                 ? riscoProcesso.Classificacao
-                : "não classificado";
+                : "nÃ£o classificado";
 
         return
             $"{descricaoTag} apresentou comportamento " +
-            $"fora do padrão esperado. Risco: {risco}. " +
-            "Recomenda-se verificar a condição " +
+            $"fora do padrÃ£o esperado. Risco: {risco}. " +
+            "Recomenda-se verificar a condiÃ§Ã£o " +
             "operacional da tag.";
     }
 

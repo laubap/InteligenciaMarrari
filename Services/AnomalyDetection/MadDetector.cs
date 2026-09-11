@@ -12,89 +12,202 @@ public class MadDetector : IAnomalyDetector
         _options = options.Value;
     }
 
-    public string Nome => "Mediana e MAD";
+    public string Nome =>
+        "Mediana e MAD";
 
-    public double Peso => _options.MadWeight;
+    public double Peso =>
+        _options.MadWeight;
 
-    public DetectorResult Detectar(DetectorInput input)
+    public DetectorResult Detectar(
+        DetectorInput input)
     {
-        var valores = input.Historico
-            .Select(x => x.Valor)
-            .Where(double.IsFinite)
-            .ToArray();
+        ArgumentNullException.ThrowIfNull(input);
 
-        if (valores.Length < 10)
+        var contexto =
+            input.Contexto;
+
+        if (contexto.Valores.Length < 10)
         {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao = "Histórico insuficiente para calcular MAD."
-            };
+            return NaoAplicavel(
+                "Histórico insuficiente para calcular MAD.");
         }
 
-        var mediana = DetectorMath.Median(valores);
-        var mad = DetectorMath.Mad(valores, mediana);
+        var mediana =
+            contexto.Mediana;
 
-        if (mad <= 0)
+        var mad =
+            contexto.Mad;
+
+        /*
+         * Escala equivalente a sigma.
+         *
+         * Mesmo quando MAD=0, não abandonamos automaticamente o detector.
+         * A BaselineProtectionProfile fornece um piso físico/estatístico.
+         */
+        var escalaRobustaOriginal =
+            mad > 0 &&
+            double.IsFinite(mad)
+                ? mad * 1.4826
+                : 0;
+
+        var protecao =
+            BaselineProtectionProfile.Build(
+                input,
+                mediana);
+
+        var escalaEfetiva =
+            protecao.ResolveEffectiveScale(
+                escalaRobustaOriginal,
+                _options.MadThreshold);
+
+        if (escalaEfetiva <= 0 ||
+            !double.IsFinite(
+                escalaEfetiva))
         {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                Detector = Nome,
-                Peso = Peso,
-                Explicacao =
-                    "MAD não aplicável porque o histórico não apresenta dispersão."
-            };
+            return NaoAplicavel(
+                "Não foi possível determinar uma escala robusta segura.");
         }
+
+        var deltaAbsoluto =
+            Math.Abs(
+                input.ValorAtual -
+                mediana);
+
+        /*
+         * delta / (MAD*1.4826) é numericamente equivalente ao
+         * modified Z-score clássico 0.6745*delta/MAD.
+         *
+         * Usar a escala equivalente permite aplicar o mesmo piso de
+         * baixa variância utilizado pelo Z-Score.
+         */
+        var zModificadoBruto =
+            deltaAbsoluto /
+            escalaEfetiva;
+
+        var dentroDeadband =
+            protecao.IsInsideDeadband(
+                input.ValorAtual,
+                mediana);
 
         var zModificado =
-            0.6745 *
-            Math.Abs(input.ValorAtual - mediana) /
-            mad;
+            dentroDeadband
+                ? 0
+                : zModificadoBruto;
 
         var ehAnomalia =
-            zModificado >= _options.MadThreshold;
-
-        var escalaRobusta = mad * 1.4826;
+            !dentroDeadband &&
+            zModificado >=
+            _options.MadThreshold;
 
         return new DetectorResult
         {
-            Aplicavel = true,
-            EhAnomalia = ehAnomalia,
-            Score = zModificado,
+            Aplicavel =
+                true,
+
+            EhAnomalia =
+                ehAnomalia,
+
+            Score =
+                zModificado,
 
             ScoreNormalizado =
-                DetectorMath.NormalizarPorLimite(
-                    zModificado,
-                    _options.MadThreshold
-                ),
+                dentroDeadband
+                    ? 0
+                    : DetectorMath.NormalizarPorLimite(
+                        zModificado,
+                        _options.MadThreshold),
 
-            Peso = Peso,
+            Peso =
+                Peso,
 
             LimiteInferior =
                 mediana -
-                (_options.MadThreshold * escalaRobusta),
+                (_options.MadThreshold *
+                 escalaEfetiva),
 
             LimiteSuperior =
                 mediana +
-                (_options.MadThreshold * escalaRobusta),
+                (_options.MadThreshold *
+                 escalaEfetiva),
 
-            Media = mediana,
-            DesvioPadrao = escalaRobusta,
+            Media =
+                mediana,
+
+            DesvioPadrao =
+                escalaEfetiva,
+
+            Detector =
+                Nome,
+
+            Explicacao =
+                dentroDeadband
+                    ? $"A variação absoluta de {deltaAbsoluto:F6} " +
+                      $"está dentro do deadband de " +
+                      $"{protecao.Deadband:F6}; o MAD foi suprimido."
+                    : ehAnomalia
+                        ? $"O valor possui score robusto efetivo de " +
+                          $"{zModificado:F2} em relação à mediana."
+                        : $"O score robusto efetivo é " +
+                          $"{zModificado:F2}, dentro do comportamento esperado.",
+
+            Metricas =
+                new Dictionary<string, double>
+                {
+                    ["mediana"] =
+                        mediana,
+
+                    ["madOriginal"] =
+                        double.IsFinite(mad)
+                            ? mad
+                            : 0,
+
+                    ["escalaRobustaOriginal"] =
+                        escalaRobustaOriginal,
+
+                    ["escalaEfetiva"] =
+                        escalaEfetiva,
+
+                    ["zModificadoEfetivo"] =
+                        zModificado,
+
+                    ["zModificadoAntesDeadband"] =
+                        zModificadoBruto,
+
+                    ["deltaAbsoluto"] =
+                        deltaAbsoluto,
+
+                    ["deadband"] =
+                        protecao.Deadband,
+
+                    ["deadbandAutomaticoP95"] =
+                        protecao.AutomaticDeadbandP95,
+
+                    ["confiancaDeadband"] =
+                        protecao.DeadbandConfidence,
+
+                    ["dentroDeadband"] =
+                        dentroDeadband
+                            ? 1
+                            : 0,
+
+                    ["pisoRelativoEscala"] =
+                        protecao.RelativeScaleFloor
+                }
+        };
+    }
+
+    private DetectorResult NaoAplicavel(
+        string explicacao)
+    {
+        return new DetectorResult
+        {
+            Aplicavel = false,
+            EhAnomalia = false,
+            Score = 0,
+            ScoreNormalizado = 0,
             Detector = Nome,
-
-            Explicacao = ehAnomalia
-                ? $"O valor possui Z-score modificado de {zModificado:F2}, indicando desvio robusto em relação à mediana."
-                : $"O Z-score modificado é {zModificado:F2}, dentro do comportamento robusto esperado.",
-
-            Metricas = new Dictionary<string, double>
-            {
-                ["mediana"] = mediana,
-                ["mad"] = mad,
-                ["zModificado"] = zModificado
-            }
+            Peso = Peso,
+            Explicacao = explicacao
         };
     }
 }

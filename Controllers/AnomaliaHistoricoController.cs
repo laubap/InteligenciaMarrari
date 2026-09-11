@@ -22,7 +22,7 @@ public class AnomaliaHistoricoController : ControllerBase
     {
         var historico = _context.AnomaliasDetectadas
             .Include(x => x.Dependencias)
-            .Where(x => x.ClienteId == clienteId)
+            .Where(x => x.ClienteId == clienteId && x.EhAnomalia)
             .OrderByDescending(x => x.DataDeteccao)
             .ToList();
 

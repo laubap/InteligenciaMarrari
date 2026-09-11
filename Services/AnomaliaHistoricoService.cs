@@ -1,3 +1,6 @@
+using System.Text.Json;
+using IAApi.Services.AnomalyDetection.Runtime;
+
 // Serviço responsável por registrar o histórico de anomalias detectadas.
 // Ele grava a anomalia principal em AnomaliasDetectadas e, se houver análise
 // de tags relacionadas, também grava as dependências detectadas.
@@ -10,8 +13,11 @@ public class AnomaliaHistoricoService
         _context = context;
     }
 
-    // Registra uma anomalia detectada e opcionalmente persiste os dados das tags
-    // relacionadas analisadas juntamente com a anomalia.
+    // Registra uma leitura analisada e opcionalmente persiste os dados das tags
+    // relacionadas juntamente com a decisão.
+    //
+    // A persistência continua INCONDICIONAL: normais, anômalas, continuations
+    // e evidências funcionais continuam fazendo parte do histórico.
     public void Registrar(
         string clienteId,
         string tagName,
@@ -25,7 +31,8 @@ public class AnomaliaHistoricoService
         int scoreRiscoProcesso,
         string? classificacaoRisco,
         string? tendenciaRisco,
-        string? tendenciaValor)
+        string? tendenciaValor,
+        RuntimeDecisionAuditData? runtimeAudit = null)
     {
         var anomalia = new AnomaliaDetectada
         {
@@ -34,7 +41,41 @@ public class AnomaliaHistoricoService
             TipoTag = tipoTag,
             ValorRecebido = valor,
             Score = score,
+
+            // Decisão operacional.
             EhAnomalia = ehAnomalia,
+
+            // B3.19 — trilha de auditoria.
+            //
+            // Se algum chamador antigo ainda não fornecer runtimeAudit,
+            // deixamos os novos campos null em vez de inventar informação.
+            LegacyEhAnomalia =
+                runtimeAudit?.LegacyFinalAnomaly,
+
+            EmitNewEvidence =
+                runtimeAudit?.EmitNewEvidence,
+
+            RuntimeDecisionSource =
+                runtimeAudit?.Source,
+
+            RuntimeUsedLegacyFallback =
+                runtimeAudit?.UsedLegacyFallback,
+
+            RuntimeDecisionReasonsJson =
+                runtimeAudit is null
+                    ? null
+                    : JsonSerializer.Serialize(
+                        runtimeAudit.Reasons),
+
+            RuntimeIncidentId =
+                runtimeAudit?.IncidentId,
+
+            RuntimeRegimeState =
+                runtimeAudit?.RegimeState,
+
+            RuntimeCandidateBaselineReady =
+                runtimeAudit?.CandidateBaselineReady,
+
             Mensagem = mensagem,
             Criticidade = criticidade,
             ScoreRiscoProcesso = scoreRiscoProcesso,
@@ -49,8 +90,11 @@ public class AnomaliaHistoricoService
 
         // Se não houver análise de relacionamentos ou não houver resultados,
         // não grava dependências de tags relacionadas.
-        if (analiseRelacionadas == null || !analiseRelacionadas.Resultados.Any())
+        if (analiseRelacionadas == null ||
+            !analiseRelacionadas.Resultados.Any())
+        {
             return;
+        }
 
         foreach (var dep in analiseRelacionadas.Resultados)
         {
@@ -63,14 +107,17 @@ public class AnomaliaHistoricoService
                 LimiteInferior = dep.LimiteInferior,
                 LimiteSuperior = dep.LimiteSuperior,
                 EhAnomalia = dep.EhAnomalia,
-                Status = dep.EhAnomalia ? "anomala" : "normal",
+                Status = dep.EhAnomalia
+                    ? "anomala"
+                    : "normal",
                 TipoRelacao = dep.TipoRelacao,
                 Impacto = dep.Impacto,
                 DescricaoRelacao = dep.DescricaoRelacao,
                 DataDeteccao = DateTime.Now
             };
 
-            _context.AnomaliaDependenciasDetectadas.Add(dependencia);
+            _context.AnomaliaDependenciasDetectadas.Add(
+                dependencia);
         }
 
         _context.SaveChanges();
