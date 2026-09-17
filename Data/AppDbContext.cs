@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<TagPerfilIa> PerfisIa { get; set; } = null!;
     public DbSet<TagContextoIa> TagsContextoIa { get; set; } = null!;
     public DbSet<TagDependenciaIa> TagDependenciasIa { get; set; } = null!;
+    // Baseline condicionado por regime operacional.
+public DbSet<TagRegimeOperacionalIa> TagsRegimesOperacionaisIa { get; set; } = null!;
     public DbSet<AnomaliaDetectada> AnomaliasDetectadas { get; set; } = null!;
     public DbSet<AnomaliaDependenciaDetectada> AnomaliaDependenciasDetectadas { get; set; } = null!;
     public DbSet<ProcessoIa> ProcessosIa { get; set; } = null!;
@@ -39,6 +41,22 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<TagIaConfig>()
             .HasIndex(x => new { x.ClienteId, x.TagName })
             .IsUnique();
+
+            /*
+ * Uma tag pode possuir no máximo uma configuração de regime
+ * operacional por cliente.
+ *
+ * Caso futuramente existam múltiplos regimes possíveis para a
+ * mesma tag, a configuração deverá ser remodelada explicitamente
+ * em vez de permitir combinações ambíguas.
+ */
+modelBuilder.Entity<TagRegimeOperacionalIa>()
+    .HasIndex(x => new
+    {
+        x.ClienteId,
+        x.TagName
+    })
+    .IsUnique();
 
         modelBuilder.Entity<TagPerfilIa>()
             .HasIndex(x => new { x.ClienteId, x.TagName })

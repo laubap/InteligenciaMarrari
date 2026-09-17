@@ -1036,6 +1036,53 @@ namespace IAApi.Migrations
                     b.ToTable("PerfisIa");
                 });
 
+            modelBuilder.Entity("TagRegimeOperacionalIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataAtualizacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LagMinutos")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MinimoAmostrasPorRegime")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TagName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TagRegime")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ToleranciaAlinhamentoMinutos")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("ToleranciaEstado")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "TagName")
+                        .IsUnique();
+
+                    b.ToTable("TagsRegimesOperacionaisIa");
+                });
+
             modelBuilder.Entity("AcaoRecomendadaIA", b =>
                 {
                     b.HasOne("MotivoAnomaliaIA", "MotivoAnomaliaIA")

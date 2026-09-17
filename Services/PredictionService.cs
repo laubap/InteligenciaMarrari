@@ -40,6 +40,11 @@ public class PredictionService
     private readonly EnsembleDetectionService _ensembleDetectionService;
     private readonly IHistoricoService _servicoHistorico;
 
+    // Baseline condicionado por regime operacional.
+    // Mantido opcional para preservar testes e construções manuais antigas.
+    private readonly OperationalRegimeBaselineProvider?
+        _operationalRegimeBaselineProvider;
+
     private readonly AnomalyInterpretationContextBuilder
         _interpretationContextBuilder;
 
@@ -123,7 +128,8 @@ public class PredictionService
         IOptions<MultivariateOperationalPromotionOptions>? multivariateOperationalPromotionOptions = null,
         MultivariateOperationalInterpretationFactory? multivariateOperationalInterpretationFactory = null,
         MultivariateOperationalReadinessService? multivariateOperationalReadinessService = null,
-        IOptions<MultivariateOperationalReadinessOptions>? multivariateOperationalReadinessOptions = null)
+        IOptions<MultivariateOperationalReadinessOptions>? multivariateOperationalReadinessOptions = null,
+        OperationalRegimeBaselineProvider? operationalRegimeBaselineProvider = null)
     {
         _context = context;
 
@@ -204,6 +210,9 @@ public class PredictionService
 
         _multivariateOperationalReadinessOptions =
             multivariateOperationalReadinessOptions;
+
+        _operationalRegimeBaselineProvider =
+            operationalRegimeBaselineProvider;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -341,9 +350,97 @@ public class PredictionService
                     })
                 .ToList();
 
-var entradaDetector =
-    new DetectorInput
-    {
+        /*
+         * Baseline padrão: mantém exatamente o perfil global já existente.
+         *
+         * Somente quando houver configuração válida e o provider conseguir
+         * construir um baseline por regime é que estes valores são
+         * substituídos antes da criação do DetectorInput.
+         */
+        var mediaHistoricaDetector =
+            perfil.Media;
+
+        var desvioPadraoHistoricoDetector =
+            perfil.DesvioPadrao;
+
+        var variacaoMinimaRelevanteDetector =
+            perfil.VariacaoMinimaRelevante;
+
+        var confiancaVariacaoMinimaDetector =
+            perfil.ConfiancaDeadband;
+
+        var baselineRegimeAplicado =
+            false;
+
+        double? valorRegimeOperacional =
+            null;
+
+        if (_operationalRegimeBaselineProvider is not null)
+        {
+            try
+            {
+                var regimeBaseline =
+                    _operationalRegimeBaselineProvider.Resolve(
+                        request.ClienteId,
+                        request.TagName,
+                        historicoBruto,
+                        dataHoraAtual);
+
+                if (regimeBaseline.Applied &&
+                    regimeBaseline.Statistics is not null)
+                {
+                    historicoRecebido =
+                        regimeBaseline.History
+                            .ToList();
+
+                    mediaHistoricaDetector =
+                        regimeBaseline.Statistics.Media;
+
+                    desvioPadraoHistoricoDetector =
+                        regimeBaseline.Statistics.DesvioPadrao;
+
+                    variacaoMinimaRelevanteDetector =
+                        regimeBaseline.Statistics.DeadbandRecomendado;
+
+                    confiancaVariacaoMinimaDetector =
+                        regimeBaseline.Statistics.ConfiancaDeadband;
+
+                    baselineRegimeAplicado =
+                        true;
+
+                    valorRegimeOperacional =
+                        regimeBaseline.CurrentRegimeValue;
+
+                    Console.WriteLine(
+                        $"BASELINE POR REGIME APLICADO " +
+                        $"Cliente={request.ClienteId} " +
+                        $"Tag={request.TagName} " +
+                        $"Regime={valorRegimeOperacional?.ToString("G6") ?? "-"} " +
+                        $"Amostras={regimeBaseline.SelectedSamples} " +
+                        $"Media={mediaHistoricaDetector:G6} " +
+                        $"Desvio={desvioPadraoHistoricoDetector:G6} " +
+                        $"Deadband={variacaoMinimaRelevanteDetector:G6} " +
+                        $"Confianca={confiancaVariacaoMinimaDetector:F1}");
+                }
+            }
+            catch (Exception ex)
+            {
+                /*
+                 * Fail-open obrigatório:
+                 * qualquer falha inesperada da nova funcionalidade
+                 * preserva o perfil/histórico global já existente.
+                 */
+                Console.WriteLine(
+                    $"BASELINE POR REGIME FAIL-OPEN " +
+                    $"Cliente={request.ClienteId} " +
+                    $"Tag={request.TagName} " +
+                    $"Erro={ex.Message}");
+            }
+        }
+
+        var entradaDetector =
+            new DetectorInput
+            {
         ClienteId =
             request.ClienteId,
 
@@ -360,10 +457,10 @@ var entradaDetector =
             dataHoraAtual,
 
         MediaHistorica =
-            perfil.Media,
+            mediaHistoricaDetector,
 
         DesvioPadraoHistorico =
-            perfil.DesvioPadrao,
+            desvioPadraoHistoricoDetector,
 
         /*
          * B3.24.1
@@ -376,10 +473,10 @@ var entradaDetector =
          * diretamente do histórico da detecção.
          */
         VariacaoMinimaRelevante =
-            perfil.VariacaoMinimaRelevante,
+            variacaoMinimaRelevanteDetector,
 
         ConfiancaVariacaoMinima =
-            perfil.ConfiancaDeadband,
+            confiancaVariacaoMinimaDetector,
 
         VariacaoMinimaDefinidaPeloCliente =
             false,
@@ -398,6 +495,17 @@ var entradaDetector =
         Console.WriteLine($"Cliente: {request.ClienteId}");
         Console.WriteLine($"Tag: {request.TagName}");
         Console.WriteLine($"Tipo: {tipoTag}");
+        Console.WriteLine(
+            $"Baseline estatístico: " +
+            $"{(baselineRegimeAplicado ? "regime operacional" : "global")}");
+
+        if (baselineRegimeAplicado)
+        {
+            Console.WriteLine(
+                $"Valor do regime operacional: " +
+                $"{valorRegimeOperacional?.ToString("G6") ?? "-"}");
+        }
+
         Console.WriteLine(
             $"Registros recebidos: " +
             $"{qualidadeHistorico.OriginalPoints}");
@@ -1092,7 +1200,7 @@ Console.WriteLine();
                     request.Valor,
 
                 MediaHistorica =
-                    perfil.Media,
+                    mediaHistoricaDetector,
 
                 LimiteInferior =
                     limiteInferior,

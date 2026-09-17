@@ -91,6 +91,10 @@ builder.Services.AddScoped<InterpretacaoProcessoService>();
 builder.Services.AddScoped<FailurePredictionService>();
 builder.Services.AddScoped<EquipamentoInteligenciaService>();
 builder.Services.AddScoped<FeedbackAnomaliaAnaliseService>();
+builder.Services.AddScoped<OperationalRegimeHistoryResolver>();
+builder.Services.AddScoped<TagProfileStatisticsCalculator>();
+builder.Services.AddScoped<OperationalRegimeBaselineService>();
+builder.Services.AddScoped<OperationalRegimeBaselineProvider>();
 
 builder.Services.AddHostedService<MonitoramentoTagsService>();
 builder.Services.AddSingleton<EnsembleV2Simulator>();
