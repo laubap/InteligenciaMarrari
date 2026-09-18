@@ -2,8 +2,11 @@
 bin/
 obj/
 
-# Banco local
+# Banco SQLite local
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 
 # Modelos treinados
 ModelsML/*.zip
@@ -13,3 +16,21 @@ Data/*_enriquecido.csv
 
 # Arquivos do Visual Studio
 .vs/
+
+# Resultados e artefatos locais
+Results/
+Artifacts/
+db-backups/
+
+# Ferramentas históricas de análise
+Tools/
+
+# Checks/backups históricos
+B319Check/
+B32012ProcessCheck/
+B3221_Backup/
+
+# Backups manuais
+*.bak
+*.bak-*
+*.before-*
