@@ -822,6 +822,177 @@ namespace IAApi.Migrations
                     b.ToTable("ProcessoTagsIa");
                 });
 
+            modelBuilder.Entity("TagComportamentoIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Classificacao")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Confianca")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime?>("DataAtualizacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Origem")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("PrimeiraObservacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("QuantidadeOcorrencias")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TagName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TotalAmostras")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UltimaObservacao")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "TagName", "Codigo")
+                        .IsUnique();
+
+                    b.HasIndex("ClienteId", "TagName", "Status");
+
+                    b.ToTable("TagsComportamentosIa");
+                });
+
+            modelBuilder.Entity("TagComportamentoOcorrenciaIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("Confianca")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataHoraFim")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataHoraInicio")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("QuantidadeAmostras")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TagComportamentoIaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("UtilizadaNoAprendizado")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagComportamentoIaId", "DataHoraInicio");
+
+                    b.HasIndex("TagComportamentoIaId", "DataHoraInicio", "DataHoraFim")
+                        .IsUnique();
+
+                    b.ToTable("TagsComportamentosOcorrenciasIa");
+                });
+
+            modelBuilder.Entity("TagComportamentoSnapshotIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("Amplitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("ConfiancaDeadband")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("DeadbandRecomendado")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("DesvioPadrao")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("JustificativaDeadband")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Maximo")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Media")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Minimo")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("PercentualZeros")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("PeriodoFim")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("PeriodoInicio")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("QuantidadePicos")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TagComportamentoIaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalOutliersRemovidos")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalRegistrosHistorico")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalRegistrosUsados")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("VariacaoMedia")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("Versao")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagComportamentoIaId", "DataCriacao");
+
+                    b.HasIndex("TagComportamentoIaId", "Versao")
+                        .IsUnique();
+
+                    b.ToTable("TagsComportamentosSnapshotsIa");
+                });
+
             modelBuilder.Entity("TagContextoIa", b =>
                 {
                     b.Property<int>("Id")
@@ -1173,6 +1344,24 @@ namespace IAApi.Migrations
                         .IsRequired();
 
                     b.Navigation("ProcessoIa");
+                });
+
+            modelBuilder.Entity("TagComportamentoOcorrenciaIa", b =>
+                {
+                    b.HasOne("TagComportamentoIa", null)
+                        .WithMany()
+                        .HasForeignKey("TagComportamentoIaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TagComportamentoSnapshotIa", b =>
+                {
+                    b.HasOne("TagComportamentoIa", null)
+                        .WithMany()
+                        .HasForeignKey("TagComportamentoIaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AnomaliaDetectada", b =>

@@ -34,6 +34,10 @@ public DbSet<TagRegimeOperacionalIa> TagsRegimesOperacionaisIa { get; set; } = n
     public DbSet<RuntimeRolloutSnapshot> RuntimeRolloutSnapshots { get; set; } = null!;
     public DbSet<MultivariateIndustrialEventReviewIa> MultivariateIndustrialEventReviews { get; set; } = null!;
 
+    public DbSet<TagComportamentoIa> TagsComportamentosIa { get; set; } = null!;
+    public DbSet<TagComportamentoSnapshotIa> TagsComportamentosSnapshotsIa { get; set; } = null!;
+    public DbSet<TagComportamentoOcorrenciaIa> TagsComportamentosOcorrenciasIa { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -214,5 +218,44 @@ modelBuilder.Entity<TagRegimeOperacionalIa>()
                 x.GroupName,
                 x.ReviewedAtUtc
             });
+
+        // B3.25 — memória comportamental persistente.
+        modelBuilder.Entity<TagComportamentoIa>()
+            .HasIndex(x => new { x.ClienteId, x.TagName, x.Codigo })
+            .IsUnique();
+
+        modelBuilder.Entity<TagComportamentoIa>()
+            .HasIndex(x => new { x.ClienteId, x.TagName, x.Status });
+
+        modelBuilder.Entity<TagComportamentoSnapshotIa>()
+            .HasIndex(x => new { x.TagComportamentoIaId, x.Versao })
+            .IsUnique();
+
+        modelBuilder.Entity<TagComportamentoSnapshotIa>()
+            .HasOne<TagComportamentoIa>()
+            .WithMany()
+            .HasForeignKey(x => x.TagComportamentoIaId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<TagComportamentoSnapshotIa>()
+            .HasIndex(x => new { x.TagComportamentoIaId, x.DataCriacao });
+
+        modelBuilder.Entity<TagComportamentoOcorrenciaIa>()
+            .HasOne<TagComportamentoIa>()
+            .WithMany()
+            .HasForeignKey(x => x.TagComportamentoIaId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<TagComportamentoOcorrenciaIa>()
+            .HasIndex(x => new
+            {
+                x.TagComportamentoIaId,
+                x.DataHoraInicio,
+                x.DataHoraFim
+            })
+            .IsUnique();
+
+        modelBuilder.Entity<TagComportamentoOcorrenciaIa>()
+            .HasIndex(x => new { x.TagComportamentoIaId, x.DataHoraInicio });
     }
 }
