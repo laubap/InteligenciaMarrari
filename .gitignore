@@ -9,7 +9,7 @@ obj/
 *.db-journal
 
 # Modelos treinados
-ModelsML/*.zip
+ModelsML/
 
 # CSVs gerados automaticamente
 Data/*_enriquecido.csv
