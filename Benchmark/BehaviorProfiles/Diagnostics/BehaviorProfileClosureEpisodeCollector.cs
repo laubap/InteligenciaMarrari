@@ -1,4 +1,4 @@
-using IAApi.Benchmark.BehaviorProfiles.V2.Structural;
+
 
 namespace IAApi.Benchmark.BehaviorProfiles.Diagnostics;
 
