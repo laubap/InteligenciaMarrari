@@ -1,3 +1,5 @@
+using IAApi.Services.AnomalyDetection.BehaviorProfiles.Maturity;
+
 namespace IAApi.Benchmark.BehaviorProfiles.V2.Maturity;
 
 public sealed class BehaviorProfileMaturityStateStore
@@ -13,7 +15,9 @@ public sealed class BehaviorProfileMaturityStateStore
         FastWindowIndex = fastWindowIndex;
     }
 
-    public BehaviorProfileTemporalState Get(string clientId, string tag) =>
+    public BehaviorProfileTemporalState Get(
+        string clientId,
+        string tag) =>
         _states.GetValueOrDefault(Key(clientId, tag)) ??
         BehaviorProfileTemporalState.Initial;
 
@@ -23,6 +27,8 @@ public sealed class BehaviorProfileMaturityStateStore
         BehaviorProfileTemporalState state) =>
         _states[Key(clientId, tag)] = state;
 
-    private static string Key(string clientId, string tag) =>
+    private static string Key(
+        string clientId,
+        string tag) =>
         clientId + "\u001f" + tag;
 }

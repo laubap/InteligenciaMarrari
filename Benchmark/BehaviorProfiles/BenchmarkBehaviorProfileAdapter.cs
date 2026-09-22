@@ -1,8 +1,10 @@
 using System.Globalization;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles;
-using IAApi.Benchmark.BehaviorProfiles.V2;
 using IAApi.Benchmark.BehaviorProfiles.V2.Structural;
+
+using BenchmarkBehaviorProfileInferenceV2 =
+    IAApi.Benchmark.BehaviorProfiles.V2.BehaviorProfileInferenceV2;
 
 namespace IAApi.Benchmark.BehaviorProfiles;
 
@@ -16,9 +18,13 @@ public sealed class BenchmarkBehaviorProfileAdapter
         "TagBehaviorProfileResolver-legacy-v1";
 
     private readonly DeclaredTagTypeParser _parser = new();
+
     private readonly TagBehaviorProfileResolver _resolver = new();
-    private readonly BehaviorProfileInferenceV2 _inferenceV2 = new();
+
+    private readonly BenchmarkBehaviorProfileInferenceV2 _inferenceV2 = new();
+
     private readonly BehaviorProfileStructuralEvidenceEvaluator _structural = new();
+
     private readonly StructuralAmbiguityResolver _ambiguityResolver = new();
 
     public BenchmarkBehaviorProfileObservation Adapt(
@@ -30,7 +36,8 @@ public sealed class BenchmarkBehaviorProfileAdapter
         ArgumentNullException.ThrowIfNull(legacyInput);
 
         var declaration = observedDeclaration ?? _parser.Parse(
-            rawValue: null, source: "Benchmark");
+            rawValue: null,
+            source: "Benchmark");
 
         var inferenceInput = new DetectorInput
         {
@@ -44,84 +51,169 @@ public sealed class BenchmarkBehaviorProfileAdapter
             Historico = legacyInput.Historico
         };
 
-        var legacyInference = _resolver.Resolve(inferenceInput);
-        var inferenceV2 = _inferenceV2.Infer(legacyInput.Historico);
-        var structural = _structural.Evaluate(
-            inferenceV2,
-            legacyInput.Historico,
-            wouldMatureUnderCurrentPolicy: false);
-        var ambiguity = _ambiguityResolver.Resolve(
-            inferenceV2,
-            structural,
-            legacyInput.Historico,
-            declaration);
-        var history = legacyInput.Historico;
-        var windowStart = history.Count == 0
-            ? (DateTimeOffset?)null
-            : new DateTimeOffset(history[0].DataHora);
-        var windowEnd = history.Count == 0
-            ? (DateTimeOffset?)null
-            : new DateTimeOffset(history[^1].DataHora);
+        var legacyInference =
+            _resolver.Resolve(
+                inferenceInput);
 
-        var inference = new InferredBehaviorProfile
-        {
-            Type = legacyInference.Type,
-            Confidence = legacyInference.Confidence,
-            Reason = legacyInference.Reason,
-            Evidence =
-            [
-                $"distinctValueCount={legacyInference.DistinctValueCount}",
-                $"distinctValueRatio={N(legacyInference.DistinctValueRatio)}",
-                $"integerLikeRatio={N(legacyInference.IntegerLikeRatio)}",
-                $"nonDecreasingRatio={N(legacyInference.NonDecreasingRatio)}",
-                $"changeRatio={N(legacyInference.ChangeRatio)}"
-            ],
-            SampleCount = legacyInference.SampleCount,
-            ObservedDuration = windowStart.HasValue && windowEnd.HasValue
-                ? windowEnd.Value - windowStart.Value
-                : TimeSpan.Zero,
-            WindowStart = windowStart,
-            WindowEnd = windowEnd,
-            AlgorithmVersion = InferenceAlgorithmVersion
-        };
+        var inferenceV2 =
+            _inferenceV2.Infer(
+                legacyInput.Historico);
 
-        var hasInference = inference.Type != TagBehaviorType.Unknown;
-        var resolved = new ResolvedBehaviorProfile
-        {
-            Type = inference.Type,
-            Confidence = inference.Confidence,
-            Origin = hasInference
-                ? BehaviorProfileOrigin.Inferred
-                : BehaviorProfileOrigin.Unknown,
-            Reason = hasInference
-                ? "Sem declaracao; perfil final paralelo proveniente da inferencia atual."
-                : "Sem declaracao e inferencia atual inconclusiva.",
-            UnknownCause = hasInference
-                ? BehaviorProfileUnknownCause.None
-                : BehaviorProfileUnknownCause.InferenceInconclusive,
-            HasConflict = false,
-            IsStable = false,
-            Declaration = declaration,
-            Inference = inference
-        };
+        var structural =
+            _structural.Evaluate(
+                inferenceV2,
+                legacyInput.Historico,
+                wouldMatureUnderCurrentPolicy: false);
+
+        var ambiguity =
+            _ambiguityResolver.Resolve(
+                inferenceV2,
+                structural,
+                legacyInput.Historico,
+                declaration);
+
+        var history =
+            legacyInput.Historico;
+
+        var windowStart =
+            history.Count == 0
+                ? (DateTimeOffset?)null
+                : new DateTimeOffset(
+                    history[0].DataHora);
+
+        var windowEnd =
+            history.Count == 0
+                ? (DateTimeOffset?)null
+                : new DateTimeOffset(
+                    history[^1].DataHora);
+
+        var inference =
+            new InferredBehaviorProfile
+            {
+                Type =
+                    legacyInference.Type,
+
+                Confidence =
+                    legacyInference.Confidence,
+
+                Reason =
+                    legacyInference.Reason,
+
+                Evidence =
+                [
+                    $"distinctValueCount={legacyInference.DistinctValueCount}",
+                    $"distinctValueRatio={N(legacyInference.DistinctValueRatio)}",
+                    $"integerLikeRatio={N(legacyInference.IntegerLikeRatio)}",
+                    $"nonDecreasingRatio={N(legacyInference.NonDecreasingRatio)}",
+                    $"changeRatio={N(legacyInference.ChangeRatio)}"
+                ],
+
+                SampleCount =
+                    legacyInference.SampleCount,
+
+                ObservedDuration =
+                    windowStart.HasValue &&
+                    windowEnd.HasValue
+                        ? windowEnd.Value -
+                          windowStart.Value
+                        : TimeSpan.Zero,
+
+                WindowStart =
+                    windowStart,
+
+                WindowEnd =
+                    windowEnd,
+
+                AlgorithmVersion =
+                    InferenceAlgorithmVersion
+            };
+
+        var hasInference =
+            inference.Type !=
+            TagBehaviorType.Unknown;
+
+        var resolved =
+            new ResolvedBehaviorProfile
+            {
+                Type =
+                    inference.Type,
+
+                Confidence =
+                    inference.Confidence,
+
+                Origin =
+                    hasInference
+                        ? BehaviorProfileOrigin.Inferred
+                        : BehaviorProfileOrigin.Unknown,
+
+                Reason =
+                    hasInference
+                        ? "Sem declaracao; perfil final paralelo proveniente da inferencia atual."
+                        : "Sem declaracao e inferencia atual inconclusiva.",
+
+                UnknownCause =
+                    hasInference
+                        ? BehaviorProfileUnknownCause.None
+                        : BehaviorProfileUnknownCause.InferenceInconclusive,
+
+                HasConflict =
+                    false,
+
+                IsStable =
+                    false,
+
+                Declaration =
+                    declaration,
+
+                Inference =
+                    inference
+            };
 
         return new BenchmarkBehaviorProfileObservation
         {
-            FastWindowIndex = fastWindowIndex,
-            MinuteIndex = minuteIndex,
-            Timestamp = legacyInput.DataHoraAtual,
-            Tag = legacyInput.TagName,
-            CurrentValue = legacyInput.ValorAtual,
-            LegacyTipoTag = legacyInput.TipoTag,
-            DeclaredTagType = declaration,
-            InferredBehaviorProfile = inference,
-            ResolvedBehaviorProfile = resolved,
-            InferredBehaviorProfileV2 = inferenceV2,
-            StructuralEvidence = structural,
-            StructuralAmbiguityResolution = ambiguity
+            FastWindowIndex =
+                fastWindowIndex,
+
+            MinuteIndex =
+                minuteIndex,
+
+            Timestamp =
+                legacyInput.DataHoraAtual,
+
+            Tag =
+                legacyInput.TagName,
+
+            CurrentValue =
+                legacyInput.ValorAtual,
+
+            LegacyTipoTag =
+                legacyInput.TipoTag,
+
+            DeclaredTagType =
+                declaration,
+
+            InferredBehaviorProfile =
+                inference,
+
+            ResolvedBehaviorProfile =
+                resolved,
+
+            InferredBehaviorProfileV2 =
+                inferenceV2,
+
+            StructuralEvidence =
+                structural,
+
+            StructuralAmbiguityResolution =
+                ambiguity
         };
     }
 
-    private static string N(double value) =>
-        value.ToString("R", CultureInfo.InvariantCulture);
+    private static string N(
+        double value)
+    {
+        return value.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
+    }
 }
