@@ -1,10 +1,15 @@
 using System.Globalization;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles;
-using IAApi.Benchmark.BehaviorProfiles.V2.Structural;
 
-using BenchmarkBehaviorProfileInferenceV2 =
-    IAApi.Benchmark.BehaviorProfiles.V2.BehaviorProfileInferenceV2;
+using ServiceBehaviorProfileInferenceV2 =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.BehaviorProfileInferenceV2;
+
+using ServiceBehaviorProfileStructuralEvidenceEvaluator =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.Structural.BehaviorProfileStructuralEvidenceEvaluator;
+
+using ServiceStructuralAmbiguityResolver =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.Structural.StructuralAmbiguityResolver;
 
 namespace IAApi.Benchmark.BehaviorProfiles;
 
@@ -21,11 +26,11 @@ public sealed class BenchmarkBehaviorProfileAdapter
 
     private readonly TagBehaviorProfileResolver _resolver = new();
 
-    private readonly BenchmarkBehaviorProfileInferenceV2 _inferenceV2 = new();
+    private readonly ServiceBehaviorProfileInferenceV2 _inferenceV2 = new();
 
-    private readonly BehaviorProfileStructuralEvidenceEvaluator _structural = new();
+    private readonly ServiceBehaviorProfileStructuralEvidenceEvaluator _structural = new();
 
-    private readonly StructuralAmbiguityResolver _ambiguityResolver = new();
+    private readonly ServiceStructuralAmbiguityResolver _ambiguityResolver = new();
 
     public BenchmarkBehaviorProfileObservation Adapt(
         int fastWindowIndex,

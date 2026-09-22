@@ -1,22 +1,23 @@
-using IAApi.Services.AnomalyDetection.BehaviorProfiles.Readiness;
+using ServiceBehaviorProfileReadinessState =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.Readiness.BehaviorProfileReadinessState;
 
 namespace IAApi.Benchmark.BehaviorProfiles.V2.Readiness;
 
 public sealed class BehaviorProfileReadinessStateStore
 {
-    private readonly Dictionary<string, BehaviorProfileReadinessState> _states =
+    private readonly Dictionary<string, ServiceBehaviorProfileReadinessState> _states =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public BehaviorProfileReadinessState Get(
+    public ServiceBehaviorProfileReadinessState Get(
         string clientId,
         string tag) =>
         _states.GetValueOrDefault(Key(clientId, tag)) ??
-        new BehaviorProfileReadinessState();
+        new ServiceBehaviorProfileReadinessState();
 
     public void Set(
         string clientId,
         string tag,
-        BehaviorProfileReadinessState state) =>
+        ServiceBehaviorProfileReadinessState state) =>
         _states[Key(clientId, tag)] = state;
 
     public void ResetWindow()

@@ -1,11 +1,20 @@
 using IAApi.Services.AnomalyDetection.BehaviorProfiles;
-using IAApi.Benchmark.BehaviorProfiles.V2.Maturity;
-using IAApi.Benchmark.BehaviorProfiles.V2.Structural;
-using IAApi.Benchmark.BehaviorProfiles.V2.Readiness;
 using IAApi.Benchmark.BehaviorProfiles.Metadata;
 
-using BenchmarkBehaviorProfileV2Result =
-    IAApi.Benchmark.BehaviorProfiles.V2.BehaviorProfileV2Result;
+using ServiceBehaviorProfileV2Result =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.BehaviorProfileV2Result;
+
+using ServiceStableBehaviorProfileObservation =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.Maturity.StableBehaviorProfileObservation;
+
+using ServiceBehaviorProfileStructuralAssessment =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.Structural.BehaviorProfileStructuralAssessment;
+
+using ServiceStructuralAmbiguityResolution =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.Structural.StructuralAmbiguityResolution;
+
+using ServiceBehaviorProfileDecisionReadiness =
+    IAApi.Services.AnomalyDetection.BehaviorProfiles.Readiness.BehaviorProfileDecisionReadiness;
 
 namespace IAApi.Benchmark.BehaviorProfiles;
 
@@ -23,7 +32,8 @@ public sealed record BenchmarkBehaviorProfileObservation
 
     public string LegacyTipoTag { get; init; } = "";
 
-    public DeclaredTagType DeclaredTagType { get; init; } = new();
+    public DeclaredTagType DeclaredTagType { get; init; } =
+        new();
 
     public InferredBehaviorProfile InferredBehaviorProfile { get; init; } =
         new();
@@ -31,21 +41,21 @@ public sealed record BenchmarkBehaviorProfileObservation
     public ResolvedBehaviorProfile ResolvedBehaviorProfile { get; init; } =
         new();
 
-    public BenchmarkBehaviorProfileV2Result InferredBehaviorProfileV2 { get; init; } =
+    public ServiceBehaviorProfileV2Result InferredBehaviorProfileV2 { get; init; } =
         new();
 
-    public StableBehaviorProfileObservation StableBehaviorProfile { get; init; } =
+    public ServiceStableBehaviorProfileObservation StableBehaviorProfile { get; init; } =
         new();
 
-    public BehaviorProfileStructuralAssessment StructuralEvidence { get; init; } =
+    public ServiceBehaviorProfileStructuralAssessment StructuralEvidence { get; init; } =
         new();
 
-    public StructuralAmbiguityResolution StructuralAmbiguityResolution { get; init; } =
+    public ServiceStructuralAmbiguityResolution StructuralAmbiguityResolution { get; init; } =
         new();
 
     public ManifestDeclaredTagMetadata ManifestMetadata { get; init; } =
         new();
 
-    public BehaviorProfileDecisionReadiness DecisionReadiness { get; init; } =
+    public ServiceBehaviorProfileDecisionReadiness DecisionReadiness { get; init; } =
         new();
 }
