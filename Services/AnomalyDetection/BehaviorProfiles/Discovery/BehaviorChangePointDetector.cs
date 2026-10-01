@@ -1,3 +1,4 @@
+using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.History;
 
 namespace IAApi.Services.AnomalyDetection.BehaviorProfiles.Discovery;
@@ -161,10 +162,10 @@ public sealed class BehaviorChangePointDetector
                     .ToArray();
 
             var medianBefore =
-                Median(before);
+                DetectorMath.Median(before);
 
             var medianAfter =
-                Median(after);
+                DetectorMath.Median(after);
 
             var absoluteShift =
                 Math.Abs(
@@ -177,12 +178,12 @@ public sealed class BehaviorChangePointDetector
             }
 
             var madBefore =
-                Mad(
+                DetectorMath.Mad(
                     before,
                     medianBefore);
 
             var madAfter =
-                Mad(
+                DetectorMath.Mad(
                     after,
                     medianAfter);
 
@@ -349,50 +350,6 @@ public sealed class BehaviorChangePointDetector
             .OrderBy(candidate =>
                 candidate.ReadingIndex)
             .ToArray();
-    }
-
-    private static double Mad(
-        IReadOnlyList<double> values,
-        double median)
-    {
-        var deviations =
-            values
-                .Select(value =>
-                    Math.Abs(
-                        value -
-                        median))
-                .ToArray();
-
-        return Median(
-            deviations);
-    }
-
-    private static double Median(
-        IReadOnlyList<double> values)
-    {
-        if (values.Count == 0)
-        {
-            return 0;
-        }
-
-        var ordered =
-            values
-                .OrderBy(value =>
-                    value)
-                .ToArray();
-
-        var middle =
-            ordered.Length / 2;
-
-        if (ordered.Length % 2 == 1)
-        {
-            return ordered[middle];
-        }
-
-        return (
-            ordered[middle - 1] +
-            ordered[middle]
-        ) / 2.0;
     }
 
     private static void ValidateOptions(

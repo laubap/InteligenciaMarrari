@@ -1,3 +1,4 @@
+using IAApi.Services.AnomalyDetection;
 namespace IAApi.Services.AnomalyDetection.BehaviorProfiles.Discovery;
 
 /// <summary>
@@ -142,9 +143,8 @@ public sealed class BehaviorCandidateEpisodeCharacterizer
         }
 
         var median =
-            Percentile(
-                values,
-                0.50);
+            DetectorMath.Median(
+                values);
 
         var q1 =
             Percentile(
