@@ -4,6 +4,7 @@ using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Runtime;
 using IAApi.Services.AnomalyDetection.Multivariate;
+using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
 
 // ServiÃ§o principal de detecÃ§Ã£o de anomalias.
 public class PredictionService
@@ -44,6 +45,11 @@ public class PredictionService
     // Mantido opcional para preservar testes e construções manuais antigas.
     private readonly OperationalRegimeBaselineProvider?
         _operationalRegimeBaselineProvider;
+
+    // B3.25 - reconhecimento comportamental em shadow.
+// Nesta etapa não possui autoridade sobre o baseline dos detectores.
+    private readonly BehaviorRuntimeBaselineProvider?
+        _behaviorRuntimeBaselineProvider;
 
     private readonly AnomalyInterpretationContextBuilder
         _interpretationContextBuilder;
@@ -129,7 +135,8 @@ public class PredictionService
         MultivariateOperationalInterpretationFactory? multivariateOperationalInterpretationFactory = null,
         MultivariateOperationalReadinessService? multivariateOperationalReadinessService = null,
         IOptions<MultivariateOperationalReadinessOptions>? multivariateOperationalReadinessOptions = null,
-        OperationalRegimeBaselineProvider? operationalRegimeBaselineProvider = null)
+        OperationalRegimeBaselineProvider? operationalRegimeBaselineProvider = null,
+        BehaviorRuntimeBaselineProvider? behaviorRuntimeBaselineProvider = null)
     {
         _context = context;
 
@@ -213,6 +220,9 @@ public class PredictionService
 
         _operationalRegimeBaselineProvider =
             operationalRegimeBaselineProvider;
+
+        _behaviorRuntimeBaselineProvider =
+            behaviorRuntimeBaselineProvider;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -372,6 +382,15 @@ public class PredictionService
         var baselineRegimeAplicado =
             false;
 
+        var baselineComportamentalAplicado =
+            false;
+
+        string? comportamentoAplicado =
+            null;
+
+        int? snapshotComportamentalAplicado =
+            null;
+
         double? valorRegimeOperacional =
             null;
 
@@ -438,6 +457,149 @@ public class PredictionService
             }
         }
 
+        /*
+ * B3.25 - MEMÓRIA COMPORTAMENTAL EM SHADOW.
+ *
+ * A prioridade continua sendo:
+ *
+ * regime operacional explícito
+ *     >
+ * comportamento aprendido
+ *     >
+ * baseline global
+ *
+ * Nesta primeira etapa o comportamento aprendido é apenas
+ * reconhecido e observado.
+ *
+ * Nenhuma estatística do detector é alterada.
+ */
+if (!baselineRegimeAplicado &&
+    _behaviorRuntimeBaselineProvider is not null)
+{
+    try
+    {
+        var behaviorShadow =
+            await _behaviorRuntimeBaselineProvider.ResolveAsync(
+                request.ClienteId,
+                request.TagName,
+                historicoBruto,
+                dataHoraAtual,
+                cancellationToken);
+
+        Console.WriteLine(
+            $"B3.25 BEHAVIOR SHADOW " +
+            $"Cliente={request.ClienteId} " +
+            $"Tag={request.TagName} " +
+            $"Recognized={behaviorShadow.Recognized} " +
+            $"Behavior={behaviorShadow.BehaviorCode ?? "-"} " +
+            $"Classification={behaviorShadow.BehaviorClassification ?? "-"} " +
+            $"CanApplyBaseline={behaviorShadow.CanApplyBaseline} " +
+            $"Snapshot={behaviorShadow.SnapshotVersion?.ToString() ?? "-"} " +
+            $"Compatibility=" +
+            $"{behaviorShadow.CompatibilityConfidence?.ToString("F4") ?? "-"} " +
+            $"Reason={behaviorShadow.Reason}");
+
+            /*
+ * B3.25 - BASELINE COMPORTAMENTAL COUNTERFACTUAL.
+ *
+ * Só observamos o baseline que poderia ser utilizado quando
+ * o comportamento reconhecido está semanticamente autorizado
+ * como baseline normal.
+ *
+ * Nenhum valor abaixo é aplicado ao DetectorInput nesta etapa.
+ */
+/*
+ * B3.25 - APLICAÇÃO DO BASELINE COMPORTAMENTAL.
+ *
+ * Só possui autoridade quando:
+ *
+ * - o comportamento foi reconhecido;
+ * - está semanticamente autorizado como Normal;
+ * - todas as estatísticas necessárias são válidas;
+ * - existe histórico comportamental utilizável.
+ *
+ * Este bloco só é alcançado quando nenhum regime operacional
+ * explícito foi aplicado.
+ */
+if (behaviorShadow.Recognized &&
+    behaviorShadow.CanApplyBaseline &&
+    behaviorShadow.Media is double behaviorMedia &&
+    behaviorShadow.DesvioPadrao is double behaviorDesvio &&
+    behaviorShadow.DeadbandRecomendado is double behaviorDeadband &&
+    behaviorShadow.ConfiancaDeadband is double behaviorConfianca &&
+    double.IsFinite(behaviorMedia) &&
+    double.IsFinite(behaviorDesvio) &&
+    double.IsFinite(behaviorDeadband) &&
+    double.IsFinite(behaviorConfianca) &&
+    behaviorDesvio >= 0 &&
+    behaviorDeadband >= 0 &&
+    behaviorShadow.History.Count > 0)
+{
+    /*
+     * Materializa o histórico antes de alterar qualquer variável
+     * operacional. Assim, uma eventual falha nesta preparação ainda
+     * preserva integralmente o baseline global.
+     */
+    var behaviorHistory =
+        behaviorShadow.History.ToList();
+
+    historicoRecebido =
+        behaviorHistory;
+
+    mediaHistoricaDetector =
+        behaviorMedia;
+
+    desvioPadraoHistoricoDetector =
+        behaviorDesvio;
+
+    variacaoMinimaRelevanteDetector =
+        behaviorDeadband;
+
+    confiancaVariacaoMinimaDetector =
+        behaviorConfianca;
+
+    baselineComportamentalAplicado =
+        true;
+
+    comportamentoAplicado =
+        behaviorShadow.BehaviorCode;
+
+    snapshotComportamentalAplicado =
+        behaviorShadow.SnapshotVersion;
+
+    Console.WriteLine(
+        $"B3.25 BEHAVIOR BASELINE APPLIED " +
+        $"Cliente={request.ClienteId} " +
+        $"Tag={request.TagName} " +
+        $"Behavior={comportamentoAplicado ?? "-"} " +
+        $"Snapshot={snapshotComportamentalAplicado?.ToString() ?? "-"} " +
+        $"Media={mediaHistoricaDetector:G6} " +
+        $"Desvio={desvioPadraoHistoricoDetector:G6} " +
+        $"Deadband={variacaoMinimaRelevanteDetector:G6} " +
+        $"Confianca={confiancaVariacaoMinimaDetector:F1} " +
+        $"Amostras={behaviorHistory.Count}");
+}
+    }
+    catch (OperationCanceledException)
+        when (cancellationToken.IsCancellationRequested)
+    {
+        throw;
+    }
+    catch (Exception ex)
+    {
+        /*
+         * Fail-open:
+         * qualquer falha no reconhecimento comportamental
+         * preserva integralmente o runtime existente.
+         */
+        Console.WriteLine(
+            $"B3.25 BEHAVIOR SHADOW FAIL-OPEN " +
+            $"Cliente={request.ClienteId} " +
+            $"Tag={request.TagName} " +
+            $"Erro={ex.Message}");
+    }
+}
+
         var entradaDetector =
             new DetectorInput
             {
@@ -495,9 +657,23 @@ public class PredictionService
         Console.WriteLine($"Cliente: {request.ClienteId}");
         Console.WriteLine($"Tag: {request.TagName}");
         Console.WriteLine($"Tipo: {tipoTag}");
-        Console.WriteLine(
-            $"Baseline estatístico: " +
-            $"{(baselineRegimeAplicado ? "regime operacional" : "global")}");
+var origemBaselineDetector =
+    baselineRegimeAplicado
+        ? "regime operacional"
+        : baselineComportamentalAplicado
+            ? "comportamento aprendido"
+            : "global";
+
+Console.WriteLine(
+    $"Baseline estatístico: {origemBaselineDetector}");
+
+    if (baselineComportamentalAplicado)
+{
+    Console.WriteLine(
+        $"Comportamento aplicado: " +
+        $"{comportamentoAplicado ?? "-"} " +
+        $"Snapshot={snapshotComportamentalAplicado?.ToString() ?? "-"}");
+}
 
         if (baselineRegimeAplicado)
         {

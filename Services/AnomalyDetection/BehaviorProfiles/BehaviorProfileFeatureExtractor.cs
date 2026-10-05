@@ -32,14 +32,14 @@ public sealed class BehaviorProfileFeatureExtractor
             .OrderBy(value => value)
             .ToArray();
 
-        var median = Median(sorted);
+        var median = DetectorMath.Median(sorted);
 
         var deviations = values
             .Select(value => Math.Abs(value - median))
             .OrderBy(value => value)
             .ToArray();
 
-        var mad = Median(deviations);
+        var mad = DetectorMath.Median(deviations);
         var robustScale = mad * 1.4826;
         var range = sorted[^1] - sorted[0];
 
@@ -56,7 +56,7 @@ public sealed class BehaviorProfileFeatureExtractor
             .OrderBy(delta => delta)
             .ToArray();
 
-        var resolution = Median(levelGaps);
+        var resolution = DetectorMath.Median(levelGaps);
 
         var deltas =
             new List<double>(
@@ -109,7 +109,7 @@ public sealed class BehaviorProfileFeatureExtractor
             .ToArray();
 
         var medianCadence =
-            Median(positiveCadences);
+            DetectorMath.Median(positiveCadences);
 
         var criticalGapThreshold =
             medianCadence > 0
@@ -123,7 +123,7 @@ public sealed class BehaviorProfileFeatureExtractor
             .ToArray();
 
         var typicalStep =
-            Median(absNonZero);
+            DetectorMath.Median(absNonZero);
 
         var p90Step =
             Percentile(
@@ -173,7 +173,7 @@ public sealed class BehaviorProfileFeatureExtractor
             .ToArray();
 
         var medianDownwardInterval =
-            Median(
+            DetectorMath.Median(
                 downwardIntervals);
 
         var downwardIntervalCv =
@@ -418,7 +418,7 @@ public sealed class BehaviorProfileFeatureExtractor
                     nonZeroCount),
 
             MedianDwellSamples =
-                Median(
+                DetectorMath.Median(
                     dwellLengths
                         .Select(
                             value =>
@@ -451,21 +451,6 @@ public sealed class BehaviorProfileFeatureExtractor
             ? numerator /
               (double)denominator
             : 0;
-    }
-
-    private static double Median(
-        IReadOnlyList<double> sorted)
-    {
-        if (sorted.Count == 0)
-            return 0;
-
-        var middle =
-            sorted.Count / 2;
-
-        return sorted.Count % 2 == 0
-            ? (sorted[middle - 1] +
-               sorted[middle]) / 2
-            : sorted[middle];
     }
 
     private static double Percentile(

@@ -39,6 +39,10 @@ public sealed record BehaviorHistoryCollectionResult
 /// Este serviço não altera o fluxo de detecção em tempo real.
 /// Ele utiliza BuscarHistoricoPorPeriodo exclusivamente para aprendizagem
 /// e descoberta de comportamentos históricos.
+///
+/// Regra temporal desta etapa:
+/// a memória comportamental preserva exatamente o relógio entregue pelo
+/// historiador. Não converte fuso e não altera DateTimeKind.
 /// </summary>
 public sealed class BehaviorHistoryCollectionService
 {
@@ -85,10 +89,13 @@ public sealed class BehaviorHistoryCollectionService
                 clienteId,
                 tagName,
                 inicio,
-                fim);
+                fim)
+            ?? new List<LeituraBruta>();
 
         var pontosDetector =
             historicoBruto
+                .Where(leitura =>
+                    leitura is not null)
                 .Select(leitura =>
                     new HistoricoDetectorPoint
                     {

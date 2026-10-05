@@ -8,10 +8,8 @@ using Xunit;
 
 public sealed class MultivariateOperationalReadinessControllerTests
 {
-    private static readonly DateTime TrainedAtUtc =
-        new(
-            2026, 9, 4, 12, 0, 0,
-            DateTimeKind.Utc);
+private static readonly DateTime TrainedAtUtc =
+    DateTime.UtcNow.AddDays(-1);
 
     [Fact]
     public async Task GrupoAprovadoComModeloValido_DeveRetornarOkReady()

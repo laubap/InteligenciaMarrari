@@ -1,4 +1,5 @@
 using IAApi.Services.AnomalyDetection;
+using IAApi.Services.AnomalyDetection.BehaviorProfiles;
 namespace IAApi.Services.AnomalyDetection.BehaviorProfiles.Discovery;
 
 /// <summary>
@@ -55,6 +56,15 @@ public sealed record BehaviorCandidateEpisodeCharacteristics
 
     public double ConfiancaDeadband { get; init; }
 
+    /// <summary>
+    /// Características estruturais e dinâmicas já calculadas pelo
+    /// BehaviorProfileFeatureExtractor existente.
+    ///
+    /// Elas serão usadas posteriormente pela etapa de similaridade
+    /// entre episódios, sem duplicar lógica de extração.
+    /// </summary>
+    public BehaviorProfileFeatures? ProfileFeatures { get; init; }
+
     public IReadOnlyList<LeituraBruta> HistoricoLimpo { get; init; } =
         Array.Empty<LeituraBruta>();
 }
@@ -71,6 +81,9 @@ public sealed class BehaviorCandidateEpisodeCharacterizer
 
     private readonly TagProfileStatisticsCalculator
         _statisticsCalculator;
+
+    private readonly BehaviorProfileFeatureExtractor
+        _featureExtractor = new();
 
     public BehaviorCandidateEpisodeCharacterizer(
         TagProfileStatisticsCalculator statisticsCalculator)
@@ -156,6 +169,35 @@ public sealed class BehaviorCandidateEpisodeCharacterizer
                 values,
                 0.75);
 
+        /*
+         * Reutiliza o extractor comportamental já existente.
+         *
+         * A extração acontece sobre o mesmo histórico limpo usado
+         * pelas estatísticas do episódio. Dessa forma, um pico isolado
+         * removido pelo IQR não passa a definir a dinâmica do comportamento.
+         *
+         * As features temporais de gap continuam disponíveis no contrato,
+         * mas não serão usadas como critério de similaridade nesta etapa,
+         * pois a segmentação temporal B3.25 já aconteceu antes.
+         */
+        var profileHistory =
+            statistics.HistoricoLimpo
+                .Select(reading =>
+                    new HistoricoDetectorPoint
+                    {
+                        DataHora =
+                            reading.DataHora,
+
+                        Valor =
+                            Convert.ToDouble(
+                                reading.Valor)
+                    })
+                .ToArray();
+
+        var profileFeatures =
+            _featureExtractor.Extract(
+                profileHistory);
+
         return new BehaviorCandidateEpisodeCharacteristics
         {
             SourceSegmentIndex =
@@ -228,6 +270,9 @@ public sealed class BehaviorCandidateEpisodeCharacterizer
 
             ConfiancaDeadband =
                 statistics.ConfiancaDeadband,
+
+            ProfileFeatures =
+                profileFeatures,
 
             HistoricoLimpo =
                 statistics.HistoricoLimpo

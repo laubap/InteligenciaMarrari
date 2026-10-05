@@ -941,6 +941,9 @@ namespace IAApi.Migrations
                     b.Property<double>("DesvioPadrao")
                         .HasColumnType("REAL");
 
+                    b.Property<double?>("IntervaloInterquartil")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("JustificativaDeadband")
                         .HasColumnType("TEXT");
 
@@ -948,6 +951,9 @@ namespace IAApi.Migrations
                         .HasColumnType("REAL");
 
                     b.Property<double>("Media")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("Mediana")
                         .HasColumnType("REAL");
 
                     b.Property<double>("Minimo")
@@ -962,11 +968,20 @@ namespace IAApi.Migrations
                     b.Property<DateTime>("PeriodoInicio")
                         .HasColumnType("TEXT");
 
+                    b.Property<double?>("PrimeiroQuartil")
+                        .HasColumnType("REAL");
+
                     b.Property<int>("QuantidadePicos")
                         .HasColumnType("INTEGER");
 
+                    b.Property<double?>("RobustScale")
+                        .HasColumnType("REAL");
+
                     b.Property<int>("TagComportamentoIaId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<double?>("TerceiroQuartil")
+                        .HasColumnType("REAL");
 
                     b.Property<int>("TotalOutliersRemovidos")
                         .HasColumnType("INTEGER");
@@ -976,6 +991,9 @@ namespace IAApi.Migrations
 
                     b.Property<int>("TotalRegistrosUsados")
                         .HasColumnType("INTEGER");
+
+                    b.Property<double?>("TypicalAbsoluteStep")
+                        .HasColumnType("REAL");
 
                     b.Property<double>("VariacaoMedia")
                         .HasColumnType("REAL");

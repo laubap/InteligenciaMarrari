@@ -17,6 +17,25 @@ public class TagComportamentoSnapshotIa
 
     public double DesvioPadrao { get; set; }
 
+    /*
+     * B3.25 — identidade comportamental rica.
+     *
+     * Nullable por compatibilidade com snapshots criados antes desta evolução.
+     * Registros antigos permanecem válidos e continuam sendo reconciliados
+     * pelas dimensões legadas até que um snapshot novo seja produzido.
+     */
+    public double? Mediana { get; set; }
+
+    public double? PrimeiroQuartil { get; set; }
+
+    public double? TerceiroQuartil { get; set; }
+
+    public double? IntervaloInterquartil { get; set; }
+
+    public double? RobustScale { get; set; }
+
+    public double? TypicalAbsoluteStep { get; set; }
+
     public double Minimo { get; set; }
 
     public double Maximo { get; set; }

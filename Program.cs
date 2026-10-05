@@ -96,6 +96,9 @@ builder.Services.AddScoped<TagProfileStatisticsCalculator>();
 builder.Services.AddScoped<OperationalRegimeBaselineService>();
 builder.Services.AddScoped<OperationalRegimeBaselineProvider>();
 
+// B3.25 — descoberta e memória comportamental.
+builder.Services.AddBehaviorMemoryDiscovery();
+
 builder.Services.AddHostedService<MonitoramentoTagsService>();
 builder.Services.AddSingleton<EnsembleV2Simulator>();
 builder.Services.AddSingleton<AdaptiveEnsembleLaboratory>();
