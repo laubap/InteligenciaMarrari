@@ -1,4 +1,5 @@
 using IAApi.Services.AnomalyDetection.BehaviorProfiles;
+using IAApi.Services.AnomalyDetection.BehaviorProfiles.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +53,8 @@ public sealed class BehaviorMemoryDiscoveryApiWiringTests
 
         var controller =
             new BehaviorMemoryDiscoveryController(
-                fixture.Workflow);
+                fixture.Workflow,
+                fixture.ClassificationService);
 
         var response =
             await controller.DiscoverAsync(
@@ -84,7 +86,8 @@ public sealed class BehaviorMemoryDiscoveryApiWiringTests
 
         var controller =
             new BehaviorMemoryDiscoveryController(
-                fixture.Workflow);
+                fixture.Workflow,
+                fixture.ClassificationService);
 
         var response =
             await controller.DiscoverAsync(
@@ -131,6 +134,280 @@ public sealed class BehaviorMemoryDiscoveryApiWiringTests
             body.Consolidation.Items);
     }
 
+    [Fact]
+    public async Task Controller_ClassificarKnownComoNormal_DeveRetornar200EPersistir()
+    {
+        await using var fixture =
+            await ApiFixture.CreateAsync();
+
+        await fixture.AddBehaviorAsync(
+            "CLIENTE-A",
+            "TAG1",
+            "BEH-001",
+            TagComportamentoIa.StatusKnown,
+            TagComportamentoIa.ClassificacaoUndefined);
+
+        var controller =
+            new BehaviorMemoryDiscoveryController(
+                fixture.Workflow,
+                fixture.ClassificationService);
+
+        var response =
+            await controller.ClassifyAsync(
+                "CLIENTE-A",
+                "TAG1",
+                "BEH-001",
+                new BehaviorMemoryClassificationRequest
+                {
+                    Classification =
+                        TagComportamentoIa.ClassificacaoNormal
+                },
+                CancellationToken.None);
+
+        var ok =
+            Assert.IsType<OkObjectResult>(
+                response.Result);
+
+        var body =
+            Assert.IsType<BehaviorMemoryClassificationResult>(
+                ok.Value);
+
+        Assert.True(
+            body.Changed);
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoUndefined,
+            body.PreviousClassification);
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoNormal,
+            body.Classification);
+
+        var persisted =
+            await fixture.Context.TagsComportamentosIa
+                .SingleAsync(x =>
+                    x.ClienteId == "CLIENTE-A" &&
+                    x.TagName == "TAG1" &&
+                    x.Codigo == "BEH-001");
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoNormal,
+            persisted.Classificacao);
+    }
+
+    [Fact]
+    public async Task Controller_ClassificarKnownComoKnownAbnormal_DeveRetornar200()
+    {
+        await using var fixture =
+            await ApiFixture.CreateAsync();
+
+        await fixture.AddBehaviorAsync(
+            "CLIENTE-A",
+            "TAG1",
+            "BEH-001",
+            TagComportamentoIa.StatusKnown,
+            TagComportamentoIa.ClassificacaoUndefined);
+
+        var controller =
+            new BehaviorMemoryDiscoveryController(
+                fixture.Workflow,
+                fixture.ClassificationService);
+
+        var response =
+            await controller.ClassifyAsync(
+                "CLIENTE-A",
+                "TAG1",
+                "BEH-001",
+                new BehaviorMemoryClassificationRequest
+                {
+                    Classification =
+                        TagComportamentoIa.ClassificacaoKnownAbnormal
+                },
+                CancellationToken.None);
+
+        var ok =
+            Assert.IsType<OkObjectResult>(
+                response.Result);
+
+        var body =
+            Assert.IsType<BehaviorMemoryClassificationResult>(
+                ok.Value);
+
+        Assert.True(
+            body.Changed);
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoKnownAbnormal,
+            body.Classification);
+    }
+
+    [Fact]
+    public async Task Controller_RepetirMesmaClassificacao_DeveSerIdempotente()
+    {
+        await using var fixture =
+            await ApiFixture.CreateAsync();
+
+        await fixture.AddBehaviorAsync(
+            "CLIENTE-A",
+            "TAG1",
+            "BEH-001",
+            TagComportamentoIa.StatusKnown,
+            TagComportamentoIa.ClassificacaoNormal);
+
+        var controller =
+            new BehaviorMemoryDiscoveryController(
+                fixture.Workflow,
+                fixture.ClassificationService);
+
+        var response =
+            await controller.ClassifyAsync(
+                "CLIENTE-A",
+                "TAG1",
+                "BEH-001",
+                new BehaviorMemoryClassificationRequest
+                {
+                    Classification =
+                        TagComportamentoIa.ClassificacaoNormal
+                },
+                CancellationToken.None);
+
+        var ok =
+            Assert.IsType<OkObjectResult>(
+                response.Result);
+
+        var body =
+            Assert.IsType<BehaviorMemoryClassificationResult>(
+                ok.Value);
+
+        Assert.False(
+            body.Changed);
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoNormal,
+            body.PreviousClassification);
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoNormal,
+            body.Classification);
+    }
+
+    [Fact]
+    public async Task Controller_ClassificarCandidate_DeveRetornarBadRequest()
+    {
+        await using var fixture =
+            await ApiFixture.CreateAsync();
+
+        await fixture.AddBehaviorAsync(
+            "CLIENTE-A",
+            "TAG1",
+            "CAND-001",
+            TagComportamentoIa.StatusCandidate,
+            TagComportamentoIa.ClassificacaoUndefined);
+
+        var controller =
+            new BehaviorMemoryDiscoveryController(
+                fixture.Workflow,
+                fixture.ClassificationService);
+
+        var response =
+            await controller.ClassifyAsync(
+                "CLIENTE-A",
+                "TAG1",
+                "CAND-001",
+                new BehaviorMemoryClassificationRequest
+                {
+                    Classification =
+                        TagComportamentoIa.ClassificacaoNormal
+                },
+                CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(
+            response.Result);
+
+        var persisted =
+            await fixture.Context.TagsComportamentosIa
+                .SingleAsync(x =>
+                    x.ClienteId == "CLIENTE-A" &&
+                    x.TagName == "TAG1" &&
+                    x.Codigo == "CAND-001");
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoUndefined,
+            persisted.Classificacao);
+    }
+
+    [Fact]
+    public async Task Controller_BehaviorInexistente_DeveRetornarNotFound()
+    {
+        await using var fixture =
+            await ApiFixture.CreateAsync();
+
+        var controller =
+            new BehaviorMemoryDiscoveryController(
+                fixture.Workflow,
+                fixture.ClassificationService);
+
+        var response =
+            await controller.ClassifyAsync(
+                "CLIENTE-A",
+                "TAG1",
+                "BEH-999",
+                new BehaviorMemoryClassificationRequest
+                {
+                    Classification =
+                        TagComportamentoIa.ClassificacaoNormal
+                },
+                CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(
+            response.Result);
+    }
+
+    [Fact]
+    public async Task Controller_ClassificacaoInvalida_DeveRetornarBadRequest()
+    {
+        await using var fixture =
+            await ApiFixture.CreateAsync();
+
+        await fixture.AddBehaviorAsync(
+            "CLIENTE-A",
+            "TAG1",
+            "BEH-001",
+            TagComportamentoIa.StatusKnown,
+            TagComportamentoIa.ClassificacaoUndefined);
+
+        var controller =
+            new BehaviorMemoryDiscoveryController(
+                fixture.Workflow,
+                fixture.ClassificationService);
+
+        var response =
+            await controller.ClassifyAsync(
+                "CLIENTE-A",
+                "TAG1",
+                "BEH-001",
+                new BehaviorMemoryClassificationRequest
+                {
+                    Classification =
+                        "QualquerCoisa"
+                },
+                CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(
+            response.Result);
+
+        var persisted =
+            await fixture.Context.TagsComportamentosIa
+                .SingleAsync(x =>
+                    x.ClienteId == "CLIENTE-A" &&
+                    x.TagName == "TAG1" &&
+                    x.Codigo == "BEH-001");
+
+        Assert.Equal(
+            TagComportamentoIa.ClassificacaoUndefined,
+            persisted.Classificacao);
+    }
+
     private sealed class ApiFixture :
         IAsyncDisposable
     {
@@ -138,7 +415,9 @@ public sealed class BehaviorMemoryDiscoveryApiWiringTests
             SqliteConnection connection,
             ServiceProvider provider,
             IServiceScope scope,
-            BehaviorDiscoveryWorkflowService workflow)
+            AppDbContext context,
+            BehaviorDiscoveryWorkflowService workflow,
+            BehaviorMemoryClassificationService classificationService)
         {
             Connection =
                 connection;
@@ -149,8 +428,14 @@ public sealed class BehaviorMemoryDiscoveryApiWiringTests
             Scope =
                 scope;
 
+            Context =
+                context;
+
             Workflow =
                 workflow;
+
+            ClassificationService =
+                classificationService;
         }
 
         public SqliteConnection Connection { get; }
@@ -159,7 +444,65 @@ public sealed class BehaviorMemoryDiscoveryApiWiringTests
 
         public IServiceScope Scope { get; }
 
+        public AppDbContext Context { get; }
+
         public BehaviorDiscoveryWorkflowService Workflow { get; }
+
+        public BehaviorMemoryClassificationService ClassificationService { get; }
+
+        public async Task AddBehaviorAsync(
+            string clienteId,
+            string tagName,
+            string codigo,
+            string status,
+            string classificacao)
+        {
+            Context.TagsComportamentosIa.Add(
+                new TagComportamentoIa
+                {
+                    ClienteId =
+                        clienteId,
+
+                    TagName =
+                        tagName,
+
+                    Codigo =
+                        codigo,
+
+                    Status =
+                        status,
+
+                    Origem =
+                        TagComportamentoIa.OrigemAutomatic,
+
+                    Classificacao =
+                        classificacao,
+
+                    PrimeiraObservacao =
+                        new DateTime(
+                            2026, 9, 1, 0, 0, 0,
+                            DateTimeKind.Utc),
+
+                    UltimaObservacao =
+                        new DateTime(
+                            2026, 9, 1, 1, 0, 0,
+                            DateTimeKind.Utc),
+
+                    QuantidadeOcorrencias =
+                        1,
+
+                    TotalAmostras =
+                        60,
+
+                    Confianca =
+                        90,
+
+                    DataCriacao =
+                        DateTime.UtcNow
+                });
+
+            await Context.SaveChangesAsync();
+        }
 
         public static async Task<ApiFixture> CreateAsync()
         {
@@ -199,11 +542,17 @@ public sealed class BehaviorMemoryDiscoveryApiWiringTests
                 scope.ServiceProvider
                     .GetRequiredService<BehaviorDiscoveryWorkflowService>();
 
+            var classificationService =
+                scope.ServiceProvider
+                    .GetRequiredService<BehaviorMemoryClassificationService>();
+
             return new ApiFixture(
                 connection,
                 provider,
                 scope,
-                workflow);
+                context,
+                workflow,
+                classificationService);
         }
 
         public async ValueTask DisposeAsync()

@@ -9,14 +9,21 @@ public sealed class BehaviorMemoryDiscoveryController :
     ControllerBase
 {
     private readonly BehaviorDiscoveryWorkflowService _workflow;
+    private readonly BehaviorMemoryClassificationService _classificationService;
 
     public BehaviorMemoryDiscoveryController(
-        BehaviorDiscoveryWorkflowService workflow)
+        BehaviorDiscoveryWorkflowService workflow,
+        BehaviorMemoryClassificationService classificationService)
     {
         _workflow =
             workflow ??
             throw new ArgumentNullException(
                 nameof(workflow));
+
+        _classificationService =
+            classificationService ??
+            throw new ArgumentNullException(
+                nameof(classificationService));
     }
 
     /// <summary>
@@ -134,6 +141,92 @@ public sealed class BehaviorMemoryDiscoveryController :
                 });
         }
     }
+
+    /// <summary>
+    /// Altera explicitamente a classificação semântica de um comportamento Known.
+    ///
+    /// Valores aceitos:
+    /// - Undefined
+    /// - Normal
+    /// - KnownAbnormal
+    ///
+    /// A operação não promove Candidate, não altera identidade BEH-xxx,
+    /// confiança, origem, ocorrências ou snapshots.
+    /// </summary>
+    [HttpPatch(
+        "cliente/{clienteId}/tag/{tagName}/behavior/{behaviorCode}/classification")]
+    [ProducesResponseType(
+        typeof(BehaviorMemoryClassificationResult),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BehaviorMemoryClassificationResult>>
+        ClassifyAsync(
+            string clienteId,
+            string tagName,
+            string behaviorCode,
+            [FromBody]
+            BehaviorMemoryClassificationRequest request,
+            CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BadRequest(
+                new
+                {
+                    erro =
+                        "O corpo da requisição é obrigatório."
+                });
+        }
+
+        try
+        {
+            var result =
+                await _classificationService.ClassifyAsync(
+                    clienteId,
+                    tagName,
+                    behaviorCode,
+                    request.Classification,
+                    cancellationToken);
+
+            return Ok(
+                result);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(
+                new
+                {
+                    erro =
+                        exception.Message
+                });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(
+                new
+                {
+                    erro =
+                        exception.Message
+                });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(
+                new
+                {
+                    erro =
+                        exception.Message
+                });
+        }
+    }
+}
+
+public sealed class BehaviorMemoryClassificationRequest
+{
+    public string Classification { get; set; } = "";
 }
 
 public sealed class BehaviorMemoryDiscoveryRequest

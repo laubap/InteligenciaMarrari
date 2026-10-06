@@ -52,6 +52,7 @@ public static class BehaviorProfilesServiceCollectionExtensions
         services.TryAddScoped<BehaviorCandidateMemoryService>();
         services.TryAddScoped<BehaviorMemorySnapshotRebuildService>();
         services.TryAddScoped<BehaviorMemoryConsolidationService>();
+        services.TryAddScoped<BehaviorMemoryClassificationService>();
 
         /*
          * Runtime comportamental B3.25.

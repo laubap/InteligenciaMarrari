@@ -385,6 +385,15 @@ public class PredictionService
         var baselineComportamentalAplicado =
             false;
 
+        var comportamentoReconhecido =
+            false;
+
+        string? codigoComportamentoReconhecido =
+            null;
+
+        string? classificacaoComportamentoReconhecido =
+            null;
+
         string? comportamentoAplicado =
             null;
 
@@ -485,6 +494,15 @@ if (!baselineRegimeAplicado &&
                 historicoBruto,
                 dataHoraAtual,
                 cancellationToken);
+
+        comportamentoReconhecido =
+            behaviorShadow.Recognized;
+
+        codigoComportamentoReconhecido =
+            behaviorShadow.BehaviorCode;
+
+        classificacaoComportamentoReconhecido =
+            behaviorShadow.BehaviorClassification;
 
         Console.WriteLine(
             $"B3.25 BEHAVIOR SHADOW " +
@@ -758,6 +776,32 @@ Console.WriteLine(
             _runtimeFunctionalDecisionContextProvider.Evaluate(
                 entradaDetector,
                 resultadoDetector);
+
+        /*
+         * B3.25 - CONTEXTO COMPORTAMENTAL PROPAGADO AO PONTO DE DECISÃO.
+         *
+         * Nesta etapa a informação é apenas observacional.
+         * Ela NÃO altera:
+         * - RuntimeFunctionalDecisionContext;
+         * - RuntimeFunctionalDecisionCandidate;
+         * - RuntimeDecision;
+         * - EhAnomalia;
+         * - score;
+         * - severidade;
+         * - lifecycle de incidente.
+         *
+         * O objetivo é deixar explícito, no mesmo ponto em que o runtime
+         * funcional é avaliado, qual comportamento foi reconhecido e qual
+         * sua classificação semântica.
+         */
+        Console.WriteLine(
+            $"B3.25 RUNTIME BEHAVIOR CONTEXT " +
+            $"Cliente={request.ClienteId} " +
+            $"Tag={request.TagName} " +
+            $"Recognized={comportamentoReconhecido} " +
+            $"Behavior={codigoComportamentoReconhecido ?? "-"} " +
+            $"Classification={classificacaoComportamentoReconhecido ?? "-"} " +
+            $"BaselineApplied={baselineComportamentalAplicado}");
 
         var runtimeFunctionalCandidate =
             _runtimeFunctionalDecisionCandidateFactory.Create(
@@ -1101,29 +1145,61 @@ if (!multivariatePromotionApplied)
     }
     else
     {
+        var comportamentoAnormalConhecido =
+            comportamentoReconhecido &&
+            string.Equals(
+                classificacaoComportamentoReconhecido,
+                "KnownAbnormal",
+                StringComparison.Ordinal);
+
         resultadoInterpretacao =
             new AnomalyInterpretationResult
             {
                 Resumo =
-                    "Nenhuma anomalia foi identificada.",
+                    comportamentoAnormalConhecido
+                        ? $"Comportamento anormal conhecido " +
+                          $"{codigoComportamentoReconhecido ?? "-"} reconhecido, " +
+                          "sem nova anomalia detectada."
+                        : "Nenhuma anomalia foi identificada.",
 
                 InterpretacaoTecnica =
-                    "Os detectores indicaram que o comportamento atual da tag permanece dentro do padrão esperado.",
+                    comportamentoAnormalConhecido
+                        ? $"O padrão atual corresponde ao comportamento " +
+                          $"anormal conhecido {codigoComportamentoReconhecido ?? "-"}. " +
+                          "Os detectores não identificaram nova evidência funcional " +
+                          "de anomalia nesta leitura."
+                        : "Os detectores indicaram que o comportamento atual da tag " +
+                          "permanece dentro do padrão esperado.",
 
                 Evidencias =
-                    new List<string>
-                    {
-                        "Nenhum detector identificou comportamento anômalo."
-                    },
+                    comportamentoAnormalConhecido
+                        ? new List<string>
+                        {
+                            $"Comportamento reconhecido: " +
+                            $"{codigoComportamentoReconhecido ?? "-"}.",
+                            "Classificação semântica: KnownAbnormal.",
+                            "Nenhum detector identificou nova evidência " +
+                            "funcional de anomalia nesta leitura."
+                        }
+                        : new List<string>
+                        {
+                            "Nenhum detector identificou comportamento anômalo."
+                        },
 
                 PossiveisCausas =
                     new(),
 
                 Recomendacoes =
-                    new()
-                    {
-                        "Continuar monitorando normalmente."
-                    },
+                    comportamentoAnormalConhecido
+                        ? new List<string>
+                        {
+                            "Continuar acompanhando o comportamento conhecido " +
+                            "e observar novas evidências dos detectores."
+                        }
+                        : new List<string>
+                        {
+                            "Continuar monitorando normalmente."
+                        },
 
                 Severidade =
                     "Normal",
@@ -1132,7 +1208,9 @@ if (!multivariatePromotionApplied)
                     false,
 
                 ModeloUtilizado =
-                    "Não utilizado",
+                    comportamentoAnormalConhecido
+                        ? "Contexto comportamental determinístico"
+                        : "Não utilizado",
 
                 DataGeracao =
                     DateTime.UtcNow
@@ -1364,7 +1442,13 @@ Console.WriteLine();
             {
                 Status = ehAnomalia
                     ? "Anomalia detectada"
-                    : "Comportamento normal",
+                    : comportamentoReconhecido &&
+                      string.Equals(
+                          classificacaoComportamentoReconhecido,
+                          "KnownAbnormal",
+                          StringComparison.Ordinal)
+                        ? "Comportamento anormal conhecido"
+                        : "Comportamento normal",
 
                 Conclusao =
                     riscoProcesso.Mensagem

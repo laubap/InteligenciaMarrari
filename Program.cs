@@ -18,6 +18,7 @@ using IAApi.Benchmark.ExperimentalIncidents.Api;
 using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
 using IAApi.Benchmark.ExperimentalAnomalyDecisions;
 
+
 var persistenceTemporalExperiment = args.Any(argumento =>
     string.Equals(argumento,
         "--experimental-persistence-temporal-confirmation",
