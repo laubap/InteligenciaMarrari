@@ -1,4 +1,3 @@
-using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 
 namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
