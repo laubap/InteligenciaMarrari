@@ -597,9 +597,6 @@ var executarAvaliacaoClean =
 var executarInvestigacaoCleanAll =
     commandSelection.ExecutarInvestigacaoCleanAll;
 
-var executarAvaliacaoImpactoDeadband =
-    commandSelection.ExecutarAvaliacaoImpactoDeadband;
-
 var executarAnaliseCausaRaiz =
     commandSelection.ExecutarAnaliseCausaRaiz;
 
@@ -657,34 +654,11 @@ if (await BenchmarkFastCommandExecutor.TryExecuteAsync(
     return;
 }
 
-
-if (executarAvaliacaoImpactoDeadband)
+if (await BenchmarkDeadbandImpactCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
+        benchmarkOptions))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo de simulação do impacto do deadband."
-    );
-
-    var diretorioResultados =
-        Path.IsPathRooted(
-            benchmarkOptions.ResultDirectory)
-            ? benchmarkOptions.ResultDirectory
-            : Path.Combine(
-                Directory.GetCurrentDirectory(),
-                benchmarkOptions.ResultDirectory);
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var evaluator =
-        scope.ServiceProvider
-            .GetRequiredService<
-                DeadbandImpactEvaluator>();
-
-    await evaluator.EvaluateAsync(
-        benchmarkOptions,
-        diretorioResultados);
-
     return;
 }
 
