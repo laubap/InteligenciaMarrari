@@ -2,7 +2,7 @@
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
 
-namespace IAApi.Benchmark.RegimeShadow;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.Evidence;
 
 
 public sealed record RegimeShadowAdaptation(

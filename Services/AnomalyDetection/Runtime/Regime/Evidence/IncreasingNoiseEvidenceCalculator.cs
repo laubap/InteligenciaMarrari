@@ -2,7 +2,7 @@ using IAApi.RegimePolicy;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
 
-namespace IAApi.Benchmark.RegimeShadow;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.Evidence;
 
 /// <summary>
 /// B3.22.5 V1b - observational evidence of sustained variability expansion.

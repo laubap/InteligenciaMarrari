@@ -2,7 +2,7 @@ using IAApi.RegimePolicy;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
 
-namespace IAApi.Benchmark.RegimeShadow;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.Evidence;
 
 /// <summary>
 /// Produz evidência experimental de deriva lenta para a camada de regime.
