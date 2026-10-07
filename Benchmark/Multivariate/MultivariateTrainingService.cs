@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Text.Json;
 using IAApi.Benchmark;
+using IAApi.Services.AnomalyDetection.Multivariate;
 
-namespace IAApi.Services.AnomalyDetection.Multivariate;
-
+namespace IAApi.Benchmark.Multivariate;
 /// <summary>
 /// Treina os modelos multivariados utilizando somente o banco limpo.
 ///
@@ -473,12 +473,6 @@ public sealed class MultivariateTrainingService
             $"Resumo: {summaryPath}");
     }
 }
-
-/// <summary>
-/// Calcula média e covariância incrementalmente,
-/// sem manter todos os vetores na memória.
-/// </summary>
-
 
 
 public sealed class MultivariateTrainingSummary

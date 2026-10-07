@@ -17,6 +17,7 @@ using IAApi.Benchmark.PersistenceCounterfactual;
 using IAApi.Benchmark.ExperimentalIncidents.Api;
 using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
 using IAApi.Benchmark.ExperimentalAnomalyDecisions;
+using IAApi.Benchmark.Multivariate;
 
 
 var persistenceTemporalExperiment = args.Any(argumento =>
