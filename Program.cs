@@ -508,45 +508,35 @@ if (experimentalIncidentApiOptions.Enabled &&
     }
 }
 
+var benchmarkCommandContext =
+    BenchmarkCommandContext.Create(
+        args,
+        builder.Configuration,
+        commandSelection);
 
 var baselineDiagnosticOptions =
-    BaselineDiagnosticOptions.Parse(args);
+    benchmarkCommandContext.BaselineDiagnosticOptions;
 
-var regimeShadowOptions = RegimeShadowOptions.Parse(args);
-
-var detectorOptionsForDualBaseline = builder.Configuration
-    .GetRequiredSection("AnomalyDetection")
-    .Get<AnomalyDetectionOptions>() ?? new AnomalyDetectionOptions();
+var regimeShadowOptions =
+    benchmarkCommandContext.RegimeShadowOptions;
 
 var dualBaselineShadowOptions =
-    DualBaselineShadowOptions.Parse(args, detectorOptionsForDualBaseline);
+    benchmarkCommandContext.DualBaselineShadowOptions;
 
 var behaviorProfileObservabilityOptions =
-    BenchmarkBehaviorProfileOptions.Parse(args);
+    benchmarkCommandContext.BehaviorProfileObservabilityOptions;
 
 var persistenceCounterfactualOptions =
-    PersistenceCounterfactualOptions.Parse(args);
+    benchmarkCommandContext.PersistenceCounterfactualOptions;
 
-var experimentalIncidentOptions = builder.Configuration
-    .GetSection("ExperimentalIncidentLayer")
-    .Get<IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions>()
-    ?? new IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions();
-if (IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions.Parse(args).Enabled)
-    experimentalIncidentOptions = experimentalIncidentOptions with { Enabled = true };
+var experimentalIncidentOptions =
+    benchmarkCommandContext.ExperimentalIncidentOptions;
 
-    var experimentalAnomalyDecisionOptions =
-    ExperimentalAnomalyDecisionOptions.Parse(args);
+var experimentalAnomalyDecisionOptions =
+    benchmarkCommandContext.ExperimentalAnomalyDecisionOptions;
 
 var functionalOperationalCanaryOptions =
-    new FunctionalOperationalCanaryOptions
-    {
-        Enabled =
-            commandSelection.FunctionalOperationalCanaryEnabled,
-        AllowedTags =
-            commandSelection.FunctionalOperationalCanaryTags,
-        AllowedFastWindows =
-            commandSelection.FunctionalOperationalCanaryWindows
-    };
+    benchmarkCommandContext.FunctionalOperationalCanaryOptions;
 
 BenchmarkCommandValidator.Validate(
     commandSelection,
