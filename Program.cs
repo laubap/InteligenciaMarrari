@@ -582,9 +582,6 @@ var executarAnaliseCausaRaiz =
 var executarAnaliseResultados =
     commandSelection.ExecutarAnaliseResultados;
 
-var executarAnaliseSensibilidadeDetectores =
-    commandSelection.ExecutarAnaliseSensibilidadeDetectores;
-
 var executarFamilyConsensusReport =
     commandSelection.ExecutarFamilyConsensusReport;
 
@@ -672,33 +669,11 @@ if (await BenchmarkEvaluationCommandExecutor.TryExecuteAsync(
     return;
 }
 
-if (executarAnaliseSensibilidadeDetectores)
+if (await BenchmarkDetectorSensitivityCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
+        benchmarkOptions))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo de análise " +
-        "de sensibilidade dos detectores."
-    );
-
-    var diretorioResultados =
-        Path.IsPathRooted(
-            benchmarkOptions.ResultDirectory)
-            ? benchmarkOptions.ResultDirectory
-            : Path.Combine(
-                Directory.GetCurrentDirectory(),
-                benchmarkOptions.ResultDirectory);
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var report =
-        scope.ServiceProvider
-            .GetRequiredService<
-                DetectorSensitivityReport>();
-
-    await report.AnalyzeAsync(
-        diretorioResultados);
-
     return;
 }
 
