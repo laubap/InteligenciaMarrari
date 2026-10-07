@@ -1,4 +1,4 @@
-namespace IAApi.Benchmark.RegimeShadow;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime;
 
 public sealed record CandidatePoint(long Sequence, DateTimeOffset Timestamp, double Value);
 
