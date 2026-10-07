@@ -1,5 +1,5 @@
-using IAApi.Benchmark.ExperimentalIncidents.Api;
-using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
+using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
+using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 

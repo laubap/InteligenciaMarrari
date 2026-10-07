@@ -1,7 +1,7 @@
-using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
+using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 using Microsoft.Extensions.Options;
 
-namespace IAApi.Benchmark.ExperimentalIncidents.Api;
+namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
 
 public interface IExperimentalIncidentQueryService
 {

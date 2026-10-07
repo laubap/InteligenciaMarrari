@@ -1,4 +1,4 @@
-namespace IAApi.Benchmark.ExperimentalIncidents.ReadModels;
+namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 
 public interface IIncidentReadModelStore
 {
