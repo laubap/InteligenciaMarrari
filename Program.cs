@@ -692,88 +692,10 @@ if (quantidadeModosSelecionados > 1)
     return;
 }
 
-if (executarTesteGrupos)
+if (await BenchmarkUtilityCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection))
 {
-    using var scope =
-        app.Services.CreateScope();
-
-    var tester =
-        scope.ServiceProvider
-            .GetRequiredService<
-                GrupoAnaliseTester>();
-
-    await tester.ExecutarAsync();
-
-    return;
-}
-
-if (executarTesteBufferMultivariado)
-{
-    using var scope =
-        app.Services.CreateScope();
-
-    var tester =
-        scope.ServiceProvider
-            .GetRequiredService<
-                MultivariateBufferTester>();
-
-    await tester.ExecutarAsync();
-
-    return;
-}
-
-if (executarTesteDatasetMultivariado)
-{
-    using var scope =
-        app.Services.CreateScope();
-
-    var tester =
-        scope.ServiceProvider
-            .GetRequiredService<
-                MultivariateDatasetTester>();
-
-    await tester.ExecutarAsync();
-
-    return;
-}
-
-if (executarTesteDetectorMultivariado)
-{
-    using var scope =
-        app.Services.CreateScope();
-
-    var tester =
-        scope.ServiceProvider
-            .GetRequiredService<
-                MultivariateDetectorTester>();
-
-    await tester.ExecutarAsync();
-
-    return;
-}
-
-if (executarTreinamentoMultivariado)
-{
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo de treinamento multivariado."
-    );
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var trainingService =
-        scope.ServiceProvider
-            .GetRequiredService<
-                MultivariateTrainingService>();
-
-    await trainingService.TreinarAsync();
-
-    Console.WriteLine();
-    Console.WriteLine(
-        "Treinamento multivariado concluído."
-    );
-
     return;
 }
 
