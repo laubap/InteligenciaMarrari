@@ -1,8 +1,7 @@
 using IAApi.Benchmark.RegimeShadow.DualBaseline.DecisionCounterfactual;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline.Decision;
-
-namespace IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
+namespace IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 
 public sealed record IncidentDetectionSnapshot(
     DateTime Timestamp,

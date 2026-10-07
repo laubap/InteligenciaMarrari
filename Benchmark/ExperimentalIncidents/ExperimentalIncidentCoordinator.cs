@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using IAApi.Benchmark.RegimeShadow.DualBaseline.DecisionCounterfactual;
-using IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
+using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline.Decision;
 
 namespace IAApi.Benchmark.ExperimentalIncidents;

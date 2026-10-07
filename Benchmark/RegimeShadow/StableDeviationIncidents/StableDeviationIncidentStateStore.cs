@@ -1,3 +1,4 @@
+using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 namespace IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
 
 public sealed class StableDeviationIncidentStateStore

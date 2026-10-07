@@ -1,7 +1,7 @@
 using IAApi.Benchmark.RegimeShadow.DualBaseline.DecisionCounterfactual;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline.Decision;
 
-namespace IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
+namespace IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 
 /// <summary>Motor puro: não possui relógio, store ou dependência de serviços.</summary>
 public sealed class StableDeviationIncidentEngine

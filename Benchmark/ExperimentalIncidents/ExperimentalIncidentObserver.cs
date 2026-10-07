@@ -7,6 +7,7 @@ using IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline.Decision;
+using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 
 namespace IAApi.Benchmark.ExperimentalIncidents;
 

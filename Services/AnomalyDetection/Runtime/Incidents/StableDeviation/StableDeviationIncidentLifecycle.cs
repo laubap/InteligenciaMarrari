@@ -1,4 +1,4 @@
-namespace IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
+namespace IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 
 public enum StableDeviationIncidentLifecycle
 {

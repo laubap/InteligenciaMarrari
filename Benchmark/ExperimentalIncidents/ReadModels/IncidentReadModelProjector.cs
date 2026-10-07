@@ -1,4 +1,4 @@
-using IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
+using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 using IAApi.Services.AnomalyDetection;
 
 namespace IAApi.Benchmark.ExperimentalIncidents.ReadModels;

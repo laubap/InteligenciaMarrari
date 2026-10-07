@@ -1,5 +1,5 @@
 ﻿using IAApi.Benchmark.ExperimentalIncidents;
-using IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
+using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 using IAApi.RegimePolicy;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
