@@ -706,131 +706,21 @@ if (await BenchmarkRunCommandExecutor.TryExecuteAsync(
     return;
 }
 
-if (executarBenchmarkCleanFast)
-{
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo BENCHMARK FAST do banco limpo."
-    );
-
-    if (functionalExperimentalAnomalyDecisionEnabled)
-    {
-        Console.WriteLine(
-            "Functional Experimental Anomaly Decision: ENABLED");
-
-        if (functionalOperationalCanaryEnabled)
-        {
-            Console.WriteLine(
-                "Functional Operational Canary: ENABLED");
-
-            Console.WriteLine(
-                $"Canary FAST windows: " +
-                $"{string.Join(", ", functionalOperationalCanaryWindows.OrderBy(x => x))}");
-
-            Console.WriteLine(
-                $"Canary tags: " +
-                $"{string.Join(", ", functionalOperationalCanaryTags.OrderBy(x => x))}");
-        }
-    }
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var runner =
-        scope.ServiceProvider
-            .GetRequiredService<BenchmarkRunner>();
-
-await runner.ExecutarAsync(
-    bancoLimpo: true,
-    modoRapido: true,
-    baselineDiagnostics:
+if (await BenchmarkFastCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
         baselineDiagnosticOptions,
-    regimeShadow:
         regimeShadowOptions,
-    dualBaselineShadow:
         dualBaselineShadowOptions,
-    behaviorProfileObservability:
         behaviorProfileObservabilityOptions,
-    persistenceTemporalExperiment:
-        persistenceTemporalExperiment,
-    experimentalIncident:
-        experimentalIncidentOptions,
-    experimentalAnomalyDecision:
-        experimentalAnomalyDecisionOptions,
-    functionalExperimentalAnomalyDecisionEnabled:
-        functionalExperimentalAnomalyDecisionEnabled,
-    functionalOperationalCanary:
-        functionalOperationalCanaryOptions);
-
-    Console.WriteLine();
-    Console.WriteLine(
-        "Execução do benchmark FAST limpo concluída."
-    );
-
-    return;
-}
-
-if (executarBenchmarkFast)
-{
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo BENCHMARK FAST do banco com anomalias."
-    );
-
-    if (functionalExperimentalAnomalyDecisionEnabled)
-    {
-        Console.WriteLine(
-            "Functional Experimental Anomaly Decision: ENABLED");
-
-        if (functionalOperationalCanaryEnabled)
-        {
-            Console.WriteLine(
-                "Functional Operational Canary: ENABLED");
-
-            Console.WriteLine(
-                $"Canary FAST windows: " +
-                $"{string.Join(", ", functionalOperationalCanaryWindows.OrderBy(x => x))}");
-
-            Console.WriteLine(
-                $"Canary tags: " +
-                $"{string.Join(", ", functionalOperationalCanaryTags.OrderBy(x => x))}");
-        }
-    }
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var runner =
-        scope.ServiceProvider
-            .GetRequiredService<BenchmarkRunner>();
-
-await runner.ExecutarAsync(
-    bancoLimpo: false,
-    modoRapido: true,
-    regimeShadow:
-        regimeShadowOptions,
-    dualBaselineShadow:
-        dualBaselineShadowOptions,
-    persistenceCounterfactual:
         persistenceCounterfactualOptions,
-    persistenceTemporalExperiment:
-        persistenceTemporalExperiment,
-    experimentalIncident:
         experimentalIncidentOptions,
-    experimentalAnomalyDecision:
         experimentalAnomalyDecisionOptions,
-    functionalExperimentalAnomalyDecisionEnabled:
-        functionalExperimentalAnomalyDecisionEnabled,
-    functionalOperationalCanary:
-        functionalOperationalCanaryOptions);
-
-    Console.WriteLine();
-    Console.WriteLine(
-        "Execução do benchmark FAST com anomalias concluída."
-    );
-
+        functionalOperationalCanaryOptions))
+{
     return;
 }
+
 
 if (executarAvaliacaoImpactoDeadband)
 {
