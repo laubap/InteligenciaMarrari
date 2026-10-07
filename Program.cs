@@ -19,6 +19,7 @@ using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
 using IAApi.Benchmark.ExperimentalAnomalyDecisions;
 using IAApi.Benchmark.Multivariate;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
+using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 
 var persistenceTemporalExperiment = args.Any(argumento =>

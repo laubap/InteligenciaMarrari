@@ -1,6 +1,6 @@
 using IAApi.Services.AnomalyDetection;
 
-namespace IAApi.Benchmark.RegimeShadow.DualBaseline;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 public enum DualBaselineReadiness { NotReady, Ready }
 public enum DualStatisticalState { NotReady, Normal, Abnormal }

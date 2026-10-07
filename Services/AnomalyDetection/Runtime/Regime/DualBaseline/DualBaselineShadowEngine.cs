@@ -1,7 +1,7 @@
 using IAApi.RegimePolicy;
 using IAApi.Services.AnomalyDetection;
 
-namespace IAApi.Benchmark.RegimeShadow.DualBaseline;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 /// <summary>
 /// Motor observacional coverage-aware. Nao promove regimes e nao altera o

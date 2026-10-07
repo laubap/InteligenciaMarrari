@@ -1,6 +1,6 @@
 using IAApi.Services.AnomalyDetection;
 
-namespace IAApi.Benchmark.RegimeShadow.DualBaseline;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 public static class DualBaselineMath
 {

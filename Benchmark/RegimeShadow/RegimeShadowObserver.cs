@@ -6,6 +6,7 @@ using IAApi.Benchmark.ExperimentalIncidents;
 using IAApi.Benchmark.ExperimentalAnomalyDecisions;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.Evidence;
+using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 namespace IAApi.Benchmark.RegimeShadow;
 

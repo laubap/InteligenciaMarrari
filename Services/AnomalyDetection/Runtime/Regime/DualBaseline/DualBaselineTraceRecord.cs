@@ -1,4 +1,4 @@
-namespace IAApi.Benchmark.RegimeShadow.DualBaseline;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 public sealed record DualBaselineTraceRecord
 {

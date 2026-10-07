@@ -1,5 +1,4 @@
 ﻿using IAApi.Benchmark.ExperimentalIncidents;
-using IAApi.Benchmark.RegimeShadow.DualBaseline;
 using IAApi.Benchmark.RegimeShadow.DualBaseline.DecisionCounterfactual;
 using IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
 using IAApi.RegimePolicy;
@@ -7,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.Evidence;
+using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 namespace IAApi.Services.AnomalyDetection.Runtime;
 

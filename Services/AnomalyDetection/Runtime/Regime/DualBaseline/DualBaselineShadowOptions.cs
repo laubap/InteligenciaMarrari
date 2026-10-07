@@ -1,6 +1,6 @@
 using IAApi.Services.AnomalyDetection;
 
-namespace IAApi.Benchmark.RegimeShadow.DualBaseline;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
 
 /// <summary>
 /// Configuracao exclusivamente observacional do experimento B3.5.1.
