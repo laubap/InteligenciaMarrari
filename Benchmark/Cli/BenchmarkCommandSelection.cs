@@ -3,6 +3,13 @@ namespace IAApi.Benchmark.Cli;
 public sealed record BenchmarkCommandSelection
 {
     public bool PersistenceTemporalExperiment { get; init; }
+    public bool FunctionalExperimentalAnomalyDecisionEnabled { get; init; }
+    public bool FunctionalOperationalCanaryEnabled { get; init; }
+
+    public HashSet<string> FunctionalOperationalCanaryTags { get; init; } =
+        new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<int> FunctionalOperationalCanaryWindows { get; init; } =
+        [];
 
     public bool ExecutarTesteGrupos { get; init; }
     public bool ExecutarTesteBufferMultivariado { get; init; }
@@ -73,8 +80,53 @@ public sealed record BenchmarkCommandSelection
             IndexOf(args, "--evaluate-functional-oracle");
         var indiceEvaluateClean = IndexOf(args, "--evaluate-clean");
 
+        var functionalOperationalCanaryTags =
+    args
+        .Where(argumento =>
+            argumento.StartsWith(
+                "--functional-operational-canary-tag=",
+                StringComparison.OrdinalIgnoreCase))
+        .Select(argumento =>
+            argumento[
+                "--functional-operational-canary-tag=".Length..])
+        .Where(tag =>
+            !string.IsNullOrWhiteSpace(tag))
+        .ToHashSet(
+            StringComparer.OrdinalIgnoreCase);
+
+var functionalOperationalCanaryWindows =
+    args
+        .Where(argumento =>
+            argumento.StartsWith(
+                "--functional-operational-canary-window=",
+                StringComparison.OrdinalIgnoreCase))
+        .Select(argumento =>
+            argumento[
+                "--functional-operational-canary-window=".Length..])
+        .Select(valor =>
+            int.TryParse(valor, out var janela)
+                ? janela
+                : (int?)null)
+        .Where(janela =>
+            janela.HasValue)
+        .Select(janela =>
+            janela!.Value)
+        .ToHashSet();
+
         return new BenchmarkCommandSelection
         {
+
+    FunctionalExperimentalAnomalyDecisionEnabled =
+        Has(args, "--functional-experimental-anomaly-decision"),
+
+    FunctionalOperationalCanaryEnabled =
+        Has(args, "--functional-operational-canary"),
+
+    FunctionalOperationalCanaryTags =
+        functionalOperationalCanaryTags,
+
+    FunctionalOperationalCanaryWindows =
+        functionalOperationalCanaryWindows,
             PersistenceTemporalExperiment =
                 Has(args, "--experimental-persistence-temporal-confirmation"),
 

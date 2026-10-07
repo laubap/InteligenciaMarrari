@@ -571,47 +571,16 @@ if (IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions.Parse(args
     ExperimentalAnomalyDecisionOptions.Parse(args);
 
 var functionalExperimentalAnomalyDecisionEnabled =
-    args.Contains(
-        "--functional-experimental-anomaly-decision",
-        StringComparer.OrdinalIgnoreCase);
+    commandSelection.FunctionalExperimentalAnomalyDecisionEnabled;
 
 var functionalOperationalCanaryEnabled =
-    args.Contains(
-        "--functional-operational-canary",
-        StringComparer.OrdinalIgnoreCase);
+    commandSelection.FunctionalOperationalCanaryEnabled;
 
 var functionalOperationalCanaryTags =
-    args
-        .Where(argumento =>
-            argumento.StartsWith(
-                "--functional-operational-canary-tag=",
-                StringComparison.OrdinalIgnoreCase))
-        .Select(argumento =>
-            argumento[
-                "--functional-operational-canary-tag=".Length..])
-        .Where(tag =>
-            !string.IsNullOrWhiteSpace(tag))
-        .ToHashSet(
-            StringComparer.OrdinalIgnoreCase);
+    commandSelection.FunctionalOperationalCanaryTags;
 
 var functionalOperationalCanaryWindows =
-    args
-        .Where(argumento =>
-            argumento.StartsWith(
-                "--functional-operational-canary-window=",
-                StringComparison.OrdinalIgnoreCase))
-        .Select(argumento =>
-            argumento[
-                "--functional-operational-canary-window=".Length..])
-        .Select(valor =>
-            int.TryParse(valor, out var janela)
-                ? janela
-                : (int?)null)
-        .Where(janela =>
-            janela.HasValue)
-        .Select(janela =>
-            janela!.Value)
-        .ToHashSet();
+    commandSelection.FunctionalOperationalCanaryWindows;
 
 var functionalOperationalCanaryOptions =
     new FunctionalOperationalCanaryOptions
