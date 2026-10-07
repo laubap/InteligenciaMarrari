@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using IAApi.Benchmark.ExperimentalIncidents;
-using IAApi.Benchmark.RegimeShadow;
 using IAApi.Benchmark.RegimeShadow.DualBaseline;
 using IAApi.RegimePolicy;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
