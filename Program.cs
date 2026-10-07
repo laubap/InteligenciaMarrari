@@ -576,9 +576,6 @@ if (functionalValidationMessages.Length > 0)
 var executarAnaliseCausaRaiz =
     commandSelection.ExecutarAnaliseCausaRaiz;
 
-var executarFamilyConsensusReport =
-    commandSelection.ExecutarFamilyConsensusReport;
-
 var executarConfidenceBenchmark =
     commandSelection.ExecutarConfidenceBenchmark;
 
@@ -700,31 +697,11 @@ if (await BenchmarkAdaptiveEnsembleCommandExecutor.TryExecuteAsync(
     return;
 }
 
-if (executarFamilyConsensusReport)
+if (await BenchmarkFamilyConsensusCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
+        benchmarkOptions))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo Family Consensus Report."
-    );
-
-    var diretorioResultados =
-        Path.IsPathRooted(
-            benchmarkOptions.ResultDirectory)
-            ? benchmarkOptions.ResultDirectory
-            : Path.Combine(
-                Directory.GetCurrentDirectory(),
-                benchmarkOptions.ResultDirectory);
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var report =
-        scope.ServiceProvider
-            .GetRequiredService<FamilyConsensusReport>();
-
-    await report.RunAsync(
-        diretorioResultados);
-
     return;
 }
 
