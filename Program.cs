@@ -573,18 +573,15 @@ if (functionalValidationMessages.Length > 0)
     return;
 }
 
-var executarAnaliseCausaRaiz =
-    commandSelection.ExecutarAnaliseCausaRaiz;
+var modeSelectionValidationMessage =
+    BenchmarkCommandValidator.ValidateModeSelection(
+        commandSelection);
 
-var quantidadeModosSelecionados =
-    commandSelection.QuantidadeModosSelecionados;
-
-if (quantidadeModosSelecionados > 1)
+if (modeSelectionValidationMessage is not null)
 {
     Console.WriteLine();
     Console.WriteLine(
-        "Use apenas um modo por execução: --benchmark, --benchmark-clean, --benchmark-fast, --benchmark-clean-fast, --evaluate, --evaluate-functional-oracle, --evaluate-clean, --investigate-clean-all, --test-groups, --test-multivariate-buffer, --test-multivariate-dataset, --evaluate-deadband-impact, --test-multivariate-detector, --analyze-results, --analyze-detector-sensitivity, --adaptive-ensemble-lab, --family-consensus-report, --confidence-benchmark ou --train-multivariate."
-    );
+        modeSelectionValidationMessage);
 
     return;
 }

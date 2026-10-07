@@ -143,4 +143,23 @@ public static class BenchmarkCommandValidator
 
     return [];
 }
+
+public static string? ValidateModeSelection(
+    BenchmarkCommandSelection commandSelection)
+{
+    if (commandSelection.QuantidadeModosSelecionados <= 1)
+        return null;
+
+    return
+        "Use apenas um modo por execução: " +
+        "--benchmark, --benchmark-clean, --benchmark-fast, " +
+        "--benchmark-clean-fast, --evaluate, " +
+        "--evaluate-functional-oracle, --evaluate-clean, " +
+        "--investigate-clean-all, --test-groups, " +
+        "--test-multivariate-buffer, --test-multivariate-dataset, " +
+        "--evaluate-deadband-impact, --test-multivariate-detector, " +
+        "--analyze-results, --analyze-detector-sensitivity, " +
+        "--adaptive-ensemble-lab, --family-consensus-report, " +
+        "--confidence-benchmark ou --train-multivariate.";
+}
 }
