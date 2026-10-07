@@ -20,31 +20,18 @@ using IAApi.Benchmark.ExperimentalAnomalyDecisions;
 using IAApi.Benchmark.Multivariate;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
 using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
+using IAApi.Benchmark.Cli;
 
 
-var persistenceTemporalExperiment = args.Any(argumento =>
-    string.Equals(argumento,
-        "--experimental-persistence-temporal-confirmation",
-        StringComparison.OrdinalIgnoreCase));
+var commandSelection = BenchmarkCommandSelection.Parse(args);
+
+var persistenceTemporalExperiment =
+    commandSelection.PersistenceTemporalExperiment;
+
+var usarGruposMultivariadosDoBenchmark =
+    commandSelection.UsarGruposMultivariadosDoBenchmark;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// B3.24.2 / MV04
-// Execução operacional: os grupos multivariados são carregados do banco,
-// permitindo configuração por cliente/tenant.
-// Modos explícitos de laboratório/benchmark continuam usando o JSON histórico
-// para preservar a reprodutibilidade dos cenários de teste e benchmark.
-var usarGruposMultivariadosDoBenchmark =
-    args.Any(argumento =>
-        string.Equals(argumento, "--benchmark", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--benchmark-clean", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--benchmark-fast", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--benchmark-clean-fast", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--test-groups", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--test-multivariate-buffer", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--test-multivariate-dataset", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--test-multivariate-detector", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(argumento, "--train-multivariate", StringComparison.OrdinalIgnoreCase));
 
 if (persistenceTemporalExperiment)
 {
@@ -261,14 +248,8 @@ var benchmarkOptions =
         "Não foi possível carregar a configuração Benchmark."
     );
 
-    var executarAdaptiveEnsembleLab =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--adaptive-ensemble-lab",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+var executarAdaptiveEnsembleLab =
+    commandSelection.ExecutarAdaptiveEnsembleLab;
 
     Console.WriteLine(
     $"CleanDatabasePath carregado: " +
@@ -535,85 +516,31 @@ if (experimentalIncidentApiOptions.Enabled &&
 }
 
 var executarTesteGrupos =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--test-groups",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarTesteGrupos;
 
 var executarTesteBufferMultivariado =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--test-multivariate-buffer",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarTesteBufferMultivariado;
 
 var executarTesteDatasetMultivariado =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--test-multivariate-dataset",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarTesteDatasetMultivariado;
 
 var executarTesteDetectorMultivariado =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--test-multivariate-detector",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarTesteDetectorMultivariado;
 
 var executarTreinamentoMultivariado =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--train-multivariate",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarTreinamentoMultivariado;
 
 var executarBenchmark =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--benchmark",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarBenchmark;
 
 var executarBenchmarkClean =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--benchmark-clean",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarBenchmarkClean;
 
 var executarBenchmarkFast =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--benchmark-fast",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarBenchmarkFast;
 
 var executarBenchmarkCleanFast =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--benchmark-clean-fast",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarBenchmarkCleanFast;
 
 var baselineDiagnosticOptions =
     BaselineDiagnosticOptions.Parse(args);
@@ -805,125 +732,47 @@ if (persistenceTemporalExperiment &&
         "com --benchmark-fast ou --benchmark-clean-fast.");
 }
 
-var indiceEvaluate = Array.FindIndex(
-    args,
-    argumento => string.Equals(
-        argumento,
-        "--evaluate",
-        StringComparison.OrdinalIgnoreCase
-    )
-);
+var indiceEvaluate =
+    commandSelection.IndiceEvaluate;
 
-var executarAvaliacao = indiceEvaluate >= 0;
+var executarAvaliacao =
+    commandSelection.ExecutarAvaliacao;
 
-var indiceEvaluateFunctionalOracle = Array.FindIndex(
-    args,
-    argumento => string.Equals(
-        argumento,
-        "--evaluate-functional-oracle",
-        StringComparison.OrdinalIgnoreCase
-    )
-);
+var indiceEvaluateFunctionalOracle =
+    commandSelection.IndiceEvaluateFunctionalOracle;
 
 var executarAvaliacaoFunctionalOracle =
-    indiceEvaluateFunctionalOracle >= 0;
+    commandSelection.ExecutarAvaliacaoFunctionalOracle;
 
-var indiceEvaluateClean = Array.FindIndex(
-    args,
-    argumento => string.Equals(
-        argumento,
-        "--evaluate-clean",
-        StringComparison.OrdinalIgnoreCase
-    )
-);
+var indiceEvaluateClean =
+    commandSelection.IndiceEvaluateClean;
 
 var executarAvaliacaoClean =
-    indiceEvaluateClean >= 0;
+    commandSelection.ExecutarAvaliacaoClean;
 
 var executarInvestigacaoCleanAll =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--investigate-clean-all",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarInvestigacaoCleanAll;
 
-    var executarAvaliacaoImpactoDeadband =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--evaluate-deadband-impact",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+var executarAvaliacaoImpactoDeadband =
+    commandSelection.ExecutarAvaliacaoImpactoDeadband;
 
-    var executarAnaliseCausaRaiz =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--analyze-false-positive-causes",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+var executarAnaliseCausaRaiz =
+    commandSelection.ExecutarAnaliseCausaRaiz;
 
-    var executarAnaliseResultados =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--analyze-results",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+var executarAnaliseResultados =
+    commandSelection.ExecutarAnaliseResultados;
 
 var executarAnaliseSensibilidadeDetectores =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--analyze-detector-sensitivity",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+    commandSelection.ExecutarAnaliseSensibilidadeDetectores;
 
-    var executarFamilyConsensusReport =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--family-consensus-report",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+var executarFamilyConsensusReport =
+    commandSelection.ExecutarFamilyConsensusReport;
 
-    var executarConfidenceBenchmark =
-    args.Any(argumento =>
-        string.Equals(
-            argumento,
-            "--confidence-benchmark",
-            StringComparison.OrdinalIgnoreCase
-        )
-    );
+var executarConfidenceBenchmark =
+    commandSelection.ExecutarConfidenceBenchmark;
 
 var quantidadeModosSelecionados =
-    (executarBenchmark ? 1 : 0) +
-    (executarBenchmarkClean ? 1 : 0) +
-    (executarBenchmarkFast ? 1 : 0) +
-    (executarBenchmarkCleanFast ? 1 : 0) +
-    (executarAvaliacao ? 1 : 0) +
-    (executarAvaliacaoFunctionalOracle ? 1 : 0) +
-    (executarAvaliacaoClean ? 1 : 0) +
-    (executarInvestigacaoCleanAll ? 1 : 0) +
-    (executarTesteGrupos ? 1 : 0) +
-    (executarTesteBufferMultivariado ? 1 : 0) +
-    (executarTesteDatasetMultivariado ? 1 : 0) +
-    (executarTesteDetectorMultivariado ? 1 : 0) +
-    (executarAvaliacaoImpactoDeadband ? 1 : 0) +
-    (executarAnaliseCausaRaiz ? 1 : 0) +
-    (executarAnaliseResultados ? 1 : 0) +
-    (executarAnaliseSensibilidadeDetectores ? 1 : 0) +
-    (executarAdaptiveEnsembleLab ? 1 : 0) +
-    (executarFamilyConsensusReport ? 1 : 0) +
-    (executarConfidenceBenchmark ? 1 : 0) +
-    (executarTreinamentoMultivariado ? 1 : 0);
+    commandSelection.QuantidadeModosSelecionados;
 
 if (quantidadeModosSelecionados > 1)
 {
