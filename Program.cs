@@ -699,54 +699,10 @@ if (await BenchmarkUtilityCommandExecutor.TryExecuteAsync(
     return;
 }
 
-if (executarBenchmark)
+if (await BenchmarkRunCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo benchmark."
-    );
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var runner =
-        scope.ServiceProvider
-            .GetRequiredService<
-                BenchmarkRunner>();
-
-    await runner.ExecutarAsync();
-
-    Console.WriteLine();
-    Console.WriteLine(
-        "Execução do benchmark concluída."
-    );
-
-    return;
-}
-
-if (executarBenchmarkClean)
-{
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo benchmark do banco limpo."
-    );
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var runner =
-        scope.ServiceProvider
-            .GetRequiredService<
-                BenchmarkRunner>();
-
-    await runner.ExecutarAsync(
-        bancoLimpo: true);
-
-    Console.WriteLine();
-    Console.WriteLine(
-        "Execução do benchmark limpo concluída."
-    );
-
     return;
 }
 
