@@ -602,38 +602,17 @@ BenchmarkCommandValidator.Validate(
     experimentalIncidentOptions,
     experimentalAnomalyDecisionOptions);
 
-if (functionalExperimentalAnomalyDecisionEnabled &&
-    !experimentalAnomalyDecisionOptions.Enabled)
+var functionalValidationMessages =
+    BenchmarkCommandValidator.ValidateFunctional(
+        commandSelection,
+        experimentalAnomalyDecisionOptions);
+
+if (functionalValidationMessages.Length > 0)
 {
-    Console.WriteLine(
-        "ERRO: --functional-experimental-anomaly-decision requer " +
-        "--experimental-anomaly-decision.");
-
-    return;
-}
-
-if (functionalOperationalCanaryEnabled &&
-    !functionalExperimentalAnomalyDecisionEnabled)
-{
-    Console.WriteLine(
-        "ERRO: --functional-operational-canary requer " +
-        "--functional-experimental-anomaly-decision.");
-
-    return;
-}
-
-if (functionalOperationalCanaryEnabled &&
-    (functionalOperationalCanaryTags.Count == 0 ||
-     functionalOperationalCanaryWindows.Count == 0))
-{
-    Console.WriteLine(
-        "ERRO: o canário operacional exige pelo menos uma tag e " +
-        "uma janela FAST explícitas.");
-
-    Console.WriteLine(
-        "Exemplo: --functional-operational-canary " +
-        "--functional-operational-canary-window=1 " +
-        "--functional-operational-canary-tag=WEATHER.COOLING_DEGREE_INDEX");
+    foreach (var message in functionalValidationMessages)
+    {
+        Console.WriteLine(message);
+    }
 
     return;
 }

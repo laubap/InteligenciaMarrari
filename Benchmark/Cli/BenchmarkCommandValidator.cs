@@ -101,4 +101,46 @@ public static class BenchmarkCommandValidator
                 "com --benchmark-fast ou --benchmark-clean-fast.");
         }
     }
+
+    public static string[] ValidateFunctional(
+    BenchmarkCommandSelection commandSelection,
+    ExperimentalAnomalyDecisionOptions experimentalAnomalyDecisionOptions)
+{
+    if (commandSelection.FunctionalExperimentalAnomalyDecisionEnabled &&
+        !experimentalAnomalyDecisionOptions.Enabled)
+    {
+        return
+        [
+            "ERRO: --functional-experimental-anomaly-decision requer " +
+            "--experimental-anomaly-decision."
+        ];
+    }
+
+    if (commandSelection.FunctionalOperationalCanaryEnabled &&
+        !commandSelection.FunctionalExperimentalAnomalyDecisionEnabled)
+    {
+        return
+        [
+            "ERRO: --functional-operational-canary requer " +
+            "--functional-experimental-anomaly-decision."
+        ];
+    }
+
+    if (commandSelection.FunctionalOperationalCanaryEnabled &&
+        (commandSelection.FunctionalOperationalCanaryTags.Count == 0 ||
+         commandSelection.FunctionalOperationalCanaryWindows.Count == 0))
+    {
+        return
+        [
+            "ERRO: o canário operacional exige pelo menos uma tag e " +
+            "uma janela FAST explícitas.",
+
+            "Exemplo: --functional-operational-canary " +
+            "--functional-operational-canary-window=1 " +
+            "--functional-operational-canary-tag=WEATHER.COOLING_DEGREE_INDEX"
+        ];
+    }
+
+    return [];
+}
 }
