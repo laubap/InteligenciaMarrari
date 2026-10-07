@@ -579,9 +579,6 @@ if (functionalValidationMessages.Length > 0)
 var executarAnaliseCausaRaiz =
     commandSelection.ExecutarAnaliseCausaRaiz;
 
-var executarAnaliseResultados =
-    commandSelection.ExecutarAnaliseResultados;
-
 var executarFamilyConsensusReport =
     commandSelection.ExecutarFamilyConsensusReport;
 
@@ -690,34 +687,13 @@ app.UseCors("FrontendCors");
 
 app.MapControllers();
 
-if (executarAnaliseResultados)
+if (await BenchmarkResultsAnalysisCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
+        benchmarkOptions))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo de análise da pasta Results."
-    );
-
-    var diretorioResultados =
-        Path.IsPathRooted(
-            benchmarkOptions.ResultDirectory)
-            ? benchmarkOptions.ResultDirectory
-            : Path.Combine(
-                Directory.GetCurrentDirectory(),
-                benchmarkOptions.ResultDirectory);
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var analyzer =
-        scope.ServiceProvider
-            .GetRequiredService<ResultsAnalyzer>();
-
-    await analyzer.AnalyzeAsync(
-        diretorioResultados);
-
     return;
 }
-
 
 if (executarAdaptiveEnsembleLab)
 {
