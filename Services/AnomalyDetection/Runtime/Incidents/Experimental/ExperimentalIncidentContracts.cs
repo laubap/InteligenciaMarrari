@@ -2,7 +2,7 @@ using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 using IAApi.Services.AnomalyDetection;
 using System.Text.Json.Serialization;
 
-namespace IAApi.Benchmark.ExperimentalIncidents;
+namespace IAApi.Services.AnomalyDetection.Runtime.Incidents.Experimental;
 
 public sealed record ExperimentalDetectorSnapshot(
     bool FinalAnomaly, double Score, IReadOnlyList<string> AnomalousDetectors);
