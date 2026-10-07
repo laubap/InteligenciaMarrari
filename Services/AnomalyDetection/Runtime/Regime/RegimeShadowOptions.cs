@@ -1,6 +1,7 @@
 using System.Globalization;
 
-namespace IAApi.Benchmark.RegimeShadow;
+
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime;
 
 /// <summary>ParÃ¢metros exclusivamente experimentais do Shadow Mode.</summary>
 public sealed record RegimeShadowOptions

@@ -10,6 +10,7 @@ using IAApi.Benchmark.ExperimentalIncidents;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Benchmark.ExperimentalAnomalyDecisions;
+using IAApi.Services.AnomalyDetection.Runtime.Regime;
 
 namespace IAApi.Benchmark;
 
