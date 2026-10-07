@@ -244,9 +244,6 @@ var benchmarkOptions =
         "Não foi possível carregar a configuração Benchmark."
     );
 
-var executarAdaptiveEnsembleLab =
-    commandSelection.ExecutarAdaptiveEnsembleLab;
-
     Console.WriteLine(
     $"CleanDatabasePath carregado: " +
     $"{benchmarkOptions.CleanDatabasePath}"
@@ -695,32 +692,11 @@ if (await BenchmarkResultsAnalysisCommandExecutor.TryExecuteAsync(
     return;
 }
 
-if (executarAdaptiveEnsembleLab)
+if (await BenchmarkAdaptiveEnsembleCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
+        benchmarkOptions))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo Adaptive Ensemble Laboratory."
-    );
-
-    var diretorioResultados =
-        Path.IsPathRooted(
-            benchmarkOptions.ResultDirectory)
-            ? benchmarkOptions.ResultDirectory
-            : Path.Combine(
-                Directory.GetCurrentDirectory(),
-                benchmarkOptions.ResultDirectory);
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var laboratory =
-        scope.ServiceProvider
-            .GetRequiredService<
-                AdaptiveEnsembleLaboratory>();
-
-    await laboratory.RunAsync(
-        diretorioResultados);
-
     return;
 }
 
