@@ -12,7 +12,6 @@ using IAApi.Benchmark.BehaviorProfiles;
 using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Benchmark.Diagnostics;
 using IAApi.Benchmark.RegimeShadow;
-using IAApi.Benchmark.RegimeShadow.DualBaseline;
 using IAApi.Benchmark.PersistenceCounterfactual;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
@@ -593,54 +592,15 @@ var functionalOperationalCanaryOptions =
             functionalOperationalCanaryWindows
     };
 
-if (baselineDiagnosticOptions.Enabled &&
-    !executarBenchmarkCleanFast)
-{
-    throw new InvalidOperationException(
-        "--b2-baseline-diagnostics só pode ser usado com " +
-        "--benchmark-clean-fast.");
-}
-
-if (regimeShadowOptions.Enabled && !executarBenchmarkCleanFast &&
-    !(regimeShadowOptions.DecisionCounterfactualEnabled && executarBenchmarkFast))
-    throw new InvalidOperationException("--regime-shadow só pode ser usado com --benchmark-clean-fast.");
-
-if (dualBaselineShadowOptions.Enabled &&
-    (!regimeShadowOptions.Enabled ||
-     (!dualBaselineShadowOptions.DecisionCounterfactualEnabled &&
-      (!executarBenchmarkCleanFast ||
-       !regimeShadowOptions.Tags.Contains(DualBaselineShadowOptions.ReferenceTag))) ||
-     (dualBaselineShadowOptions.DecisionCounterfactualEnabled &&
-      !executarBenchmarkCleanFast && !executarBenchmarkFast)))
-{
-    throw new InvalidOperationException(
-        "--dual-baseline-shadow exige --benchmark-clean-fast --regime-shadow " +
-        "--regime-shadow-tags=DRYCHAMBER04.MATERIAL_TEMPERATURE.");
-}
-
-if (experimentalAnomalyDecisionOptions.Enabled &&
-    (!executarBenchmarkCleanFast && !executarBenchmarkFast))
-{
-    throw new InvalidOperationException(
-        "--experimental-anomaly-decision só pode ser usado com " +
-        "--benchmark-clean-fast ou --benchmark-fast.");
-}
-
-if (experimentalAnomalyDecisionOptions.Enabled &&
-    !dualBaselineShadowOptions.DecisionCounterfactualEnabled)
-{
-    throw new InvalidOperationException(
-        "--experimental-anomaly-decision exige o " +
-        "--dual-baseline-decision-counterfactual.");
-}
-
-if (experimentalAnomalyDecisionOptions.Enabled &&
-    !experimentalIncidentOptions.Enabled)
-{
-    throw new InvalidOperationException(
-        "--experimental-anomaly-decision exige " +
-        "--experimental-incident-layer.");
-}
+BenchmarkCommandValidator.Validate(
+    commandSelection,
+    baselineDiagnosticOptions,
+    regimeShadowOptions,
+    dualBaselineShadowOptions,
+    behaviorProfileObservabilityOptions,
+    persistenceCounterfactualOptions,
+    experimentalIncidentOptions,
+    experimentalAnomalyDecisionOptions);
 
 if (functionalExperimentalAnomalyDecisionEnabled &&
     !experimentalAnomalyDecisionOptions.Enabled)
