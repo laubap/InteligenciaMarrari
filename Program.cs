@@ -594,9 +594,6 @@ var indiceEvaluateClean =
 var executarAvaliacaoClean =
     commandSelection.ExecutarAvaliacaoClean;
 
-var executarInvestigacaoCleanAll =
-    commandSelection.ExecutarInvestigacaoCleanAll;
-
 var executarAnaliseCausaRaiz =
     commandSelection.ExecutarAnaliseCausaRaiz;
 
@@ -662,62 +659,11 @@ if (await BenchmarkDeadbandImpactCommandExecutor.TryExecuteAsync(
     return;
 }
 
-if (executarInvestigacaoCleanAll)
+if (await BenchmarkCleanInvestigationCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
+        benchmarkOptions))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo de investigação completa do banco limpo."
-    );
-
-    var diretorioProjeto =
-        Directory.GetCurrentDirectory();
-
-    var diretorioResultados =
-        Path.Combine(
-            diretorioProjeto,
-            "Results"
-        );
-
-    if (!Directory.Exists(
-            diretorioResultados))
-    {
-        throw new DirectoryNotFoundException(
-            $"Diretório de resultados não encontrado: " +
-            $"{diretorioResultados}"
-        );
-    }
-
-    var arquivoDeteccoes =
-        new DirectoryInfo(
-            diretorioResultados)
-            .GetFiles(
-                "clean_detections_*.jsonl")
-            .OrderByDescending(
-                arquivo =>
-                    arquivo.LastWriteTimeUtc)
-            .FirstOrDefault();
-
-    if (arquivoDeteccoes is null)
-    {
-        throw new FileNotFoundException(
-            "Nenhum arquivo clean_detections_*.jsonl foi encontrado."
-        );
-    }
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var investigator =
-        scope.ServiceProvider
-            .GetRequiredService<
-                CalibrationAllInvestigator>();
-
-    await investigator.InvestigateAllAsync(
-        benchmarkOptions.CleanDatabasePath,
-        arquivoDeteccoes.FullName,
-        diretorioResultados
-    );
-
     return;
 }
 
