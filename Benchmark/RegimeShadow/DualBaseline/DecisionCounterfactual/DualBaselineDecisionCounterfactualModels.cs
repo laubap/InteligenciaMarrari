@@ -1,16 +1,5 @@
 namespace IAApi.Benchmark.RegimeShadow.DualBaseline.DecisionCounterfactual;
-
-public enum DualBaselineDecisionClassification
-{
-    LegacyNormal,
-    LegacyAnomaly,
-    StableUnresolvedDeviationStart,
-    StableUnresolvedDeviationContinuation,
-    CandidateMismatch,
-    ResolvedOrReturnedToActive,
-    NotEligible,
-    CandidateRejectedStillOutsideActive
-}
+using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline.Decision;
 
 public sealed record DualBaselineDecisionRecord(
     int FastWindow, long MinuteIndex, DateTime Timestamp, string Tag,

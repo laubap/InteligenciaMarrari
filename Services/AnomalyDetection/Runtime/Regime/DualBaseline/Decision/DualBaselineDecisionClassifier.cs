@@ -1,5 +1,5 @@
 using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline;
-namespace IAApi.Benchmark.RegimeShadow.DualBaseline.DecisionCounterfactual;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline.Decision;
 
 public static class DualBaselineDecisionClassifier
 {
