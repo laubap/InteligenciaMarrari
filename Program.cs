@@ -24,15 +24,12 @@ using IAApi.Benchmark.Cli;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
-var persistenceTemporalExperiment =
-    commandSelection.PersistenceTemporalExperiment;
-
 var usarGruposMultivariadosDoBenchmark =
     commandSelection.UsarGruposMultivariadosDoBenchmark;
 
 var builder = WebApplication.CreateBuilder(args);
 
-if (persistenceTemporalExperiment)
+if (commandSelection.PersistenceTemporalExperiment)
 {
     builder.Configuration[
         "AnomalyDetection:ExperimentalPersistenceTemporalConfirmationEnabled"] = "true";
@@ -514,32 +511,6 @@ if (experimentalIncidentApiOptions.Enabled &&
     }
 }
 
-var executarTesteGrupos =
-    commandSelection.ExecutarTesteGrupos;
-
-var executarTesteBufferMultivariado =
-    commandSelection.ExecutarTesteBufferMultivariado;
-
-var executarTesteDatasetMultivariado =
-    commandSelection.ExecutarTesteDatasetMultivariado;
-
-var executarTesteDetectorMultivariado =
-    commandSelection.ExecutarTesteDetectorMultivariado;
-
-var executarTreinamentoMultivariado =
-    commandSelection.ExecutarTreinamentoMultivariado;
-
-var executarBenchmark =
-    commandSelection.ExecutarBenchmark;
-
-var executarBenchmarkClean =
-    commandSelection.ExecutarBenchmarkClean;
-
-var executarBenchmarkFast =
-    commandSelection.ExecutarBenchmarkFast;
-
-var executarBenchmarkCleanFast =
-    commandSelection.ExecutarBenchmarkCleanFast;
 
 var baselineDiagnosticOptions =
     BaselineDiagnosticOptions.Parse(args);
@@ -569,27 +540,15 @@ if (IAApi.Benchmark.ExperimentalIncidents.ExperimentalIncidentOptions.Parse(args
     var experimentalAnomalyDecisionOptions =
     ExperimentalAnomalyDecisionOptions.Parse(args);
 
-var functionalExperimentalAnomalyDecisionEnabled =
-    commandSelection.FunctionalExperimentalAnomalyDecisionEnabled;
-
-var functionalOperationalCanaryEnabled =
-    commandSelection.FunctionalOperationalCanaryEnabled;
-
-var functionalOperationalCanaryTags =
-    commandSelection.FunctionalOperationalCanaryTags;
-
-var functionalOperationalCanaryWindows =
-    commandSelection.FunctionalOperationalCanaryWindows;
-
 var functionalOperationalCanaryOptions =
     new FunctionalOperationalCanaryOptions
     {
         Enabled =
-            functionalOperationalCanaryEnabled,
+            commandSelection.FunctionalOperationalCanaryEnabled,
         AllowedTags =
-            functionalOperationalCanaryTags,
+            commandSelection.FunctionalOperationalCanaryTags,
         AllowedFastWindows =
-            functionalOperationalCanaryWindows
+            commandSelection.FunctionalOperationalCanaryWindows
     };
 
 BenchmarkCommandValidator.Validate(
@@ -615,29 +574,6 @@ if (functionalValidationMessages.Length > 0)
     }
 
     return;
-}
-
-if (behaviorProfileObservabilityOptions.Enabled &&
-    !executarBenchmarkCleanFast)
-{
-    throw new InvalidOperationException(
-        "--tag-profile-observability so pode ser usado com " +
-        "--benchmark-clean-fast.");
-}
-
-if (persistenceCounterfactualOptions.Enabled && !executarBenchmarkFast)
-{
-    throw new InvalidOperationException(
-        "--persistence-counterfactual so pode ser usado com --benchmark-fast.");
-}
-
-if (persistenceTemporalExperiment &&
-    !executarBenchmarkFast &&
-    !executarBenchmarkCleanFast)
-{
-    throw new InvalidOperationException(
-        "--experimental-persistence-temporal-confirmation so pode ser usado " +
-        "com --benchmark-fast ou --benchmark-clean-fast.");
 }
 
 var indiceEvaluate =
