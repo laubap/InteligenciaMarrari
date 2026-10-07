@@ -1,7 +1,7 @@
 using IAApi.RegimePolicy;
 using IAApi.Services.AnomalyDetection.Runtime.Regime;
 
-namespace IAApi.Benchmark.RegimeShadow;
+namespace IAApi.Services.AnomalyDetection.Runtime.Regime;
 
 public sealed record RegimeShadowLifecycleResult(
     CandidateEvidenceState NextCandidateState,
