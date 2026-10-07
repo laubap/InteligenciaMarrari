@@ -576,9 +576,6 @@ if (functionalValidationMessages.Length > 0)
 var executarAnaliseCausaRaiz =
     commandSelection.ExecutarAnaliseCausaRaiz;
 
-var executarConfidenceBenchmark =
-    commandSelection.ExecutarConfidenceBenchmark;
-
 var quantidadeModosSelecionados =
     commandSelection.QuantidadeModosSelecionados;
 
@@ -705,31 +702,11 @@ if (await BenchmarkFamilyConsensusCommandExecutor.TryExecuteAsync(
     return;
 }
 
-if (executarConfidenceBenchmark)
+if (await BenchmarkConfidenceCommandExecutor.TryExecuteAsync(
+        app.Services,
+        commandSelection,
+        benchmarkOptions))
 {
-    Console.WriteLine();
-    Console.WriteLine(
-        "API iniciada em modo Confidence Engine Benchmark."
-    );
-
-    var diretorioResultados =
-        Path.IsPathRooted(
-            benchmarkOptions.ResultDirectory)
-            ? benchmarkOptions.ResultDirectory
-            : Path.Combine(
-                Directory.GetCurrentDirectory(),
-                benchmarkOptions.ResultDirectory);
-
-    using var scope =
-        app.Services.CreateScope();
-
-    var runner =
-        scope.ServiceProvider
-            .GetRequiredService<ConfidenceEngineBenchmarkRunner>();
-
-    await runner.RunAsync(
-        diretorioResultados);
-
     return;
 }
 app.Run();
