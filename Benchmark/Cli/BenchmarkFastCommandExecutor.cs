@@ -133,4 +133,22 @@ public static class BenchmarkFastCommandExecutor
             $"Canary tags: " +
             $"{string.Join(", ", commandSelection.FunctionalOperationalCanaryTags.OrderBy(x => x))}");
     }
+
+    public static Task<bool> TryExecuteAsync(
+    IServiceProvider services,
+    BenchmarkCommandSelection commandSelection,
+    BenchmarkCommandContext context)
+{
+    return TryExecuteAsync(
+        services,
+        commandSelection,
+        context.BaselineDiagnosticOptions,
+        context.RegimeShadowOptions,
+        context.DualBaselineShadowOptions,
+        context.BehaviorProfileObservabilityOptions,
+        context.PersistenceCounterfactualOptions,
+        context.ExperimentalIncidentOptions,
+        context.ExperimentalAnomalyDecisionOptions,
+        context.FunctionalOperationalCanaryOptions);
+}
 }

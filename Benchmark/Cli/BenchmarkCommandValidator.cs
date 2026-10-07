@@ -162,4 +162,28 @@ public static string? ValidateModeSelection(
         "--adaptive-ensemble-lab, --family-consensus-report, " +
         "--confidence-benchmark ou --train-multivariate.";
 }
+
+public static void Validate(
+    BenchmarkCommandSelection commandSelection,
+    BenchmarkCommandContext context)
+{
+    Validate(
+        commandSelection,
+        context.BaselineDiagnosticOptions,
+        context.RegimeShadowOptions,
+        context.DualBaselineShadowOptions,
+        context.BehaviorProfileObservabilityOptions,
+        context.PersistenceCounterfactualOptions,
+        context.ExperimentalIncidentOptions,
+        context.ExperimentalAnomalyDecisionOptions);
+}
+
+public static string[] ValidateFunctional(
+    BenchmarkCommandSelection commandSelection,
+    BenchmarkCommandContext context)
+{
+    return ValidateFunctional(
+        commandSelection,
+        context.ExperimentalAnomalyDecisionOptions);
+}
 }

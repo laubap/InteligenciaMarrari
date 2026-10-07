@@ -514,44 +514,14 @@ var benchmarkCommandContext =
         builder.Configuration,
         commandSelection);
 
-var baselineDiagnosticOptions =
-    benchmarkCommandContext.BaselineDiagnosticOptions;
-
-var regimeShadowOptions =
-    benchmarkCommandContext.RegimeShadowOptions;
-
-var dualBaselineShadowOptions =
-    benchmarkCommandContext.DualBaselineShadowOptions;
-
-var behaviorProfileObservabilityOptions =
-    benchmarkCommandContext.BehaviorProfileObservabilityOptions;
-
-var persistenceCounterfactualOptions =
-    benchmarkCommandContext.PersistenceCounterfactualOptions;
-
-var experimentalIncidentOptions =
-    benchmarkCommandContext.ExperimentalIncidentOptions;
-
-var experimentalAnomalyDecisionOptions =
-    benchmarkCommandContext.ExperimentalAnomalyDecisionOptions;
-
-var functionalOperationalCanaryOptions =
-    benchmarkCommandContext.FunctionalOperationalCanaryOptions;
-
 BenchmarkCommandValidator.Validate(
     commandSelection,
-    baselineDiagnosticOptions,
-    regimeShadowOptions,
-    dualBaselineShadowOptions,
-    behaviorProfileObservabilityOptions,
-    persistenceCounterfactualOptions,
-    experimentalIncidentOptions,
-    experimentalAnomalyDecisionOptions);
+    benchmarkCommandContext);
 
 var functionalValidationMessages =
     BenchmarkCommandValidator.ValidateFunctional(
         commandSelection,
-        experimentalAnomalyDecisionOptions);
+        benchmarkCommandContext);
 
 if (functionalValidationMessages.Length > 0)
 {
@@ -593,14 +563,7 @@ if (await BenchmarkRunCommandExecutor.TryExecuteAsync(
 if (await BenchmarkFastCommandExecutor.TryExecuteAsync(
         app.Services,
         commandSelection,
-        baselineDiagnosticOptions,
-        regimeShadowOptions,
-        dualBaselineShadowOptions,
-        behaviorProfileObservabilityOptions,
-        persistenceCounterfactualOptions,
-        experimentalIncidentOptions,
-        experimentalAnomalyDecisionOptions,
-        functionalOperationalCanaryOptions))
+        benchmarkCommandContext))
 {
     return;
 }
