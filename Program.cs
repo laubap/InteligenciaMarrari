@@ -16,6 +16,7 @@ using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstr
 using IAApi.Infrastructure.Llm.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Interpretation.DependencyInjection;
 using IAApi.Services.AnomalyDetection.DependencyInjection;
+using IAApi.Services.ModelTraining.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -187,8 +188,7 @@ builder.Services.AddSingleton<
 builder.Services.AddIsolationForestServices(
     builder.Configuration);
 
-builder.Services.AddScoped<DadosTreinamentoTagService>();
-builder.Services.AddScoped<ModeloTagStatusService>();
+builder.Services.AddModelTrainingServices();
 
 // Configuração OpenAI
 builder.Services.Configure<OpenAiOptions>(
