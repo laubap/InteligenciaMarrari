@@ -14,7 +14,7 @@ using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadMod
 using IAApi.Benchmark.Multivariate;
 using IAApi.Benchmark.Cli;
 using IAApi.Benchmark.DependencyInjection;
-
+using IAApi.Services.AnomalyDetection.Multivariate.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -299,21 +299,7 @@ builder.Services.AddScoped<TagContextoIaService>();
 builder.Services.AddScoped<
     AnomalyInterpretationContextBuilder>();
 
-builder.Services.AddScoped<GrupoAnaliseService>();
-
-builder.Services.AddScoped<
-    OperationalMultivariateTrainingService>();
-
-builder.Services.AddScoped<GrupoAnaliseCadastroService>();
-
-builder.Services.AddScoped<
-    MultivariateGroupBufferService>();
-
-builder.Services.AddSingleton<
-    MultivariateRuntimeStateStore>();
-
-builder.Services.AddSingleton<
-    MultivariateModelPersistenceService>();
+builder.Services.AddOperationalMultivariateCoreServices();
 
 // B3.24.2 / MV08.2C — backtest histórico multivariado diagnóstico.
 // Somente leitura/análise; não altera modelo, runtime, readiness ou promoção.
