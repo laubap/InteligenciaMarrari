@@ -84,29 +84,9 @@ builder.Services.AddBehaviorMemoryDiscovery();
 
 builder.Services.AddHostedService<MonitoramentoTagsService>();
 builder.Services.AddSingleton<EnsembleV2Simulator>();
-builder.Services.AddSingleton<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeDecisionMetrics>();
 
-builder.Services.Configure<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeDecisionMetricsEndpointOptions>(
-    builder.Configuration.GetSection(
-        IAApi.Services.AnomalyDetection.Runtime.RuntimeDecisionMetricsEndpointOptions.SectionName)
-);
-
-builder.Services.Configure<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutReadinessOptions>(
-    builder.Configuration.GetSection(
-        IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutReadinessOptions.SectionName)
-);
-
-builder.Services.AddSingleton<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutReadinessEvaluator>();
-
-    builder.Services.AddSingleton<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotFactory>();
-
-builder.Services.AddScoped<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotService>();
+builder.Services.AddRuntimeRolloutCoreServices(
+    builder.Configuration);
 
     builder.Services.AddScoped<
     MultivariateCorrelationDiagnosticService>();
