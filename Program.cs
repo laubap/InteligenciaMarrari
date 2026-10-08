@@ -13,6 +13,7 @@ using IAApi.Benchmark.Cli;
 using IAApi.Benchmark.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Multivariate.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Confidence.DependencyInjection;
+using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -229,12 +230,8 @@ builder.Services.AddBenchmarkLaboratoryServices();
 builder.Services.AddBenchmarkMultivariateServices();
 
 // Experimental Incident API: disabled by default and strictly read-only.
-builder.Services.Configure<ExperimentalIncidentApiOptions>(
-    builder.Configuration.GetSection(ExperimentalIncidentApiOptions.SectionName));
-builder.Services.AddSingleton<IIncidentReadModelStore, InMemoryIncidentReadModelStore>();
-builder.Services.AddSingleton<IncidentReadModelSnapshotLoader>();
-builder.Services.AddSingleton<IExperimentalIncidentQueryService,
-    ExperimentalIncidentQueryService>();
+builder.Services.AddExperimentalIncidentApiServices(
+    builder.Configuration);
 
 
 // Provedor do LM Studio no servidor
