@@ -13,6 +13,7 @@ using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 using IAApi.Benchmark.Multivariate;
 using IAApi.Benchmark.Cli;
+using IAApi.Benchmark.DependencyInjection;
 
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
@@ -255,17 +256,7 @@ builder.Services.AddSingleton<SQLiteHistoricoService>(
     )
 );
 
-builder.Services.AddScoped<BenchmarkRunner>();
-builder.Services.AddSingleton<BenchmarkEvaluator>();
-builder.Services.AddSingleton<CleanBenchmarkEvaluator>();
-builder.Services.AddSingleton<CalibrationInvestigator>();
-builder.Services.AddSingleton<CalibrationAllInvestigator>();
-builder.Services.AddSingleton<DeadbandImpactEvaluator>();
-builder.Services.AddSingleton<ResultsAnalyzer>();
-builder.Services.AddSingleton<DetectorSensitivityReport>();
-builder.Services.AddSingleton<FamilyConsensusReport>();
-builder.Services.AddSingleton<
-    FalsePositiveRootCauseAnalyzer>();
+builder.Services.AddBenchmarkCoreServices();
 
 // Experimental Incident API: disabled by default and strictly read-only.
 builder.Services.Configure<ExperimentalIncidentApiOptions>(
