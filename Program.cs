@@ -7,8 +7,6 @@ using IAApi.Services;
 using IAApi.Infrastructure.Llm.Providers;
 using IAApi.Infrastructure.Llm.Configuration;
 using IAApi.Services.AnomalyDetection.Multivariate;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 using IAApi.Benchmark.Cli;
 using IAApi.Benchmark.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Multivariate.DependencyInjection;
