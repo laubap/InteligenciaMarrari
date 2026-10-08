@@ -227,34 +227,9 @@ builder.Services.Configure<LlmOptions>(
 );
 
 // Configuração do benchmark
-var benchmarkSection =
-    builder.Configuration.GetRequiredSection(
-        BenchmarkOptions.SectionName
-    );
-
 var benchmarkOptions =
-    benchmarkSection.Get<BenchmarkOptions>()
-    ?? throw new InvalidOperationException(
-        "Não foi possível carregar a configuração Benchmark."
-    );
-
-    Console.WriteLine(
-    $"CleanDatabasePath carregado: " +
-    $"{benchmarkOptions.CleanDatabasePath}"
-);
-
-Console.WriteLine(
-    $"AnomalyDatabasePath carregado: " +
-    $"{benchmarkOptions.AnomalyDatabasePath}"
-);
-
-builder.Services.AddSingleton(benchmarkOptions);
-
-builder.Services.AddSingleton<SQLiteHistoricoService>(
-    _ => new SQLiteHistoricoService(
-        benchmarkOptions.HistoryWindowSize
-    )
-);
+    builder.Services.AddBenchmarkConfiguration(
+        builder.Configuration);
 
 builder.Services.AddBenchmarkCoreServices();
 

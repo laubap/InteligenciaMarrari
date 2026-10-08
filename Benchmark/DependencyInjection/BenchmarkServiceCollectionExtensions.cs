@@ -1,5 +1,6 @@
 using IAApi.Benchmark;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 
 namespace IAApi.Benchmark.DependencyInjection;
 
@@ -24,4 +25,34 @@ public static class BenchmarkServiceCollectionExtensions
 
         return services;
     }
+
+    public static BenchmarkOptions AddBenchmarkConfiguration(
+    this IServiceCollection services,
+    IConfiguration configuration)
+{
+    var benchmarkSection =
+        configuration.GetRequiredSection(
+            BenchmarkOptions.SectionName);
+
+    var benchmarkOptions =
+        benchmarkSection.Get<BenchmarkOptions>()
+        ?? throw new InvalidOperationException(
+            "Não foi possível carregar a configuração Benchmark.");
+
+    Console.WriteLine(
+        $"CleanDatabasePath carregado: " +
+        $"{benchmarkOptions.CleanDatabasePath}");
+
+    Console.WriteLine(
+        $"AnomalyDatabasePath carregado: " +
+        $"{benchmarkOptions.AnomalyDatabasePath}");
+
+    services.AddSingleton(benchmarkOptions);
+
+    services.AddSingleton<SQLiteHistoricoService>(
+        _ => new SQLiteHistoricoService(
+            benchmarkOptions.HistoryWindowSize));
+
+    return benchmarkOptions;
+}
 }
