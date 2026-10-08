@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using IAApi.Benchmark.Multivariate;
 using IAApi.Benchmark.Tests;
+using IAApi.Services.AnomalyDetection.Multivariate;
 
 namespace IAApi.Benchmark.DependencyInjection;
 
@@ -72,6 +73,7 @@ public static IServiceCollection AddBenchmarkLaboratoryServices(
 public static IServiceCollection AddBenchmarkMultivariateServices(
     this IServiceCollection services)
 {
+    services.AddScoped<GrupoAnaliseTester>();
     services.AddScoped<MultivariateBufferTester>();
     services.AddScoped<MultivariateDatasetTester>();
     services.AddScoped<MultivariateDetectorTester>();

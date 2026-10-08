@@ -306,8 +306,6 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<GrupoAnaliseCadastroService>();
 
-builder.Services.AddScoped<GrupoAnaliseTester>();
-
 builder.Services.AddScoped<
     MultivariateGroupBufferService>();
 
