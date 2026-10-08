@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using IAApi.Services.AnomalyDetection;
-using IAApi.Services.ModelTraining;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services;
 using IAApi.Infrastructure.Llm.Providers;
