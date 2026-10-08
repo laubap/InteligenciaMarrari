@@ -15,6 +15,7 @@ using IAApi.Benchmark.Multivariate;
 using IAApi.Benchmark.Cli;
 using IAApi.Benchmark.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Multivariate.DependencyInjection;
+using IAApi.Services.AnomalyDetection.Confidence.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -310,12 +311,8 @@ builder.Services.AddOperationalMultivariateDecisionServices(
 builder.Services.AddMultivariateAnalysisProvider(
     usarGruposMultivariadosDoBenchmark);
 
-    builder.Services.Configure<ConfidenceEngineOptions>(
-    builder.Configuration.GetSection("ConfidenceEngine"));
-
-builder.Services.AddSingleton<ConfidenceEngine>();
-builder.Services.AddSingleton<LegacyDetectorResultV2Adapter>();
-builder.Services.AddSingleton<EvidenceBuilder>();
+builder.Services.AddConfidenceEngineServices(
+    builder.Configuration);
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
