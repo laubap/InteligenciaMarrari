@@ -38,4 +38,21 @@ public static class AnomalyDetectionServiceCollectionExtensions
 
     return services;
 }
+
+public static IServiceCollection AddOperationalRegimeServices(
+    this IServiceCollection services)
+{
+    services.AddScoped<
+        OperationalRegimeHistoryResolver>();
+
+    services.AddScoped<
+        OperationalRegimeBaselineService>();
+
+    services.AddScoped<
+        OperationalRegimeBaselineProvider>();
+
+    return services;
+}
+
+
 }

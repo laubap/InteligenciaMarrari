@@ -70,10 +70,9 @@ builder.Services.AddScoped<InterpretacaoProcessoService>();
 builder.Services.AddScoped<FailurePredictionService>();
 builder.Services.AddScoped<EquipamentoInteligenciaService>();
 builder.Services.AddScoped<FeedbackAnomaliaAnaliseService>();
-builder.Services.AddScoped<OperationalRegimeHistoryResolver>();
 builder.Services.AddScoped<TagProfileStatisticsCalculator>();
-builder.Services.AddScoped<OperationalRegimeBaselineService>();
-builder.Services.AddScoped<OperationalRegimeBaselineProvider>();
+builder.Services.AddOperationalRegimeServices();
+
 
 // B3.25 — descoberta e memória comportamental.
 builder.Services.AddBehaviorMemoryDiscovery();
