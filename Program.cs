@@ -82,7 +82,6 @@ builder.Services.AddBehaviorMemoryDiscovery();
 
 builder.Services.AddHostedService<MonitoramentoTagsService>();
 builder.Services.AddSingleton<EnsembleV2Simulator>();
-builder.Services.AddSingleton<AdaptiveEnsembleLaboratory>();
 builder.Services.AddSingleton<
     IAApi.Services.AnomalyDetection.Runtime.RuntimeDecisionMetrics>();
 
@@ -232,6 +231,7 @@ var benchmarkOptions =
         builder.Configuration);
 
 builder.Services.AddBenchmarkCoreServices();
+builder.Services.AddBenchmarkLaboratoryServices();
 
 // Experimental Incident API: disabled by default and strictly read-only.
 builder.Services.Configure<ExperimentalIncidentApiOptions>(
@@ -432,9 +432,6 @@ else
 builder.Services.AddSingleton<ConfidenceEngine>();
 builder.Services.AddSingleton<LegacyDetectorResultV2Adapter>();
 builder.Services.AddSingleton<EvidenceBuilder>();
-builder.Services.AddSingleton<ConfidenceBenchmarkAnalyzer>();
-builder.Services.AddSingleton<ConfidenceBenchmarkReportWriter>();
-builder.Services.AddSingleton<ConfidenceEngineBenchmarkRunner>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();

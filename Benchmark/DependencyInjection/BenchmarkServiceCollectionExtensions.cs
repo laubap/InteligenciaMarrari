@@ -55,4 +55,16 @@ public static class BenchmarkServiceCollectionExtensions
 
     return benchmarkOptions;
 }
+
+public static IServiceCollection AddBenchmarkLaboratoryServices(
+    this IServiceCollection services)
+{
+    services.AddSingleton<AdaptiveEnsembleLaboratory>();
+
+    services.AddSingleton<ConfidenceBenchmarkAnalyzer>();
+    services.AddSingleton<ConfidenceBenchmarkReportWriter>();
+    services.AddSingleton<ConfidenceEngineBenchmarkRunner>();
+
+    return services;
+}
 }
