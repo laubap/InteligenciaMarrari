@@ -214,12 +214,8 @@ builder.Services.Configure<OpenAiOptions>(
     builder.Configuration.GetSection("OpenAI")
 );
 
-// Configuração do LLM
-builder.Services.Configure<LlmOptions>(
-    builder.Configuration.GetSection(
-        LlmOptions.SectionName
-    )
-);
+builder.Services.AddLlmConfiguration(
+    builder.Configuration);
 
 // Configuração do benchmark
 var benchmarkOptions =

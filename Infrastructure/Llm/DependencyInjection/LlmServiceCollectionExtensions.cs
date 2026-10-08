@@ -2,6 +2,7 @@ using IAApi.Infrastructure.Llm.Configuration;
 using IAApi.Infrastructure.Llm.Providers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Configuration;
 
 namespace IAApi.Infrastructure.Llm.DependencyInjection;
 
@@ -35,4 +36,15 @@ public static class LlmServiceCollectionExtensions
 
         return services;
     }
+
+    public static IServiceCollection AddLlmConfiguration(
+    this IServiceCollection services,
+    IConfiguration configuration)
+{
+    services.Configure<LlmOptions>(
+        configuration.GetSection(
+            LlmOptions.SectionName));
+
+    return services;
+}
 }
