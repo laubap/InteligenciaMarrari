@@ -15,6 +15,7 @@ using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Depende
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstrap;
 using IAApi.Infrastructure.Llm.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Interpretation.DependencyInjection;
+using IAApi.Services.AnomalyDetection.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -182,32 +183,12 @@ builder.Services.AddSingleton<
     IValidateOptions<AnomalyDetectionOptions>,
     AnomalyDetectionOptionsValidator>();
 
-builder.Services.AddSingleton<
-    IValidateOptions<IsolationForestOptions>,
-    IsolationForestOptionsValidator>();
-
 // Isolation Forest
-builder.Services.Configure<IsolationForestOptions>(
-    builder.Configuration.GetSection(
-        "AnomalyDetection:IsolationForest"
-    )
-);
-
-builder.Services.AddScoped<
-    IsolationForestFeatureExtractor>();
-
-builder.Services.AddScoped<
-    IAnomalyDetector,
-    IsolationForestDetector>();
-
-builder.Services.AddSingleton<
-    IsolationForestPersistenceService>();
+builder.Services.AddIsolationForestServices(
+    builder.Configuration);
 
 builder.Services.AddScoped<DadosTreinamentoTagService>();
 builder.Services.AddScoped<ModeloTagStatusService>();
-
-builder.Services.AddScoped<
-    IsolationForestTrainingService>();
 
 // Configuração OpenAI
 builder.Services.Configure<OpenAiOptions>(
