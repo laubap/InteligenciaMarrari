@@ -45,4 +45,36 @@ public static class MultivariateServiceCollectionExtensions
 
     return services;
 }
+
+public static IServiceCollection AddOperationalMultivariateDecisionServices(
+    this IServiceCollection services,
+    IConfiguration configuration)
+{
+    services.AddScoped<MultivariateDetector>();
+
+    services.Configure<MultivariateDecisionFusionOptions>(
+        configuration.GetSection(
+            MultivariateDecisionFusionOptions.SectionName));
+
+    services.AddSingleton<
+        MultivariateDecisionCounterfactualEvaluator>();
+
+    services.AddScoped<
+        MultivariateDecisionCounterfactualObserver>();
+
+    services.Configure<MultivariateOperationalPromotionOptions>(
+        configuration.GetSection(
+            MultivariateOperationalPromotionOptions.SectionName));
+
+    services.AddSingleton<
+        MultivariateOperationalFusionResolver>();
+
+    services.AddSingleton<
+        MultivariateOperationalInterpretationFactory>();
+
+    services.AddScoped<
+        MultivariateShadowRuntimeCoordinator>();
+
+    return services;
+}
 }

@@ -304,45 +304,8 @@ builder.Services.AddOperationalMultivariateCoreServices();
 builder.Services.AddOperationalMultivariateGovernanceServices(
     builder.Configuration);
 
-builder.Services.AddScoped<
-    MultivariateDetector>();
-
-
-// B3.24.2 / MV06 — avaliação counterfactual da decisão multivariada.
-// Permite comparar o efeito da evidência multivariada sem conceder
-// automaticamente autoridade operacional ao grupo.
-builder.Services.Configure<
-    MultivariateDecisionFusionOptions>(
-    builder.Configuration.GetSection(
-        MultivariateDecisionFusionOptions.SectionName));
-
-builder.Services.AddSingleton<
-    MultivariateDecisionCounterfactualEvaluator>();
-
-builder.Services.AddScoped<
-    MultivariateDecisionCounterfactualObserver>();
-
-// B3.24.2 / MV06.3 — promoção operacional multivariada.
-// A autoridade real possui feature flag própria, passa pelos gates
-// de segurança/readiness e permanece desligada por padrão.
-builder.Services.Configure<
-    MultivariateOperationalPromotionOptions>(
-    builder.Configuration.GetSection(
-        MultivariateOperationalPromotionOptions.SectionName));
-
-builder.Services.AddSingleton<
-    MultivariateOperationalFusionResolver>();
-
-builder.Services.AddSingleton<
-    MultivariateOperationalInterpretationFactory>();
-
-
-// B3.24.2 / MV01 — inferência multivariada operacional.
-// O coordinator executa a análise multivariada e mantém o estado necessário.
-// A autoridade sobre a decisão final não é definida aqui: ela é controlada
-// posteriormente pelas políticas de promoção, readiness e fusão operacional.
-builder.Services.AddScoped<
-    MultivariateShadowRuntimeCoordinator>();
+builder.Services.AddOperationalMultivariateDecisionServices(
+    builder.Configuration);
 
 if (usarGruposMultivariadosDoBenchmark)
 {
