@@ -126,9 +126,8 @@ builder.Services.AddHostedService<
     IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotHostedService>();
 
 // Configuração dos detectores de anomalia
-builder.Services.Configure<AnomalyDetectionOptions>(
-    builder.Configuration.GetSection("AnomalyDetection")
-);
+builder.Services.AddAnomalyDetectionConfiguration(
+    builder.Configuration);
 
 // B3.18 — runtime operational decision.
 // Ausência da seção mantém Enabled = false e comportamento Legacy.
@@ -155,9 +154,7 @@ builder.Services.AddSingleton<DetectorApplicabilityPolicy>();
 
 builder.Services.AddLegacyAnomalyDetectionServices();
 
-builder.Services.AddSingleton<
-    IValidateOptions<AnomalyDetectionOptions>,
-    AnomalyDetectionOptionsValidator>();
+builder.Services.AddAnomalyDetectionValidation();
 
 // Isolation Forest
 builder.Services.AddIsolationForestServices(
