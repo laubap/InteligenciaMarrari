@@ -307,18 +307,8 @@ builder.Services.AddOperationalMultivariateGovernanceServices(
 builder.Services.AddOperationalMultivariateDecisionServices(
     builder.Configuration);
 
-if (usarGruposMultivariadosDoBenchmark)
-{
-    builder.Services.AddScoped<
-        IGrupoAnaliseProvider,
-        JsonGrupoAnaliseProvider>();
-}
-else
-{
-    builder.Services.AddScoped<
-        IGrupoAnaliseProvider,
-        DatabaseGrupoAnaliseProvider>();
-}
+builder.Services.AddMultivariateAnalysisProvider(
+    usarGruposMultivariadosDoBenchmark);
 
     builder.Services.Configure<ConfidenceEngineOptions>(
     builder.Configuration.GetSection("ConfidenceEngine"));

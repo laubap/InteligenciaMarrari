@@ -77,4 +77,24 @@ public static IServiceCollection AddOperationalMultivariateDecisionServices(
 
     return services;
 }
+
+public static IServiceCollection AddMultivariateAnalysisProvider(
+    this IServiceCollection services,
+    bool useBenchmarkGroups)
+{
+    if (useBenchmarkGroups)
+    {
+        services.AddScoped<
+            IGrupoAnaliseProvider,
+            JsonGrupoAnaliseProvider>();
+    }
+    else
+    {
+        services.AddScoped<
+            IGrupoAnaliseProvider,
+            DatabaseGrupoAnaliseProvider>();
+    }
+
+    return services;
+}
 }
