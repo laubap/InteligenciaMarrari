@@ -14,6 +14,7 @@ using IAApi.Services.AnomalyDetection.Confidence.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstrap;
 using IAApi.Infrastructure.Llm.DependencyInjection;
+using IAApi.Services.AnomalyDetection.Interpretation.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -237,32 +238,7 @@ builder.Services.AddExperimentalIncidentApiServices(
 builder.Services.AddLmStudioProvider();
 
 // Serviços de interpretação
-builder.Services.AddScoped<
-    RuleBasedAnomalyInterpretationService>();
-
-builder.Services.AddScoped<
-    LocalLlmAnomalyInterpretationService>();
-
-builder.Services.AddScoped<
-    IAnomalyInterpretationService>(
-    serviceProvider =>
-    {
-        var configuration =
-            serviceProvider.GetRequiredService<
-                IConfiguration>();
-
-        var llmHabilitado =
-            configuration.GetValue<bool>(
-                "Llm:Habilitado"
-            );
-
-        return llmHabilitado
-            ? serviceProvider.GetRequiredService<
-                LocalLlmAnomalyInterpretationService>()
-            : serviceProvider.GetRequiredService<
-                RuleBasedAnomalyInterpretationService>();
-    }
-);
+builder.Services.AddAnomalyInterpretationServices();
 
 builder.Services.AddScoped<TagContextoIaService>();
 
