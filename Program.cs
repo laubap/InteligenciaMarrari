@@ -16,6 +16,7 @@ using IAApi.Infrastructure.Llm.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Interpretation.DependencyInjection;
 using IAApi.Services.AnomalyDetection.DependencyInjection;
 using IAApi.Services.ModelTraining.DependencyInjection;
+using IAApi.Services.AnomalyDetection.Runtime.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -131,23 +132,8 @@ builder.Services.AddAnomalyDetectionConfiguration(
 
 // B3.18 — runtime operational decision.
 // Ausência da seção mantém Enabled = false e comportamento Legacy.
-builder.Services.Configure<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeAnomalyDecisionOptions>(
-    builder.Configuration.GetSection(
-        IAApi.Services.AnomalyDetection.Runtime.RuntimeAnomalyDecisionOptions.SectionName)
-);
-
-builder.Services.AddSingleton<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeAnomalyDecisionResolver>();
-
-builder.Services.AddSingleton<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeFunctionalDecisionCandidateFactory>();
-
-builder.Services.AddSingleton<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeFunctionalDecisionStateStore>();
-
-builder.Services.AddSingleton<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeFunctionalDecisionContextProvider>();
+builder.Services.AddRuntimeAnomalyDecisionServices(
+    builder.Configuration);
 
 builder.Services.AddSingleton<TagBehaviorProfileResolver>();
 builder.Services.AddSingleton<DetectorApplicabilityPolicy>();
