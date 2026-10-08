@@ -13,6 +13,7 @@ using IAApi.Services.AnomalyDetection.Multivariate.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Confidence.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstrap;
+using IAApi.Infrastructure.Llm.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -232,33 +233,8 @@ builder.Services.AddBenchmarkMultivariateServices();
 builder.Services.AddExperimentalIncidentApiServices(
     builder.Configuration);
 
-
 // Provedor do LM Studio no servidor
-builder.Services.AddHttpClient<
-    ILlmProvider,
-    LmStudioLlmProvider>(
-    (serviceProvider, httpClient) =>
-    {
-        var options = serviceProvider
-            .GetRequiredService<IOptions<LlmOptions>>()
-            .Value;
-
-        if (string.IsNullOrWhiteSpace(options.BaseUrl))
-        {
-            throw new InvalidOperationException(
-                "A configuração Llm:BaseUrl não foi informada."
-            );
-        }
-
-        httpClient.BaseAddress =
-            new Uri(options.BaseUrl);
-
-        httpClient.Timeout =
-            TimeSpan.FromSeconds(
-                options.TimeoutSegundos
-            );
-    }
-);
+builder.Services.AddLmStudioProvider();
 
 // Serviços de interpretação
 builder.Services.AddScoped<
