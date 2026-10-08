@@ -153,31 +153,7 @@ builder.Services.AddSingleton<
 builder.Services.AddSingleton<TagBehaviorProfileResolver>();
 builder.Services.AddSingleton<DetectorApplicabilityPolicy>();
 
-builder.Services.AddScoped<
-    IAnomalyDetector,
-    StatisticalDetector>();
-
-builder.Services.AddScoped<
-    IAnomalyDetector,
-    MadDetector>();
-
-builder.Services.AddScoped<
-    IAnomalyDetector,
-    EwmaDetector>();
-
-builder.Services.AddScoped<
-    IAnomalyDetector,
-    RateOfChangeDetector>();
-
-builder.Services.AddScoped<
-    IAnomalyDetector,
-    PersistenceDetector>();
-
-builder.Services.AddScoped<
-    IAnomalyDetector,
-    LevelShiftDetector>();
-
-builder.Services.AddScoped<EnsembleDetectionService>();
+builder.Services.AddLegacyAnomalyDetectionServices();
 
 builder.Services.AddSingleton<
     IValidateOptions<AnomalyDetectionOptions>,
