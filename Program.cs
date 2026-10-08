@@ -1,11 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services;
-using IAApi.Infrastructure.Llm.Providers;
-using IAApi.Infrastructure.Llm.Configuration;
-using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Benchmark.Cli;
 using IAApi.Benchmark.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Multivariate.DependencyInjection;
