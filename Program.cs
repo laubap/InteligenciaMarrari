@@ -88,8 +88,7 @@ builder.Services.AddSingleton<EnsembleV2Simulator>();
 builder.Services.AddRuntimeRolloutCoreServices(
     builder.Configuration);
 
-    builder.Services.AddScoped<
-    MultivariateCorrelationDiagnosticService>();
+builder.Services.AddMultivariateDiagnosticServices();
 
 builder.Services.AddRuntimeRolloutPersistenceServices(
     builder.Configuration);

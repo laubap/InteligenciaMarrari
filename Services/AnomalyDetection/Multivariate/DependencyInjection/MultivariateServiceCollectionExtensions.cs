@@ -97,4 +97,13 @@ public static IServiceCollection AddMultivariateAnalysisProvider(
 
     return services;
 }
+
+public static IServiceCollection AddMultivariateDiagnosticServices(
+    this IServiceCollection services)
+{
+    services.AddScoped<
+        MultivariateCorrelationDiagnosticService>();
+
+    return services;
+}
 }
