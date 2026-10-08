@@ -34,6 +34,10 @@ public static class AnomalyInterpretationServiceCollectionExtensions
                         RuleBasedAnomalyInterpretationService>();
             });
 
+        services.AddScoped<
+            AnomalyInterpretationContextBuilder>();
+
+
         return services;
     }
 }

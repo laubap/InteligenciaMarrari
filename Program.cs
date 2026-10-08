@@ -238,9 +238,6 @@ builder.Services.AddAnomalyInterpretationServices();
 
 builder.Services.AddScoped<TagContextoIaService>();
 
-builder.Services.AddScoped<
-    AnomalyInterpretationContextBuilder>();
-
 builder.Services.AddOperationalMultivariateCoreServices();
 
 builder.Services.AddOperationalMultivariateGovernanceServices(
