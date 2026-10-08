@@ -26,4 +26,16 @@ public static class AnomalyDetectionServiceCollectionExtensions
 
         return services;
     }
+
+    public static IServiceCollection AddAnomalyDetectionCoreServices(
+    this IServiceCollection services)
+{
+    services.AddSingleton<
+        TagBehaviorProfileResolver>();
+
+    services.AddSingleton<
+        DetectorApplicabilityPolicy>();
+
+    return services;
+}
 }

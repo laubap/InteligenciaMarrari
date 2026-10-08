@@ -135,8 +135,7 @@ builder.Services.AddAnomalyDetectionConfiguration(
 builder.Services.AddRuntimeAnomalyDecisionServices(
     builder.Configuration);
 
-builder.Services.AddSingleton<TagBehaviorProfileResolver>();
-builder.Services.AddSingleton<DetectorApplicabilityPolicy>();
+builder.Services.AddAnomalyDetectionCoreServices();
 
 builder.Services.AddLegacyAnomalyDetectionServices();
 
