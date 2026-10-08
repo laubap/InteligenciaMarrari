@@ -34,4 +34,25 @@ public static class RuntimeRolloutServiceCollectionExtensions
 
         return services;
     }
+
+    public static IServiceCollection AddRuntimeRolloutPersistenceServices(
+    this IServiceCollection services,
+    IConfiguration configuration)
+{
+    services.Configure<
+        RuntimeRolloutSnapshotPersistenceOptions>(
+        configuration.GetSection(
+            RuntimeRolloutSnapshotPersistenceOptions.SectionName));
+
+    services.AddScoped<
+        RuntimeRolloutEvolutionService>();
+
+    services.AddScoped<
+        RuntimeRolloutHistoryService>();
+
+    services.AddHostedService<
+        RuntimeRolloutSnapshotHostedService>();
+
+    return services;
+}
 }

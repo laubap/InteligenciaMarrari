@@ -91,20 +91,8 @@ builder.Services.AddRuntimeRolloutCoreServices(
     builder.Services.AddScoped<
     MultivariateCorrelationDiagnosticService>();
 
-builder.Services.Configure<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotPersistenceOptions>(
-    builder.Configuration.GetSection(
-        IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotPersistenceOptions.SectionName)
-);
-
-builder.Services.AddScoped<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutEvolutionService>();
-
-builder.Services.AddScoped<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutHistoryService>();
-
-builder.Services.AddHostedService<
-    IAApi.Services.AnomalyDetection.Runtime.RuntimeRolloutSnapshotHostedService>();
+builder.Services.AddRuntimeRolloutPersistenceServices(
+    builder.Configuration);
 
 // Configuração dos detectores de anomalia
 builder.Services.AddAnomalyDetectionConfiguration(
