@@ -214,10 +214,6 @@ builder.Services.Configure<OpenAiOptions>(
     builder.Configuration.GetSection("OpenAI")
 );
 
-builder.Services.AddScoped<MultivariateBufferTester>();
-builder.Services.AddScoped<MultivariateDatasetTester>();
-builder.Services.AddScoped<MultivariateDetectorTester>();
-
 // Configuração do LLM
 builder.Services.Configure<LlmOptions>(
     builder.Configuration.GetSection(
@@ -232,6 +228,7 @@ var benchmarkOptions =
 
 builder.Services.AddBenchmarkCoreServices();
 builder.Services.AddBenchmarkLaboratoryServices();
+builder.Services.AddBenchmarkMultivariateServices();
 
 // Experimental Incident API: disabled by default and strictly read-only.
 builder.Services.Configure<ExperimentalIncidentApiOptions>(
@@ -310,9 +307,6 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<GrupoAnaliseCadastroService>();
 
 builder.Services.AddScoped<GrupoAnaliseTester>();
-
-builder.Services.AddScoped<
-    MultivariateTrainingService>();
 
 builder.Services.AddScoped<
     MultivariateGroupBufferService>();

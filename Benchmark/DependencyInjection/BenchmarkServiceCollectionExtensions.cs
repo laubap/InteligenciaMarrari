@@ -1,6 +1,8 @@
 using IAApi.Benchmark;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using IAApi.Benchmark.Multivariate;
+using IAApi.Benchmark.Tests;
 
 namespace IAApi.Benchmark.DependencyInjection;
 
@@ -64,6 +66,16 @@ public static IServiceCollection AddBenchmarkLaboratoryServices(
     services.AddSingleton<ConfidenceBenchmarkAnalyzer>();
     services.AddSingleton<ConfidenceBenchmarkReportWriter>();
     services.AddSingleton<ConfidenceEngineBenchmarkRunner>();
+
+    return services;
+}
+public static IServiceCollection AddBenchmarkMultivariateServices(
+    this IServiceCollection services)
+{
+    services.AddScoped<MultivariateBufferTester>();
+    services.AddScoped<MultivariateDatasetTester>();
+    services.AddScoped<MultivariateDetectorTester>();
+    services.AddScoped<MultivariateTrainingService>();
 
     return services;
 }
