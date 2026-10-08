@@ -301,55 +301,8 @@ builder.Services.AddScoped<
 
 builder.Services.AddOperationalMultivariateCoreServices();
 
-// B3.24.2 / MV08.2C — backtest histórico multivariado diagnóstico.
-// Somente leitura/análise; não altera modelo, runtime, readiness ou promoção.
-builder.Services.AddSingleton<
-    MultivariateHistoricalBacktestAnalyzer>();
-
-builder.Services.AddScoped<
-    OperationalMultivariateBacktestService>();
-
-// B3.24.2 / MV08.4B — qualificação operacional multivariada.
-// Executa avaliação técnica e de governança; não altera ApprovedGroups,
-// promoção ou RuntimeDecision.
-builder.Services.AddSingleton<
-    MultivariateOperationalQualificationEvaluator>();
-
-builder.Services.AddScoped<
-    OperationalMultivariateQualificationService>();
-
-// B3.24.2 / MV08.4D1 — armazenamento auditável das revisões
-// industriais por evento. Não participa da decisão operacional.
-builder.Services.AddScoped<
-    MultivariateIndustrialEventReviewStore>();
-
-builder.Services.AddSingleton<
-    MultivariateIndustrialReviewAssessmentService>();
-
-// B3.24.2 / MV08.4D3 — fila de revisão industrial.
-// Somente consulta/organização da evidência e das revisões persistidas.
-// Não concede autoridade operacional ao grupo.
-builder.Services.AddSingleton<
-    MultivariateIndustrialReviewQueueBuilder>();
-
-builder.Services.AddScoped<
-    IMultivariateIndustrialReviewQueueService,
-    MultivariateIndustrialReviewQueueService>();
-
-// B3.24.2 / MV07 — readiness operacional multivariado.
-// Avalia se grupo e modelo estão aptos a receber autoridade operacional.
-// Não cria anomalias por conta própria, mas funciona como gate de segurança
-// quando uma promoção multivariada é considerada.
-builder.Services.Configure<
-    MultivariateOperationalReadinessOptions>(
-    builder.Configuration.GetSection(
-        "AnomalyDetection:MultivariateOperationalReadiness"));
-
-builder.Services.AddSingleton<
-    MultivariateOperationalReadinessEvaluator>();
-
-builder.Services.AddScoped<
-    MultivariateOperationalReadinessService>();
+builder.Services.AddOperationalMultivariateGovernanceServices(
+    builder.Configuration);
 
 builder.Services.AddScoped<
     MultivariateDetector>();
