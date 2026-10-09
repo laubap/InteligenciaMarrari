@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using IAApi.Services.AnomalyDetection.Orchestration;
 
 namespace IAApi.Services.DependencyInjection;
 
@@ -13,6 +14,7 @@ public static class ProcessIntelligenceServiceCollectionExtensions
         services.AddScoped<InterpretacaoProcessoService>();
         services.AddScoped<EquipamentoInteligenciaService>();
         services.AddScoped<FailurePredictionService>();
+        services.AddScoped<PredictionContextLoader>();
 
         return services;
     }

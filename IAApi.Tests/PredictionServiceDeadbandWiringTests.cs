@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xunit;
+using IAApi.Services.AnomalyDetection.Orchestration;
 
 namespace IAApi.Tests;
 
@@ -699,14 +700,19 @@ public sealed class PredictionServiceDeadbandWiringTests
         IHistoricoService historicoService,
         OperationalRegimeBaselineProvider? regimeProvider = null)
     {
+
+var predictionContextLoader =
+    new PredictionContextLoader(
+        context,
+        processoAnaliseService);
+
         return new PredictionService(
-            context,
+            predictionContextLoader,
             null!,
             null!,
             null!,
             null!,
             null!,
-            processoAnaliseService,
             null!,
             ensemble,
             historicoService,

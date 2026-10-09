@@ -22,13 +22,12 @@ public class PredictionService
      */
     private const double LimiteEnsembleInterpretacao = 50.0;
 
-    private readonly AppDbContext _context;
     private readonly AnaliseRelacionadasService _analiseRelacionadasService;
     private readonly AnomaliaHistoricoService _historicoService;
     private readonly PredictionRiskAnalysisService _predictionRiskAnalysisService;
     private readonly PredictionTrendAnalysisService _predictionTrendAnalysisService;
 
-    private readonly ProcessoAnaliseService _processoAnaliseService;
+    private readonly PredictionContextLoader _predictionContextLoader;
 
     private readonly FeedbackAnomaliaAnaliseService
         _feedbackAnomaliaAnaliseService;
@@ -106,13 +105,12 @@ private readonly PredictionResponseBuilder
     _predictionResponseBuilder;
 
     public PredictionService(
-        AppDbContext context,
+        PredictionContextLoader predictionContextLoader,
         AnaliseRelacionadasService analiseRelacionadasService,
         AnomaliaHistoricoService historicoService,
         PredictionRiskAnalysisService predictionRiskAnalysisService,
         PredictionTrendAnalysisService predictionTrendAnalysisService,
         PredictionResponseBuilder predictionResponseBuilder,
-        ProcessoAnaliseService processoAnaliseService,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         EnsembleDetectionService ensembleDetectionService,
         IHistoricoService servicoHistorico,
@@ -133,7 +131,8 @@ private readonly PredictionResponseBuilder
         OperationalRegimeBaselineProvider? operationalRegimeBaselineProvider = null,
         BehaviorRuntimeBaselineProvider? behaviorRuntimeBaselineProvider = null)
     {
-        _context = context;
+        _predictionContextLoader =
+    predictionContextLoader;
 
         _analiseRelacionadasService =
             analiseRelacionadasService;
@@ -146,9 +145,6 @@ private readonly PredictionResponseBuilder
 
         _predictionTrendAnalysisService =
             predictionTrendAnalysisService;
-
-        _processoAnaliseService =
-            processoAnaliseService;
 
         _feedbackAnomaliaAnaliseService =
             feedbackAnomaliaAnaliseService;
@@ -219,11 +215,10 @@ private readonly PredictionResponseBuilder
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var config = _context.TagsIaConfig
-            .FirstOrDefault(x =>
-                x.ClienteId == request.ClienteId &&
-                x.TagName == request.TagName &&
-                x.IaAtiva);
+var config =
+    _predictionContextLoader.BuscarConfiguracaoAtiva(
+        request.ClienteId,
+        request.TagName);
 
         if (config == null)
         {
@@ -268,10 +263,10 @@ private readonly PredictionResponseBuilder
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var perfil = _context.PerfisIa
-            .FirstOrDefault(x =>
-                x.ClienteId == request.ClienteId &&
-                x.TagName == request.TagName);
+var perfil =
+    _predictionContextLoader.BuscarPerfil(
+        request.ClienteId,
+        request.TagName);
 
         if (perfil == null)
         {
@@ -282,16 +277,16 @@ private readonly PredictionResponseBuilder
             );
         }
 
-        var contexto = _context.TagsContextoIa
-            .FirstOrDefault(x =>
-                x.ClienteId == request.ClienteId &&
-                x.TagName == request.TagName);
+var contextoOperacional =
+    _predictionContextLoader.CarregarContextoOperacional(
+        request.ClienteId,
+        request.TagName);
 
-        var processo =
-            _processoAnaliseService.BuscarProcessoDaTag(
-                request.ClienteId,
-                request.TagName
-            );
+var contexto =
+    contextoOperacional.Contexto;
+
+var processo =
+    contextoOperacional.Processo;
 
         var tipoTag =
             contexto?.TipoRepresentacao
