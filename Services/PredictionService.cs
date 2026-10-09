@@ -106,6 +106,9 @@ public class PredictionService
     private readonly IOptions<MultivariateOperationalReadinessOptions>?
         _multivariateOperationalReadinessOptions;
 
+    private readonly PredictionDependencyMapper
+    _predictionDependencyMapper;
+
     public PredictionService(
         AppDbContext context,
         AnaliseRelacionadasService analiseRelacionadasService,
@@ -115,6 +118,7 @@ public class PredictionService
         TendenciaRiscoService tendenciaRiscoService,
         TendenciaValorService tendenciaValorService,
         InterpretacaoDependenciasService interpretacaoDependenciasService,
+        PredictionDependencyMapper predictionDependencyMapper,
         ProcessoAnaliseService processoAnaliseService,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         EnsembleDetectionService ensembleDetectionService,
@@ -218,6 +222,9 @@ public class PredictionService
 
         _behaviorRuntimeBaselineProvider =
             behaviorRuntimeBaselineProvider;
+
+        _predictionDependencyMapper =
+            predictionDependencyMapper;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -1561,59 +1568,10 @@ Console.WriteLine();
                         processo.ProcedimentoRecomendado
                 },
 
-            Dependencias =
-                analiseRelacionadas.Resultados
-                    .Select(item =>
-                        new DependenciaAnalisadaDto
-                        {
-                            TagName =
-                                item.TagName,
-
-                            Descricao =
-                                item.Descricao,
-
-                            ValorAtual =
-                                item.ValorAtual,
-
-                            Media =
-                                item.Media,
-
-                            LimiteInferior =
-                                item.LimiteInferior,
-
-                            LimiteSuperior =
-                                item.LimiteSuperior,
-
-                            EhAnomalia =
-                                item.EhAnomalia,
-
-                            Status = item.EhAnomalia
-                                ? "anÃ´mala"
-                                : "normal",
-
-                            TipoRelacao =
-                                item.TipoRelacao,
-
-                            Impacto =
-                                item.Impacto,
-
-                            Criticidade =
-                                item.Criticidade,
-
-                            Equipamento =
-                                item.Equipamento,
-
-                            Area =
-                                item.Area,
-
-                            Interpretacao =
-                                _interpretacaoDependenciasService
-                                    .Interpretar(
-                                        item,
-                                        contexto
-                                    )
-                        })
-                    .ToList(),
+Dependencias =
+    _predictionDependencyMapper.Mapear(
+        analiseRelacionadas,
+        contexto),
 
             Risco = new RiscoProcessoDto
             {
