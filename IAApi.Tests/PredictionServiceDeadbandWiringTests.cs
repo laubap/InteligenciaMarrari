@@ -708,7 +708,6 @@ public sealed class PredictionServiceDeadbandWiringTests
             null!,
             null!,
             null!,
-            null!,
             processoAnaliseService,
             null!,
             ensemble,

@@ -29,9 +29,6 @@ public class PredictionService
     private readonly TendenciaRiscoService _tendenciaRiscoService;
     private readonly TendenciaValorService _tendenciaValorService;
 
-    private readonly InterpretacaoDependenciasService
-        _interpretacaoDependenciasService;
-
     private readonly ProcessoAnaliseService _processoAnaliseService;
 
     private readonly FeedbackAnomaliaAnaliseService
@@ -117,7 +114,6 @@ public class PredictionService
         ExplicacaoRiscoService explicacaoRiscoService,
         TendenciaRiscoService tendenciaRiscoService,
         TendenciaValorService tendenciaValorService,
-        InterpretacaoDependenciasService interpretacaoDependenciasService,
         PredictionDependencyMapper predictionDependencyMapper,
         ProcessoAnaliseService processoAnaliseService,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
@@ -159,9 +155,6 @@ public class PredictionService
 
         _tendenciaValorService =
             tendenciaValorService;
-
-        _interpretacaoDependenciasService =
-            interpretacaoDependenciasService;
 
         _processoAnaliseService =
             processoAnaliseService;
