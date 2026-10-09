@@ -47,17 +47,12 @@ builder.Services.AddCors(options =>
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite("Data Source=ia_config.db"));
 
-// Serviços gerais
-builder.Services.AddSingleton<
-    IHistoricoService,
-    BridgeHistoricoService>();
-    
+builder.Services.AddBridgeServices();
+
 builder.Services.AddTagProfileStatisticsServices();
 builder.Services.AddScoped<PerfilTagService>();
 builder.Services.AddScoped<PredictionService>();
-builder.Services.AddScoped<BridgeTagsService>();
 builder.Services.AddScoped<AnaliseRelacionadasService>();
-builder.Services.AddScoped<BridgeValorAtualService>();
 builder.Services.AddScoped<AnomaliaHistoricoService>();
 builder.Services.AddScoped<RiskScoreService>();
 builder.Services.AddScoped<ExplicacaoRiscoService>();
