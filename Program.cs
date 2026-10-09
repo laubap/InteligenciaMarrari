@@ -13,6 +13,7 @@ using IAApi.Services.AnomalyDetection.Interpretation.DependencyInjection;
 using IAApi.Services.AnomalyDetection.DependencyInjection;
 using IAApi.Services.ModelTraining.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Runtime.DependencyInjection;
+using IAApi.Services.DependencyInjection;
 
 var commandSelection = BenchmarkCommandSelection.Parse(args);
 
@@ -51,7 +52,7 @@ builder.Services.AddSingleton<
     IHistoricoService,
     BridgeHistoricoService>();
 
-builder.Services.AddScoped<HistoricoLimpezaService>();
+builder.Services.AddScoped<TagProfileStatisticsCalculator>();
 builder.Services.AddScoped<PerfilTagService>();
 builder.Services.AddScoped<PredictionService>();
 builder.Services.AddScoped<BridgeTagsService>();
@@ -70,7 +71,8 @@ builder.Services.AddScoped<InterpretacaoProcessoService>();
 builder.Services.AddScoped<FailurePredictionService>();
 builder.Services.AddScoped<EquipamentoInteligenciaService>();
 builder.Services.AddScoped<FeedbackAnomaliaAnaliseService>();
-builder.Services.AddScoped<TagProfileStatisticsCalculator>();
+
+
 builder.Services.AddOperationalRegimeServices();
 
 
