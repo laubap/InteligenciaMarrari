@@ -37,6 +37,9 @@ public static class AnomalyInterpretationServiceCollectionExtensions
         services.AddScoped<
             AnomalyInterpretationContextBuilder>();
 
+        services.AddScoped<
+            PredictionInterpretationService>();
+
 
         return services;
     }

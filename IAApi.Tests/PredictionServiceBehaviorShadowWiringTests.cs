@@ -555,7 +555,6 @@ return new PredictionService(
     null!,
     null!,
     null!,
-    null!,
     behaviorRuntimeBaselineProvider:
         behaviorProvider);
     }

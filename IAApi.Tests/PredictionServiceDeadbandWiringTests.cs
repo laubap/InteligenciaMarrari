@@ -719,7 +719,6 @@ return new PredictionService(
     null!,
     null!,
     null!,
-    null!,
     operationalRegimeBaselineProvider:
         regimeProvider);
     }

@@ -45,11 +45,8 @@ public class PredictionService
     private readonly BehaviorRuntimeBaselineProvider?
         _behaviorRuntimeBaselineProvider;
 
-    private readonly AnomalyInterpretationContextBuilder
-        _interpretationContextBuilder;
-
-    private readonly IAnomalyInterpretationService
-        _anomalyInterpretationService;
+private readonly PredictionInterpretationService
+    _predictionInterpretationService;
 
     // B3.18 â€” ponte operacional do runtime real.
     // O DetectorResult Legacy permanece imutÃ¡vel.
@@ -105,8 +102,7 @@ private readonly PredictionResponseBuilder
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         EnsembleDetectionService ensembleDetectionService,
         IHistoricoService servicoHistorico,
-        AnomalyInterpretationContextBuilder interpretationContextBuilder,
-        IAnomalyInterpretationService anomalyInterpretationService,
+        PredictionInterpretationService predictionInterpretationService,
         RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
         PredictionRuntimeDecisionService predictionRuntimeDecisionService,
         MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
@@ -143,11 +139,8 @@ private readonly PredictionResponseBuilder
         _servicoHistorico =
             servicoHistorico;
 
-        _interpretationContextBuilder =
-            interpretationContextBuilder;
-
-        _anomalyInterpretationService =
-            anomalyInterpretationService;
+ _predictionInterpretationService =
+    predictionInterpretationService;
 
         _runtimeFunctionalDecisionContextProvider =
             runtimeFunctionalDecisionContextProvider;
@@ -993,181 +986,17 @@ var runtimeDecision =
          * - dados histÃ³ricos;
          * - informaÃ§Ãµes operacionais cadastradas para a tag.
          */
-AnomalyInterpretationResult? resultadoInterpretacao =
-    null;
-
-/*
- * Se a autoridade veio do multivariado, não chamamos a interpretação
- * univariada/LLM. A interpretação multivariada será construída logo após
- * o cálculo de risco, pois sua severidade vem da classificação operacional.
- */
-if (!multivariatePromotionApplied)
-{
-    if (runtimeDecision.RequiresNewInterpretation)
-    {
-        var contextoInterpretacao =
-            await _interpretationContextBuilder.CriarAsync(
-                entradaDetector,
-                resultadoDetector,
-                LimiteEnsembleInterpretacao,
-                runtimeDecision.EmitAnomaly,
-                cancellationToken
-            );
-
-        resultadoInterpretacao =
-            await _anomalyInterpretationService.InterpretarAsync(
-                contextoInterpretacao,
-                cancellationToken
-            );
-    }
-    else if (runtimeDecision.IsAnomalyContinuation)
-    {
-        /*
-         * B3.22.5 V3d.2
-         *
-         * A condição continua operacionalmente anômala, porém não existe
-         * nova evidência funcional. Preservamos a anomalia na resposta,
-         * risco e persistência, mas não repetimos interpretação por LLM.
-         */
-        var contextoContinuacao =
-            await _interpretationContextBuilder.CriarAsync(
-                entradaDetector,
-                resultadoDetector,
-                LimiteEnsembleInterpretacao,
-                runtimeDecision.EmitAnomaly,
-                cancellationToken
-            );
-
-        var increasingNoiseContinuation =
-            string.Equals(
-                runtimeDecision.Source,
-                "IncreasingNoiseContinuation",
-                StringComparison.OrdinalIgnoreCase);
-
-        resultadoInterpretacao =
-            new AnomalyInterpretationResult
-            {
-                Resumo =
-                    "A anomalia permanece ativa e está em acompanhamento.",
-
-                InterpretacaoTecnica =
-                    increasingNoiseContinuation
-                        ? "A expansão sustentada da variabilidade permanece ativa. " +
-                          "Esta leitura representa a continuidade da mesma condição " +
-                          "já identificada, sem nova evidência funcional independente."
-                        : "A condição anômala previamente identificada permanece ativa. " +
-                          "Esta leitura é uma continuação e não representa uma nova " +
-                          "evidência funcional independente.",
-
-                Evidencias =
-                    increasingNoiseContinuation
-                        ? new List<string>
-                        {
-                            "A evidência de aumento sustentado de variabilidade permanece ativa.",
-                            "Nenhuma nova interpretação foi iniciada para esta leitura de continuação."
-                        }
-                        : new List<string>
-                        {
-                            "A condição funcional de anomalia permanece ativa.",
-                            "Nenhuma nova interpretação foi iniciada para esta leitura de continuação."
-                        },
-
-                PossiveisCausas =
-                    new(),
-
-                Recomendacoes =
-                    new()
-                    {
-                        "Continuar acompanhando a evolução das próximas leituras."
-                    },
-
-                Severidade =
-                    contextoContinuacao.Severidade,
-
-                GeradoPorLlm =
-                    false,
-
-                ModeloUtilizado =
-                    "Continuação determinística",
-
-                DataGeracao =
-                    DateTime.UtcNow
-            };
-    }
-    else
-    {
-        var comportamentoAnormalConhecido =
-            comportamentoReconhecido &&
-            string.Equals(
-                classificacaoComportamentoReconhecido,
-                "KnownAbnormal",
-                StringComparison.Ordinal);
-
-        resultadoInterpretacao =
-            new AnomalyInterpretationResult
-            {
-                Resumo =
-                    comportamentoAnormalConhecido
-                        ? $"Comportamento anormal conhecido " +
-                          $"{codigoComportamentoReconhecido ?? "-"} reconhecido, " +
-                          "sem nova anomalia detectada."
-                        : "Nenhuma anomalia foi identificada.",
-
-                InterpretacaoTecnica =
-                    comportamentoAnormalConhecido
-                        ? $"O padrão atual corresponde ao comportamento " +
-                          $"anormal conhecido {codigoComportamentoReconhecido ?? "-"}. " +
-                          "Os detectores não identificaram nova evidência funcional " +
-                          "de anomalia nesta leitura."
-                        : "Os detectores indicaram que o comportamento atual da tag " +
-                          "permanece dentro do padrão esperado.",
-
-                Evidencias =
-                    comportamentoAnormalConhecido
-                        ? new List<string>
-                        {
-                            $"Comportamento reconhecido: " +
-                            $"{codigoComportamentoReconhecido ?? "-"}.",
-                            "Classificação semântica: KnownAbnormal.",
-                            "Nenhum detector identificou nova evidência " +
-                            "funcional de anomalia nesta leitura."
-                        }
-                        : new List<string>
-                        {
-                            "Nenhum detector identificou comportamento anômalo."
-                        },
-
-                PossiveisCausas =
-                    new(),
-
-                Recomendacoes =
-                    comportamentoAnormalConhecido
-                        ? new List<string>
-                        {
-                            "Continuar acompanhando o comportamento conhecido " +
-                            "e observar novas evidências dos detectores."
-                        }
-                        : new List<string>
-                        {
-                            "Continuar monitorando normalmente."
-                        },
-
-                Severidade =
-                    "Normal",
-
-                GeradoPorLlm =
-                    false,
-
-                ModeloUtilizado =
-                    comportamentoAnormalConhecido
-                        ? "Contexto comportamental determinístico"
-                        : "Não utilizado",
-
-                DataGeracao =
-                    DateTime.UtcNow
-            };
-    }
-}
+var resultadoInterpretacao =
+    await _predictionInterpretationService.InterpretarAsync(
+        entradaDetector,
+        resultadoDetector,
+        runtimeDecision,
+        LimiteEnsembleInterpretacao,
+        multivariatePromotionApplied,
+        comportamentoReconhecido,
+        classificacaoComportamentoReconhecido,
+        codigoComportamentoReconhecido,
+        cancellationToken);
 
         var limiteInferior =
             resultadoDetector.LimiteInferior;
