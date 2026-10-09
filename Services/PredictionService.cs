@@ -53,20 +53,11 @@ public class PredictionService
 
     // B3.18 â€” ponte operacional do runtime real.
     // O DetectorResult Legacy permanece imutÃ¡vel.
-    private readonly RuntimeAnomalyDecisionResolver
-        _runtimeDecisionResolver;
-
-    private readonly IOptions<RuntimeAnomalyDecisionOptions>
-        _runtimeDecisionOptions;
-
-    private readonly RuntimeFunctionalDecisionCandidateFactory
-        _runtimeFunctionalDecisionCandidateFactory;
+    private readonly PredictionRuntimeDecisionService
+    _predictionRuntimeDecisionService;
 
     private readonly RuntimeFunctionalDecisionContextProvider
         _runtimeFunctionalDecisionContextProvider;
-
-    private readonly RuntimeDecisionMetrics
-        _runtimeDecisionMetrics;
 
     // B3.24.2 / MV01 — caminho multivariado somente observacional.
     // Pode ser null em testes antigos construídos manualmente.
@@ -116,11 +107,8 @@ private readonly PredictionResponseBuilder
         IHistoricoService servicoHistorico,
         AnomalyInterpretationContextBuilder interpretationContextBuilder,
         IAnomalyInterpretationService anomalyInterpretationService,
-        RuntimeAnomalyDecisionResolver runtimeDecisionResolver,
-        IOptions<RuntimeAnomalyDecisionOptions> runtimeDecisionOptions,
-        RuntimeFunctionalDecisionCandidateFactory runtimeFunctionalDecisionCandidateFactory,
         RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
-        RuntimeDecisionMetrics runtimeDecisionMetrics,
+        PredictionRuntimeDecisionService predictionRuntimeDecisionService,
         MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
         MultivariateDecisionCounterfactualObserver? multivariateDecisionCounterfactualObserver = null,
         MultivariateOperationalFusionResolver? multivariateOperationalFusionResolver = null,
@@ -161,20 +149,11 @@ private readonly PredictionResponseBuilder
         _anomalyInterpretationService =
             anomalyInterpretationService;
 
-        _runtimeDecisionResolver =
-            runtimeDecisionResolver;
-
-        _runtimeDecisionOptions =
-            runtimeDecisionOptions;
-
-        _runtimeFunctionalDecisionCandidateFactory =
-            runtimeFunctionalDecisionCandidateFactory;
-
         _runtimeFunctionalDecisionContextProvider =
             runtimeFunctionalDecisionContextProvider;
 
-        _runtimeDecisionMetrics =
-            runtimeDecisionMetrics;
+        _predictionRuntimeDecisionService =
+            predictionRuntimeDecisionService;
 
         _multivariateShadowRuntimeCoordinator =
             multivariateShadowRuntimeCoordinator;
@@ -784,20 +763,11 @@ Console.WriteLine(
             $"Classification={classificacaoComportamentoReconhecido ?? "-"} " +
             $"BaselineApplied={baselineComportamentalAplicado}");
 
-        var runtimeFunctionalCandidate =
-            _runtimeFunctionalDecisionCandidateFactory.Create(
-                resultadoDetector,
-                runtimeFunctionalContext);
-
-        var runtimeDecision =
-            _runtimeDecisionResolver.Resolve(
-                resultadoDetector,
-                _runtimeDecisionOptions.Value,
-                request.ClienteId,
-                runtimeFunctionalCandidate);
-
-        _runtimeDecisionMetrics.Record(
-            runtimeDecision);
+var runtimeDecision =
+    _predictionRuntimeDecisionService.Resolve(
+        resultadoDetector,
+        runtimeFunctionalContext,
+        request.ClienteId);
 
         /*
          * B3.24.2 / MV06.2 + MV06.3B

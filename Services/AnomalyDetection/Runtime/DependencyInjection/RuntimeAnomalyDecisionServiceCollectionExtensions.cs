@@ -25,6 +25,9 @@ public static class RuntimeAnomalyDecisionServiceCollectionExtensions
         services.AddSingleton<
             RuntimeFunctionalDecisionContextProvider>();
 
+        services.AddSingleton<
+            PredictionRuntimeDecisionService>();
+
         return services;
     }
 }

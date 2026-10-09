@@ -706,25 +706,22 @@ var predictionContextLoader =
         context,
         processoAnaliseService);
 
-        return new PredictionService(
-            predictionContextLoader,
-            null!,
-            null!,
-            null!,
-            null!,
-            null!,
-            null!,
-            ensemble,
-            historicoService,
-            null!,
-            null!,
-            null!,
-            null!,
-            null!,
-            null!,
-            null!,
-            operationalRegimeBaselineProvider:
-                regimeProvider);
+return new PredictionService(
+    predictionContextLoader,
+    null!,
+    null!,
+    null!,
+    null!,
+    null!,
+    null!,
+    ensemble,
+    historicoService,
+    null!,
+    null!,
+    null!,
+    null!,
+    operationalRegimeBaselineProvider:
+        regimeProvider);
     }
 
     private sealed class CaptureDetector :
