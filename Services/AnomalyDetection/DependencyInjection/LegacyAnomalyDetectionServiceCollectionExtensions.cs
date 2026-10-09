@@ -1,0 +1,40 @@
+using IAApi.Services.AnomalyDetection;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace IAApi.Services.AnomalyDetection.DependencyInjection;
+
+public static class LegacyAnomalyDetectionServiceCollectionExtensions
+{
+    public static IServiceCollection AddLegacyAnomalyDetectionServices(
+        this IServiceCollection services)
+    {
+        services.AddScoped<
+            IAnomalyDetector,
+            StatisticalDetector>();
+
+        services.AddScoped<
+            IAnomalyDetector,
+            MadDetector>();
+
+        services.AddScoped<
+            IAnomalyDetector,
+            EwmaDetector>();
+
+        services.AddScoped<
+            IAnomalyDetector,
+            RateOfChangeDetector>();
+
+        services.AddScoped<
+            IAnomalyDetector,
+            PersistenceDetector>();
+
+        services.AddScoped<
+            IAnomalyDetector,
+            LevelShiftDetector>();
+
+        services.AddScoped<
+            EnsembleDetectionService>();
+
+        return services;
+    }
+}
