@@ -255,4 +255,39 @@ public static class PredictionResponseMapper
             processo.ProcedimentoRecomendado
     };
 }
+
+public static List<DetectorExecutadoDto> MapearDetectores(
+    IEnumerable<DetectorDebugItem> detectores)
+{
+    return detectores
+        .Select(detector =>
+            new DetectorExecutadoDto
+            {
+                Nome =
+                    detector.Nome,
+
+                Aplicavel =
+                    detector.Aplicavel,
+
+                VotouAnomalia =
+                    detector.VotouAnomalia,
+
+                ScoreNormalizado =
+                    detector.ScoreNormalizado,
+
+                ScoreOriginal =
+                    detector.ScoreOriginal,
+
+                Peso =
+                    detector.Peso,
+
+                Explicacao =
+                    detector.Explicacao,
+
+                Metricas =
+                    detector.Metricas
+                    ?? new Dictionary<string, double>()
+            })
+        .ToList();
+}
 }
