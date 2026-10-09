@@ -1433,104 +1433,28 @@ Console.WriteLine();
             FeedbackSemelhante =
                 analiseFeedbacks,
 
-            Resumo = new ResumoAnomaliaDto
-            {
-                Status = ehAnomalia
-                    ? "Anomalia detectada"
-                    : comportamentoReconhecido &&
-                      string.Equals(
-                          classificacaoComportamentoReconhecido,
-                          "KnownAbnormal",
-                          StringComparison.Ordinal)
-                        ? "Comportamento anormal conhecido"
-                        : "Comportamento normal",
+            Resumo =
+    PredictionResponseMapper.MapearResumo(
+        ehAnomalia,
+        comportamentoReconhecido,
+        classificacaoComportamentoReconhecido,
+        riscoProcesso.Mensagem),
 
-                Conclusao =
-                    riscoProcesso.Mensagem
-            },
+ Perfil =
+    PredictionResponseMapper.MapearPerfil(
+        request,
+        mediaHistoricaDetector,
+        limiteInferior,
+        limiteSuperior,
+        score),
 
-            Perfil = new PerfilComportamentalDto
-            {
-                ValorRecebido =
-                    request.Valor,
+ Contexto =
+    PredictionResponseMapper.MapearContexto(
+        contexto),
 
-                MediaHistorica =
-                    mediaHistoricaDetector,
-
-                LimiteInferior =
-                    limiteInferior,
-
-                LimiteSuperior =
-                    limiteSuperior,
-
-                Score =
-                    score
-            },
-
-            Contexto = contexto == null
-                ? null
-                : new ContextoOperacionalDto
-                {
-                    Descricao =
-                        contexto.Descricao,
-
-                    Criticidade =
-                        contexto.Criticidade,
-
-                    Equipamento =
-                        contexto.Equipamento,
-
-                    Area =
-                        contexto.Area,
-
-                    ObservacaoModoOperacao =
-                        contexto.ObservacaoModoOperacao,
-
-                    Impactos =
-                       PredictionResponseFormatter.LerLista( contexto.Impactos),
-
-                    CausasProvaveis =
-                        PredictionResponseFormatter.LerLista(contexto.CausasProvaveis),
-
-                    AcoesRecomendadas =
-                        PredictionResponseFormatter.LerLista(contexto.AcoesRecomendadas),
-
-                    ModosOperacao =
-                        PredictionResponseFormatter.LerLista(contexto.ModosOperacao)
-                },
-
-            Interpretacao = new InterpretacaoAnomaliaDto
-            {
-                Resumo =
-                    resultadoInterpretacao.Resumo,
-
-                InterpretacaoTecnica =
-                    resultadoInterpretacao.InterpretacaoTecnica,
-
-                Evidencias =
-                    resultadoInterpretacao.Evidencias
-                    ?? new List<string>(),
-
-                PossiveisCausas =
-                    resultadoInterpretacao.PossiveisCausas
-                    ?? new List<string>(),
-
-                Recomendacoes =
-                    resultadoInterpretacao.Recomendacoes
-                    ?? new List<string>(),
-
-                Severidade =
-                    resultadoInterpretacao.Severidade,
-
-                GeradoPorLlm =
-                    resultadoInterpretacao.GeradoPorLlm,
-
-                ModeloUtilizado =
-                    resultadoInterpretacao.ModeloUtilizado,
-
-                DataGeracao =
-                    resultadoInterpretacao.DataGeracao
-            },
+Interpretacao =
+    PredictionResponseMapper.MapearInterpretacao(
+        resultadoInterpretacao),
 
             Processo = processo == null
                 ? null
@@ -1566,72 +1490,22 @@ Dependencias =
         analiseRelacionadas,
         contexto),
 
-            Risco = new RiscoProcessoDto
-            {
-                Score =
-                    riscoProcesso.ScoreRisco,
+Risco =
+    PredictionResponseMapper.MapearRisco(
+        riscoProcesso,
+        fatoresRisco),
 
-                Classificacao =
-                    riscoProcesso.Classificacao,
+Tendencias =
+    PredictionResponseMapper.MapearTendencias(
+        tendenciaRisco,
+        tendenciaValor),
 
-                Mensagem =
-                    riscoProcesso.Mensagem,
-
-                Fatores =
-                    fatoresRisco
-            },
-
-            Tendencias = new TendenciasDto
-            {
-                TendenciaRisco =
-                    tendenciaRisco.Tendencia,
-
-                MensagemTendenciaRisco =
-                    tendenciaRisco.Mensagem,
-
-                TendenciaValor =
-                    tendenciaValor.Tendencia,
-
-                MensagemTendenciaValor =
-                    tendenciaValor.Mensagem
-            },
-
-            Multivariado =
-                multivariatePromotionApplied &&
-                multivariateOperationalEvidence is not null
-                    ? new MultivariateAnomalyDto
-                    {
-                        PromocaoOperacional =
-                            true,
-
-                        Origem =
-                            runtimeDecision.Source,
-
-                        Grupo =
-                            multivariateOperationalEvidence.GroupName,
-
-                        MinuteIndex =
-                            multivariateOperationalEvidence.MinuteIndex,
-
-                        IdadeMinutos =
-                            multivariateOperationalEvidence.AgeMinutes,
-
-                        ScoreNormalizado =
-                            multivariateOperationalEvidence.Score,
-
-                        LimiteScore =
-                            multivariateOperationalEvidence.Threshold,
-
-                        MahalanobisSquared =
-                            multivariateOperationalEvidence.MahalanobisSquared,
-
-                        ScoreUnivariado =
-                            score,
-
-                        Tags =
-                            multivariateOperationalEvidence.Tags.ToList()
-                    }
-                    : null,
+Multivariado =
+    PredictionResponseMapper.MapearMultivariado(
+        multivariatePromotionApplied,
+        multivariateOperationalEvidence,
+        runtimeDecision.Source,
+        score),
 
             Detectores =
                 detectoresExecutados
