@@ -52,6 +52,7 @@ builder.Services.AddBridgeServices();
 builder.Services.AddTagProfileStatisticsServices();
 builder.Services.AddScoped<PerfilTagService>();
 builder.Services.AddScoped<PredictionService>();
+builder.Services.AddScoped<CurrentValuePredictionService>();
 builder.Services.AddRiskAnalysisServices();
 builder.Services.AddAnomalyContextAnalysisServices();
 builder.Services.AddProcessIntelligenceServices();

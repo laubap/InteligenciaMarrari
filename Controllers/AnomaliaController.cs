@@ -10,14 +10,19 @@ public class AnomaliaController : ControllerBase
     private readonly AppDbContext _context;
     private readonly FeedbackAnomaliaAnaliseService _feedbackAnomaliaAnaliseService;
 
+    private readonly CurrentValuePredictionService
+    _currentValuePredictionService;
+
     public AnomaliaController(
         PredictionService predictionService,
         AppDbContext context,
-        FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService)
+        FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
+        CurrentValuePredictionService currentValuePredictionService)
     {
         _predictionService = predictionService;
         _context = context;
         _feedbackAnomaliaAnaliseService = feedbackAnomaliaAnaliseService;
+        _currentValuePredictionService = currentValuePredictionService;
     }
 
 [HttpPost("tag")]
@@ -59,10 +64,11 @@ Console.WriteLine("========================================");
     {
         try
         {
-            var resposta = await _predictionService.DetectarValorAtual(
-                request.ClienteId,
-                request.TagName
-            );
+var resposta =
+    await _currentValuePredictionService
+        .DetectarValorAtual(
+            request.ClienteId,
+            request.TagName);
 
             return Ok(resposta);
         }

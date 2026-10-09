@@ -13,29 +13,37 @@ public class MonitoramentoTagsService : BackgroundService
         _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(
+        CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
+                using var scope =
+                    _scopeFactory.CreateScope();
 
-                var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var predictionService = scope.ServiceProvider.GetRequiredService<PredictionService>();
+                var context =
+                    scope.ServiceProvider
+                        .GetRequiredService<AppDbContext>();
 
-                var tagsAtivas = await context.TagsIaConfig
-                    .Where(x => x.IaAtiva)
-                    .ToListAsync(stoppingToken);
+                var currentValuePredictionService =
+                    scope.ServiceProvider
+                        .GetRequiredService<CurrentValuePredictionService>();
+
+                var tagsAtivas =
+                    await context.TagsIaConfig
+                        .Where(x => x.IaAtiva)
+                        .ToListAsync(stoppingToken);
 
                 foreach (var tag in tagsAtivas)
                 {
                     try
                     {
-                        await predictionService.DetectarValorAtual(
-                            tag.ClienteId,
-                            tag.TagName
-                        );
+                        await currentValuePredictionService
+                            .DetectarValorAtual(
+                                tag.ClienteId,
+                                tag.TagName);
                     }
                     catch (Exception ex)
                     {
@@ -43,17 +51,20 @@ public class MonitoramentoTagsService : BackgroundService
                             ex,
                             "Falha ao monitorar tag {TagName} do cliente {ClienteId}",
                             tag.TagName,
-                            tag.ClienteId
-                        );
+                            tag.ClienteId);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro geral no monitoramento automático de tags.");
+                _logger.LogError(
+                    ex,
+                    "Erro geral no monitoramento automático de tags.");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            await Task.Delay(
+                TimeSpan.FromMinutes(1),
+                stoppingToken);
         }
     }
 }
