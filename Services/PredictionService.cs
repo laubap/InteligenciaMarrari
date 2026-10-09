@@ -103,8 +103,8 @@ public class PredictionService
     private readonly IOptions<MultivariateOperationalReadinessOptions>?
         _multivariateOperationalReadinessOptions;
 
-    private readonly PredictionDependencyMapper
-    _predictionDependencyMapper;
+private readonly PredictionResponseBuilder
+    _predictionResponseBuilder;
 
     public PredictionService(
         AppDbContext context,
@@ -114,7 +114,7 @@ public class PredictionService
         ExplicacaoRiscoService explicacaoRiscoService,
         TendenciaRiscoService tendenciaRiscoService,
         TendenciaValorService tendenciaValorService,
-        PredictionDependencyMapper predictionDependencyMapper,
+        PredictionResponseBuilder predictionResponseBuilder,
         ProcessoAnaliseService processoAnaliseService,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         EnsembleDetectionService ensembleDetectionService,
@@ -216,8 +216,8 @@ public class PredictionService
         _behaviorRuntimeBaselineProvider =
             behaviorRuntimeBaselineProvider;
 
-        _predictionDependencyMapper =
-            predictionDependencyMapper;
+        _predictionResponseBuilder =
+            predictionResponseBuilder;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -1381,81 +1381,30 @@ foreach (var item in resultadoInterpretacao.Recomendacoes)
 Console.WriteLine("=========================================");
 Console.WriteLine();
 
+return _predictionResponseBuilder.Build(
+    request,
+    tipoTag,
+    ehAnomalia,
+    score,
+    mensagem,
+    analiseFeedbacks,
+    comportamentoReconhecido,
+    classificacaoComportamentoReconhecido,
+    mediaHistoricaDetector,
+    limiteInferior,
+    limiteSuperior,
+    contexto,
+    resultadoInterpretacao,
+    processo,
+    analiseRelacionadas,
+    riscoProcesso,
+    fatoresRisco,
+    tendenciaRisco,
+    tendenciaValor,
+    multivariatePromotionApplied,
+    multivariateOperationalEvidence,
+    runtimeDecision.Source,
+    detectoresExecutados);
 
-        return new AnomaliaResponse
-        {
-            ClienteId =
-                request.ClienteId,
-
-            TagName =
-                request.TagName,
-
-            TipoTag =
-                tipoTag,
-
-            EhAnomalia =
-                ehAnomalia,
-
-            Score =
-                (float)score,
-
-            Mensagem =
-                mensagem,
-
-            FeedbackSemelhante =
-                analiseFeedbacks,
-
-            Resumo =
-    PredictionResponseMapper.MapearResumo(
-        ehAnomalia,
-        comportamentoReconhecido,
-        classificacaoComportamentoReconhecido,
-        riscoProcesso.Mensagem),
-
- Perfil =
-    PredictionResponseMapper.MapearPerfil(
-        request,
-        mediaHistoricaDetector,
-        limiteInferior,
-        limiteSuperior,
-        score),
-
- Contexto =
-    PredictionResponseMapper.MapearContexto(
-        contexto),
-
-Interpretacao =
-    PredictionResponseMapper.MapearInterpretacao(
-        resultadoInterpretacao),
-
-Processo =
-    PredictionResponseMapper.MapearProcesso(
-        processo),
-
-Dependencias =
-    _predictionDependencyMapper.Mapear(
-        analiseRelacionadas,
-        contexto),
-
-Risco =
-    PredictionResponseMapper.MapearRisco(
-        riscoProcesso,
-        fatoresRisco),
-
-Tendencias =
-    PredictionResponseMapper.MapearTendencias(
-        tendenciaRisco,
-        tendenciaValor),
-
-Multivariado =
-    PredictionResponseMapper.MapearMultivariado(
-        multivariatePromotionApplied,
-        multivariateOperationalEvidence,
-        runtimeDecision.Source,
-        score),
-
-            Detectores =
-                detectoresExecutados
-        };
     }
 }
