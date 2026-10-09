@@ -51,8 +51,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddSingleton<
     IHistoricoService,
     BridgeHistoricoService>();
-
-builder.Services.AddScoped<TagProfileStatisticsCalculator>();
+    
+builder.Services.AddTagProfileStatisticsServices();
 builder.Services.AddScoped<PerfilTagService>();
 builder.Services.AddScoped<PredictionService>();
 builder.Services.AddScoped<BridgeTagsService>();
