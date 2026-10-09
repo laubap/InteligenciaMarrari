@@ -55,7 +55,6 @@ builder.Services.AddScoped<PredictionService>();
 builder.Services.AddRiskAnalysisServices();
 builder.Services.AddAnomalyContextAnalysisServices();
 builder.Services.AddProcessIntelligenceServices();
-builder.Services.AddScoped<FailurePredictionService>();
 builder.Services.AddScoped<FeedbackAnomaliaAnaliseService>();
 
 

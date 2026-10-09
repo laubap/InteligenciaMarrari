@@ -12,6 +12,7 @@ public static class ProcessIntelligenceServiceCollectionExtensions
         services.AddScoped<ProcessoHealthScoreService>();
         services.AddScoped<InterpretacaoProcessoService>();
         services.AddScoped<EquipamentoInteligenciaService>();
+        services.AddScoped<FailurePredictionService>();
 
         return services;
     }
