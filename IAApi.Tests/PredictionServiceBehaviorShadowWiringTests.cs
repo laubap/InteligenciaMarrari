@@ -542,6 +542,13 @@ public sealed class PredictionServiceBehaviorShadowWiringTests
         context,
         processoAnaliseService);
 
+var predictionDetectionPreparationService =
+    new PredictionDetectionPreparationService(
+        historicoService,
+        operationalRegimeBaselineProvider: null,
+        behaviorRuntimeBaselineProvider:
+            behaviorProvider);
+
 return new PredictionService(
     predictionContextLoader,
     null!,
@@ -550,13 +557,11 @@ return new PredictionService(
     null!,
     null!,
     null!,
-    ensemble,
-    historicoService,
-    null!,
-    null!,
-    null!,
-    behaviorRuntimeBaselineProvider:
-        behaviorProvider);
+   ensemble,
+predictionDetectionPreparationService,
+null!,
+null!,
+null!);
     }
 
     private static LeituraBruta[]

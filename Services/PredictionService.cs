@@ -3,7 +3,6 @@ using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Runtime;
 using IAApi.Services.AnomalyDetection.Multivariate;
-using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
 using IAApi.Services.AnomalyDetection.Presentation;
 using IAApi.Services.AnomalyDetection.Orchestration;
 
@@ -33,17 +32,9 @@ public class PredictionService
         _feedbackAnomaliaAnaliseService;
 
     private readonly EnsembleDetectionService _ensembleDetectionService;
-    private readonly IHistoricoService _servicoHistorico;
 
-    // Baseline condicionado por regime operacional.
-    // Mantido opcional para preservar testes e construções manuais antigas.
-    private readonly OperationalRegimeBaselineProvider?
-        _operationalRegimeBaselineProvider;
-
-    // B3.25 - reconhecimento comportamental em shadow.
-// Nesta etapa não possui autoridade sobre o baseline dos detectores.
-    private readonly BehaviorRuntimeBaselineProvider?
-        _behaviorRuntimeBaselineProvider;
+    private readonly PredictionDetectionPreparationService
+        _predictionDetectionPreparationService;
 
 private readonly PredictionInterpretationService
     _predictionInterpretationService;
@@ -101,7 +92,7 @@ private readonly PredictionResponseBuilder
         PredictionResponseBuilder predictionResponseBuilder,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         EnsembleDetectionService ensembleDetectionService,
-        IHistoricoService servicoHistorico,
+        PredictionDetectionPreparationService predictionDetectionPreparationService,
         PredictionInterpretationService predictionInterpretationService,
         RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
         PredictionRuntimeDecisionService predictionRuntimeDecisionService,
@@ -111,9 +102,7 @@ private readonly PredictionResponseBuilder
         IOptions<MultivariateOperationalPromotionOptions>? multivariateOperationalPromotionOptions = null,
         MultivariateOperationalInterpretationFactory? multivariateOperationalInterpretationFactory = null,
         MultivariateOperationalReadinessService? multivariateOperationalReadinessService = null,
-        IOptions<MultivariateOperationalReadinessOptions>? multivariateOperationalReadinessOptions = null,
-        OperationalRegimeBaselineProvider? operationalRegimeBaselineProvider = null,
-        BehaviorRuntimeBaselineProvider? behaviorRuntimeBaselineProvider = null)
+        IOptions<MultivariateOperationalReadinessOptions>? multivariateOperationalReadinessOptions = null)
     {
         _predictionContextLoader =
     predictionContextLoader;
@@ -136,8 +125,8 @@ private readonly PredictionResponseBuilder
         _ensembleDetectionService =
             ensembleDetectionService;
 
-        _servicoHistorico =
-            servicoHistorico;
+        _predictionDetectionPreparationService =
+            predictionDetectionPreparationService;
 
  _predictionInterpretationService =
     predictionInterpretationService;
@@ -168,12 +157,6 @@ private readonly PredictionResponseBuilder
 
         _multivariateOperationalReadinessOptions =
             multivariateOperationalReadinessOptions;
-
-        _operationalRegimeBaselineProvider =
-            operationalRegimeBaselineProvider;
-
-        _behaviorRuntimeBaselineProvider =
-            behaviorRuntimeBaselineProvider;
 
         _predictionResponseBuilder =
             predictionResponseBuilder;
@@ -264,448 +247,31 @@ var processo =
             contexto?.TipoRepresentacao
             ?? "perfil-comportamental";
 
-        /*
-         * Busca o histÃ³rico real da tag no Bridge.
-         *
-         * O segundo parÃ¢metro existe para manter compatibilidade
-         * com a interface IHistoricoService. Atualmente o Bridge
-         * utiliza apenas o nome da tag para buscar o histÃ³rico.
-         */
-        var historicoBruto =
-            _servicoHistorico.BuscarHistorico(
-                request.ClienteId,
-                request.TagName,
-                tipoTag
-            );
-
-        if (historicoBruto == null)
-        {
-            throw new Exception(
-                $"O serviÃ§o de histÃ³rico retornou uma resposta nula " +
-                $"para a tag '{request.TagName}'."
-            );
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        /*
-         * A sanitizaÃ§Ã£o agora Ã© responsabilidade exclusiva de DetectorInput.
-         *
-         * Aqui apenas convertemos as leituras recebidas para o contrato
-         * comum. Na atribuiÃ§Ã£o de Historico serÃ£o:
-         * - removidos valores/timestamps invÃ¡lidos;
-         * - consolidados timestamps duplicados;
-         * - corrigida a ordenaÃ§Ã£o quando necessÃ¡rio;
-         * - medidos cadÃªncia e gaps.
-         */
-        var historicoRecebido =
-            historicoBruto
-                .Where(leitura =>
-                    leitura != null)
-                .Select(leitura =>
-                    new HistoricoDetectorPoint
-                    {
-                        DataHora =
-                            leitura.DataHora,
-
-                        Valor =
-                            leitura.Valor
-                    })
-                .ToList();
-
-        /*
-         * Baseline padrão: mantém exatamente o perfil global já existente.
-         *
-         * Somente quando houver configuração válida e o provider conseguir
-         * construir um baseline por regime é que estes valores são
-         * substituídos antes da criação do DetectorInput.
-         */
-        var mediaHistoricaDetector =
-            perfil.Media;
-
-        var desvioPadraoHistoricoDetector =
-            perfil.DesvioPadrao;
-
-        var variacaoMinimaRelevanteDetector =
-            perfil.VariacaoMinimaRelevante;
-
-        var confiancaVariacaoMinimaDetector =
-            perfil.ConfiancaDeadband;
-
-        var baselineRegimeAplicado =
-            false;
-
-        var baselineComportamentalAplicado =
-            false;
-
-        var comportamentoReconhecido =
-            false;
-
-        string? codigoComportamentoReconhecido =
-            null;
-
-        string? classificacaoComportamentoReconhecido =
-            null;
-
-        string? comportamentoAplicado =
-            null;
-
-        int? snapshotComportamentalAplicado =
-            null;
-
-        double? valorRegimeOperacional =
-            null;
-
-        if (_operationalRegimeBaselineProvider is not null)
-        {
-            try
-            {
-                var regimeBaseline =
-                    _operationalRegimeBaselineProvider.Resolve(
-                        request.ClienteId,
-                        request.TagName,
-                        historicoBruto,
-                        dataHoraAtual);
-
-                if (regimeBaseline.Applied &&
-                    regimeBaseline.Statistics is not null)
-                {
-                    historicoRecebido =
-                        regimeBaseline.History
-                            .ToList();
-
-                    mediaHistoricaDetector =
-                        regimeBaseline.Statistics.Media;
-
-                    desvioPadraoHistoricoDetector =
-                        regimeBaseline.Statistics.DesvioPadrao;
-
-                    variacaoMinimaRelevanteDetector =
-                        regimeBaseline.Statistics.DeadbandRecomendado;
-
-                    confiancaVariacaoMinimaDetector =
-                        regimeBaseline.Statistics.ConfiancaDeadband;
-
-                    baselineRegimeAplicado =
-                        true;
-
-                    valorRegimeOperacional =
-                        regimeBaseline.CurrentRegimeValue;
-
-                    Console.WriteLine(
-                        $"BASELINE POR REGIME APLICADO " +
-                        $"Cliente={request.ClienteId} " +
-                        $"Tag={request.TagName} " +
-                        $"Regime={valorRegimeOperacional?.ToString("G6") ?? "-"} " +
-                        $"Amostras={regimeBaseline.SelectedSamples} " +
-                        $"Media={mediaHistoricaDetector:G6} " +
-                        $"Desvio={desvioPadraoHistoricoDetector:G6} " +
-                        $"Deadband={variacaoMinimaRelevanteDetector:G6} " +
-                        $"Confianca={confiancaVariacaoMinimaDetector:F1}");
-                }
-            }
-            catch (Exception ex)
-            {
-                /*
-                 * Fail-open obrigatório:
-                 * qualquer falha inesperada da nova funcionalidade
-                 * preserva o perfil/histórico global já existente.
-                 */
-                Console.WriteLine(
-                    $"BASELINE POR REGIME FAIL-OPEN " +
-                    $"Cliente={request.ClienteId} " +
-                    $"Tag={request.TagName} " +
-                    $"Erro={ex.Message}");
-            }
-        }
-
-        /*
- * B3.25 - MEMÓRIA COMPORTAMENTAL EM SHADOW.
- *
- * A prioridade continua sendo:
- *
- * regime operacional explícito
- *     >
- * comportamento aprendido
- *     >
- * baseline global
- *
- * Nesta primeira etapa o comportamento aprendido é apenas
- * reconhecido e observado.
- *
- * Nenhuma estatística do detector é alterada.
- */
-if (!baselineRegimeAplicado &&
-    _behaviorRuntimeBaselineProvider is not null)
-{
-    try
-    {
-        var behaviorShadow =
-            await _behaviorRuntimeBaselineProvider.ResolveAsync(
-                request.ClienteId,
-                request.TagName,
-                historicoBruto,
+        var preparation =
+            await _predictionDetectionPreparationService.PrepararAsync(
+                request,
+                perfil,
+                tipoTag,
                 dataHoraAtual,
                 cancellationToken);
 
-        comportamentoReconhecido =
-            behaviorShadow.Recognized;
-
-        codigoComportamentoReconhecido =
-            behaviorShadow.BehaviorCode;
-
-        classificacaoComportamentoReconhecido =
-            behaviorShadow.BehaviorClassification;
-
-        Console.WriteLine(
-            $"B3.25 BEHAVIOR SHADOW " +
-            $"Cliente={request.ClienteId} " +
-            $"Tag={request.TagName} " +
-            $"Recognized={behaviorShadow.Recognized} " +
-            $"Behavior={behaviorShadow.BehaviorCode ?? "-"} " +
-            $"Classification={behaviorShadow.BehaviorClassification ?? "-"} " +
-            $"CanApplyBaseline={behaviorShadow.CanApplyBaseline} " +
-            $"Snapshot={behaviorShadow.SnapshotVersion?.ToString() ?? "-"} " +
-            $"Compatibility=" +
-            $"{behaviorShadow.CompatibilityConfidence?.ToString("F4") ?? "-"} " +
-            $"Reason={behaviorShadow.Reason}");
-
-            /*
- * B3.25 - BASELINE COMPORTAMENTAL COUNTERFACTUAL.
- *
- * Só observamos o baseline que poderia ser utilizado quando
- * o comportamento reconhecido está semanticamente autorizado
- * como baseline normal.
- *
- * Nenhum valor abaixo é aplicado ao DetectorInput nesta etapa.
- */
-/*
- * B3.25 - APLICAÇÃO DO BASELINE COMPORTAMENTAL.
- *
- * Só possui autoridade quando:
- *
- * - o comportamento foi reconhecido;
- * - está semanticamente autorizado como Normal;
- * - todas as estatísticas necessárias são válidas;
- * - existe histórico comportamental utilizável.
- *
- * Este bloco só é alcançado quando nenhum regime operacional
- * explícito foi aplicado.
- */
-if (behaviorShadow.Recognized &&
-    behaviorShadow.CanApplyBaseline &&
-    behaviorShadow.Media is double behaviorMedia &&
-    behaviorShadow.DesvioPadrao is double behaviorDesvio &&
-    behaviorShadow.DeadbandRecomendado is double behaviorDeadband &&
-    behaviorShadow.ConfiancaDeadband is double behaviorConfianca &&
-    double.IsFinite(behaviorMedia) &&
-    double.IsFinite(behaviorDesvio) &&
-    double.IsFinite(behaviorDeadband) &&
-    double.IsFinite(behaviorConfianca) &&
-    behaviorDesvio >= 0 &&
-    behaviorDeadband >= 0 &&
-    behaviorShadow.History.Count > 0)
-{
-    /*
-     * Materializa o histórico antes de alterar qualquer variável
-     * operacional. Assim, uma eventual falha nesta preparação ainda
-     * preserva integralmente o baseline global.
-     */
-    var behaviorHistory =
-        behaviorShadow.History.ToList();
-
-    historicoRecebido =
-        behaviorHistory;
-
-    mediaHistoricaDetector =
-        behaviorMedia;
-
-    desvioPadraoHistoricoDetector =
-        behaviorDesvio;
-
-    variacaoMinimaRelevanteDetector =
-        behaviorDeadband;
-
-    confiancaVariacaoMinimaDetector =
-        behaviorConfianca;
-
-    baselineComportamentalAplicado =
-        true;
-
-    comportamentoAplicado =
-        behaviorShadow.BehaviorCode;
-
-    snapshotComportamentalAplicado =
-        behaviorShadow.SnapshotVersion;
-
-    Console.WriteLine(
-        $"B3.25 BEHAVIOR BASELINE APPLIED " +
-        $"Cliente={request.ClienteId} " +
-        $"Tag={request.TagName} " +
-        $"Behavior={comportamentoAplicado ?? "-"} " +
-        $"Snapshot={snapshotComportamentalAplicado?.ToString() ?? "-"} " +
-        $"Media={mediaHistoricaDetector:G6} " +
-        $"Desvio={desvioPadraoHistoricoDetector:G6} " +
-        $"Deadband={variacaoMinimaRelevanteDetector:G6} " +
-        $"Confianca={confiancaVariacaoMinimaDetector:F1} " +
-        $"Amostras={behaviorHistory.Count}");
-}
-    }
-    catch (OperationCanceledException)
-        when (cancellationToken.IsCancellationRequested)
-    {
-        throw;
-    }
-    catch (Exception ex)
-    {
-        /*
-         * Fail-open:
-         * qualquer falha no reconhecimento comportamental
-         * preserva integralmente o runtime existente.
-         */
-        Console.WriteLine(
-            $"B3.25 BEHAVIOR SHADOW FAIL-OPEN " +
-            $"Cliente={request.ClienteId} " +
-            $"Tag={request.TagName} " +
-            $"Erro={ex.Message}");
-    }
-}
-
         var entradaDetector =
-            new DetectorInput
-            {
-        ClienteId =
-            request.ClienteId,
+            preparation.EntradaDetector;
 
-        TagName =
-            request.TagName,
+        var baselineComportamentalAplicado =
+            preparation.BaselineComportamentalAplicado;
 
-        TipoTag =
-            tipoTag,
+        var comportamentoReconhecido =
+            preparation.ComportamentoReconhecido;
 
-        ValorAtual =
-            request.Valor,
+        var codigoComportamentoReconhecido =
+            preparation.CodigoComportamentoReconhecido;
 
-        DataHoraAtual =
-            dataHoraAtual,
+        var classificacaoComportamentoReconhecido =
+            preparation.ClassificacaoComportamentoReconhecido;
 
-        MediaHistorica =
-            mediaHistoricaDetector,
-
-        DesvioPadraoHistorico =
-            desvioPadraoHistoricoDetector,
-
-        /*
-         * B3.24.1
-         *
-         * Preserva no runtime o deadband aprendido durante
-         * o treinamento do perfil.
-         *
-         * Sem estes campos, o BaselineProtectionProfile
-         * ignora o valor persistido e recalcula o P95
-         * diretamente do histórico da detecção.
-         */
-        VariacaoMinimaRelevante =
-            variacaoMinimaRelevanteDetector,
-
-        ConfiancaVariacaoMinima =
-            confiancaVariacaoMinimaDetector,
-
-        VariacaoMinimaDefinidaPeloCliente =
-            false,
-
-        Historico =
-            historicoRecebido
-    };
-        var historicoDetector =
-            entradaDetector.Historico;
-
-        var qualidadeHistorico =
-            entradaDetector.QualidadeHistorico;
-
-        Console.WriteLine("================================");
-        Console.WriteLine("HISTÃ“RICO PREPARADO PARA DETECÃ‡ÃƒO");
-        Console.WriteLine($"Cliente: {request.ClienteId}");
-        Console.WriteLine($"Tag: {request.TagName}");
-        Console.WriteLine($"Tipo: {tipoTag}");
-var origemBaselineDetector =
-    baselineRegimeAplicado
-        ? "regime operacional"
-        : baselineComportamentalAplicado
-            ? "comportamento aprendido"
-            : "global";
-
-Console.WriteLine(
-    $"Baseline estatístico: {origemBaselineDetector}");
-
-    if (baselineComportamentalAplicado)
-{
-    Console.WriteLine(
-        $"Comportamento aplicado: " +
-        $"{comportamentoAplicado ?? "-"} " +
-        $"Snapshot={snapshotComportamentalAplicado?.ToString() ?? "-"}");
-}
-
-        if (baselineRegimeAplicado)
-        {
-            Console.WriteLine(
-                $"Valor do regime operacional: " +
-                $"{valorRegimeOperacional?.ToString("G6") ?? "-"}");
-        }
-
-        Console.WriteLine(
-            $"Registros recebidos: " +
-            $"{qualidadeHistorico.OriginalPoints}");
-        Console.WriteLine(
-            $"Registros vÃ¡lidos: " +
-            $"{qualidadeHistorico.ValidPoints}");
-        Console.WriteLine(
-            $"Valores invÃ¡lidos removidos: " +
-            $"{qualidadeHistorico.InvalidValues}");
-        Console.WriteLine(
-            $"Timestamps invÃ¡lidos removidos: " +
-            $"{qualidadeHistorico.InvalidTimestamps}");
-        Console.WriteLine(
-            $"Timestamps duplicados: " +
-            $"{qualidadeHistorico.DuplicateTimestamps}");
-        Console.WriteLine(
-            $"TransiÃ§Ãµes fora de ordem: " +
-            $"{qualidadeHistorico.OutOfOrderTransitions}");
-        Console.WriteLine(
-            $"CadÃªncia mediana: " +
-            $"{qualidadeHistorico.MedianIntervalMinutes:F3} min");
-        Console.WriteLine(
-            $"Maior gap: " +
-            $"{qualidadeHistorico.LargestGapMinutes:F3} min");
-        Console.WriteLine(
-            $"Gap crÃ­tico: " +
-            $"{qualidadeHistorico.HasCriticalGap}");
-
-        if (historicoDetector.Count > 0)
-        {
-            Console.WriteLine(
-                $"Primeiro registro: " +
-                $"{historicoDetector.First().DataHora:yyyy-MM-dd HH:mm:ss}"
-            );
-
-            Console.WriteLine(
-                $"Ãšltimo registro: " +
-                $"{historicoDetector.Last().DataHora:yyyy-MM-dd HH:mm:ss}"
-            );
-        }
-
-        Console.WriteLine("================================");
-
-        if (historicoDetector.Count < 10)
-        {
-            throw new Exception(
-                $"HistÃ³rico insuficiente para analisar a tag " +
-                $"'{request.TagName}'. Foram encontrados apenas " +
-                $"{historicoDetector.Count} pontos vÃ¡lidos."
-            );
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
+        var mediaHistoricaDetector =
+            preparation.MediaHistoricaDetector;
 
         /*
          * O ensemble executa os detectores e continua sendo o Ãºnico

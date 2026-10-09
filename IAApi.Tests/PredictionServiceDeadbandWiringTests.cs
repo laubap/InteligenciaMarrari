@@ -706,6 +706,12 @@ var predictionContextLoader =
         context,
         processoAnaliseService);
 
+var predictionDetectionPreparationService =
+    new PredictionDetectionPreparationService(
+        historicoService,
+        regimeProvider,
+        behaviorRuntimeBaselineProvider: null);
+
 return new PredictionService(
     predictionContextLoader,
     null!,
@@ -715,12 +721,10 @@ return new PredictionService(
     null!,
     null!,
     ensemble,
-    historicoService,
+    predictionDetectionPreparationService,
     null!,
     null!,
-    null!,
-    operationalRegimeBaselineProvider:
-        regimeProvider);
+    null!);
     }
 
     private sealed class CaptureDetector :

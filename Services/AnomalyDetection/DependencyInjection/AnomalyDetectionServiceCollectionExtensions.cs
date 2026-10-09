@@ -51,6 +51,12 @@ public static IServiceCollection AddOperationalRegimeServices(
     services.AddScoped<
         OperationalRegimeBaselineProvider>();
 
+    services.AddScoped<
+    IAApi.Services.AnomalyDetection.Orchestration
+        .PredictionDetectionPreparationService>();
+
+    
+
     return services;
 }
 
