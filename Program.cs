@@ -59,12 +59,8 @@ builder.Services.AddScoped<ExplicacaoRiscoService>();
 builder.Services.AddScoped<TendenciaRiscoService>();
 builder.Services.AddScoped<TendenciaValorService>();
 builder.Services.AddScoped<InterpretacaoDependenciasService>();
-builder.Services.AddScoped<ProcessoAnaliseService>();
-builder.Services.AddScoped<ProcessoInteligenciaService>();
-builder.Services.AddScoped<ProcessoHealthScoreService>();
-builder.Services.AddScoped<InterpretacaoProcessoService>();
+builder.Services.AddProcessIntelligenceServices();
 builder.Services.AddScoped<FailurePredictionService>();
-builder.Services.AddScoped<EquipamentoInteligenciaService>();
 builder.Services.AddScoped<FeedbackAnomaliaAnaliseService>();
 
 
