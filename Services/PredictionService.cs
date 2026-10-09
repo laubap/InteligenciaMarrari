@@ -5,6 +5,7 @@ using IAApi.Services.AnomalyDetection.Runtime;
 using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
 using IAApi.Services.AnomalyDetection.Presentation;
+using IAApi.Services.AnomalyDetection.Orchestration;
 
 // ServiÃ§o principal de detecÃ§Ã£o de anomalias.
 public class PredictionService
@@ -24,8 +25,7 @@ public class PredictionService
     private readonly AppDbContext _context;
     private readonly AnaliseRelacionadasService _analiseRelacionadasService;
     private readonly AnomaliaHistoricoService _historicoService;
-    private readonly RiskScoreService _riskScoreService;
-    private readonly ExplicacaoRiscoService _explicacaoRiscoService;
+    private readonly PredictionRiskAnalysisService _predictionRiskAnalysisService;
     private readonly TendenciaRiscoService _tendenciaRiscoService;
     private readonly TendenciaValorService _tendenciaValorService;
 
@@ -110,8 +110,7 @@ private readonly PredictionResponseBuilder
         AppDbContext context,
         AnaliseRelacionadasService analiseRelacionadasService,
         AnomaliaHistoricoService historicoService,
-        RiskScoreService riskScoreService,
-        ExplicacaoRiscoService explicacaoRiscoService,
+        PredictionRiskAnalysisService predictionRiskAnalysisService,
         TendenciaRiscoService tendenciaRiscoService,
         TendenciaValorService tendenciaValorService,
         PredictionResponseBuilder predictionResponseBuilder,
@@ -144,11 +143,8 @@ private readonly PredictionResponseBuilder
         _historicoService =
             historicoService;
 
-        _riskScoreService =
-            riskScoreService;
-
-        _explicacaoRiscoService =
-            explicacaoRiscoService;
+        _predictionRiskAnalysisService =
+            predictionRiskAnalysisService;
 
         _tendenciaRiscoService =
             tendenciaRiscoService;
@@ -1240,21 +1236,18 @@ if (!multivariatePromotionApplied)
                 request.TagName
             );
 
-        var riscoProcesso =
-            _riskScoreService.Calcular(
-                ehAnomalia,
-                score,
-                contexto?.Criticidade,
-                analiseRelacionadas
-            );
+var analiseRisco =
+    _predictionRiskAnalysisService.Analisar(
+        ehAnomalia,
+        score,
+        contexto,
+        analiseRelacionadas);
 
-        var fatoresRisco =
-            _explicacaoRiscoService.GerarFatores(
-                score,
-                contexto,
-                analiseRelacionadas,
-                riscoProcesso
-            );
+var riscoProcesso =
+    analiseRisco.Risco;
+
+var fatoresRisco =
+    analiseRisco.Fatores;
 
         if (multivariatePromotionApplied &&
             multivariateOperationalEvidence is not null)

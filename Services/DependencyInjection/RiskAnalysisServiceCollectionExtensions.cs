@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using IAApi.Services.AnomalyDetection.Orchestration;
 
 namespace IAApi.Services.DependencyInjection;
 
@@ -11,6 +12,7 @@ public static class RiskAnalysisServiceCollectionExtensions
         services.AddScoped<ExplicacaoRiscoService>();
         services.AddScoped<TendenciaRiscoService>();
         services.AddScoped<TendenciaValorService>();
+        services.AddScoped<PredictionRiskAnalysisService>();
 
         return services;
     }
