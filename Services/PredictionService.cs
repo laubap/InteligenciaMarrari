@@ -1,10 +1,10 @@
-﻿using System.Text.Json;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Runtime;
 using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
+using IAApi.Services.AnomalyDetection.Presentation;
 
 // ServiÃ§o principal de detecÃ§Ã£o de anomalias.
 public class PredictionService
@@ -1268,8 +1268,8 @@ if (!multivariatePromotionApplied)
                 _multivariateOperationalInterpretationFactory!.Create(
                     multivariateOperationalEvidence,
                     score,
-                    MapearSeveridadeRisco(
-                        riscoProcesso.Classificacao));
+            PredictionResponseFormatter.MapearSeveridadeRisco(
+                riscoProcesso.Classificacao));
 
             fatoresRisco.Add(
                 $"Anomalia multivariada operacional no grupo " +
@@ -1316,12 +1316,12 @@ if (!multivariatePromotionApplied)
         var mensagem =
             multivariatePromotionApplied &&
             multivariateOperationalEvidence is not null
-                ? MontarMensagemMultivariada(
+                ? PredictionResponseFormatter.MontarMensagemMultivariada(
                     request,
                     contexto,
                     riscoProcesso,
                     multivariateOperationalEvidence)
-                : MontarMensagemCliente(
+                : PredictionResponseFormatter.MontarMensagemCliente(
                     request,
                     contexto,
                     ehAnomalia,
@@ -1487,16 +1487,16 @@ Console.WriteLine();
                         contexto.ObservacaoModoOperacao,
 
                     Impactos =
-                        LerLista(contexto.Impactos),
+                       PredictionResponseFormatter.LerLista( contexto.Impactos),
 
                     CausasProvaveis =
-                        LerLista(contexto.CausasProvaveis),
+                        PredictionResponseFormatter.LerLista(contexto.CausasProvaveis),
 
                     AcoesRecomendadas =
-                        LerLista(contexto.AcoesRecomendadas),
+                        PredictionResponseFormatter.LerLista(contexto.AcoesRecomendadas),
 
                     ModosOperacao =
-                        LerLista(contexto.ModosOperacao)
+                        PredictionResponseFormatter.LerLista(contexto.ModosOperacao)
                 },
 
             Interpretacao = new InterpretacaoAnomaliaDto
@@ -1685,112 +1685,5 @@ Console.WriteLine();
             Detectores =
                 detectoresExecutados
         };
-    }
-
-    private static string MapearSeveridadeRisco(
-        string? classificacao)
-    {
-        return classificacao?.Trim().ToLowerInvariant() switch
-        {
-            "critico" or "crítico" =>
-                "Crítica",
-
-            "alto" =>
-                "Alta",
-
-            "medio" or "médio" =>
-                "Média",
-
-            "baixo" =>
-                "Baixa",
-
-            _ =>
-                "Normal"
-        };
-    }
-
-    private static string MontarMensagemMultivariada(
-        AnomaliaRequest request,
-        TagContextoIa? contexto,
-        ResultadoRiscoProcesso riscoProcesso,
-        MultivariateDecisionEvidence evidence)
-    {
-        var descricaoTag =
-            !string.IsNullOrWhiteSpace(
-                contexto?.Descricao)
-                ? contexto.Descricao
-                : request.TagName;
-
-        var risco =
-            !string.IsNullOrWhiteSpace(
-                riscoProcesso.Classificacao)
-                ? riscoProcesso.Classificacao
-                : "não classificado";
-
-        return
-            $"{descricaoTag} participa de uma condição multivariada " +
-            $"anômala no grupo '{evidence.GroupName}'. " +
-            $"Risco: {risco}. Recomenda-se verificar em conjunto " +
-            "as tags participantes e o estado operacional do processo.";
-    }
-
-    private string MontarMensagemCliente(
-        AnomaliaRequest request,
-        TagContextoIa? contexto,
-        bool ehAnomalia,
-        double score,
-        ResultadoRiscoProcesso riscoProcesso,
-        ResultadoTendenciaValor tendenciaValor)
-    {
-        var descricaoTag =
-            !string.IsNullOrWhiteSpace(
-                contexto?.Descricao)
-                ? contexto.Descricao
-                : request.TagName;
-
-        if (!ehAnomalia)
-        {
-            return
-                $"{descricaoTag} estÃ¡ operando " +
-                "dentro do comportamento esperado. " +
-                "Nenhuma aÃ§Ã£o imediata Ã© necessÃ¡ria.";
-        }
-
-        var risco =
-            !string.IsNullOrWhiteSpace(
-                riscoProcesso.Classificacao)
-                ? riscoProcesso.Classificacao
-                : "nÃ£o classificado";
-
-        return
-            $"{descricaoTag} apresentou comportamento " +
-            $"fora do padrÃ£o esperado. Risco: {risco}. " +
-            "Recomenda-se verificar a condiÃ§Ã£o " +
-            "operacional da tag.";
-    }
-
-    private static List<string> LerLista(
-        string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return new List<string>();
-        }
-
-        try
-        {
-            return
-                JsonSerializer.Deserialize<List<string>>(json)
-                ?? new List<string>();
-        }
-        catch
-        {
-            return json
-                .Split(';', ',')
-                .Select(x => x.Trim())
-                .Where(x =>
-                    !string.IsNullOrWhiteSpace(x))
-                .ToList();
-        }
     }
 }
