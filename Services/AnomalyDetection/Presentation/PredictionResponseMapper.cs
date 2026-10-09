@@ -219,4 +219,40 @@ public static class PredictionResponseMapper
                 evidence.Tags.ToList()
         };
     }
+
+    public static ProcessoDto? MapearProcesso(
+    ProcessoIa? processo)
+{
+    if (processo is null)
+    {
+        return null;
+    }
+
+    return new ProcessoDto
+    {
+        Nome =
+            processo.Nome,
+
+        Descricao =
+            processo.Descricao,
+
+        Area =
+            processo.Area,
+
+        Criticidade =
+            processo.Criticidade,
+
+        Objetivo =
+            processo.Objetivo,
+
+        CondicaoNormal =
+            processo.CondicaoNormal,
+
+        ConsequenciasFalha =
+            processo.ConsequenciasFalha,
+
+        ProcedimentoRecomendado =
+            processo.ProcedimentoRecomendado
+    };
+}
 }

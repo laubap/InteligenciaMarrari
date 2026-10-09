@@ -1456,34 +1456,9 @@ Interpretacao =
     PredictionResponseMapper.MapearInterpretacao(
         resultadoInterpretacao),
 
-            Processo = processo == null
-                ? null
-                : new ProcessoDto
-                {
-                    Nome =
-                        processo.Nome,
-
-                    Descricao =
-                        processo.Descricao,
-
-                    Area =
-                        processo.Area,
-
-                    Criticidade =
-                        processo.Criticidade,
-
-                    Objetivo =
-                        processo.Objetivo,
-
-                    CondicaoNormal =
-                        processo.CondicaoNormal,
-
-                    ConsequenciasFalha =
-                        processo.ConsequenciasFalha,
-
-                    ProcedimentoRecomendado =
-                        processo.ProcedimentoRecomendado
-                },
+Processo =
+    PredictionResponseMapper.MapearProcesso(
+        processo),
 
 Dependencias =
     _predictionDependencyMapper.Mapear(
