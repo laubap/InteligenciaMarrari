@@ -13,6 +13,7 @@ public static class RiskAnalysisServiceCollectionExtensions
         services.AddScoped<TendenciaRiscoService>();
         services.AddScoped<TendenciaValorService>();
         services.AddScoped<PredictionRiskAnalysisService>();
+        services.AddScoped<PredictionTrendAnalysisService>();
 
         return services;
     }

@@ -26,8 +26,7 @@ public class PredictionService
     private readonly AnaliseRelacionadasService _analiseRelacionadasService;
     private readonly AnomaliaHistoricoService _historicoService;
     private readonly PredictionRiskAnalysisService _predictionRiskAnalysisService;
-    private readonly TendenciaRiscoService _tendenciaRiscoService;
-    private readonly TendenciaValorService _tendenciaValorService;
+    private readonly PredictionTrendAnalysisService _predictionTrendAnalysisService;
 
     private readonly ProcessoAnaliseService _processoAnaliseService;
 
@@ -111,8 +110,7 @@ private readonly PredictionResponseBuilder
         AnaliseRelacionadasService analiseRelacionadasService,
         AnomaliaHistoricoService historicoService,
         PredictionRiskAnalysisService predictionRiskAnalysisService,
-        TendenciaRiscoService tendenciaRiscoService,
-        TendenciaValorService tendenciaValorService,
+        PredictionTrendAnalysisService predictionTrendAnalysisService,
         PredictionResponseBuilder predictionResponseBuilder,
         ProcessoAnaliseService processoAnaliseService,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
@@ -146,11 +144,8 @@ private readonly PredictionResponseBuilder
         _predictionRiskAnalysisService =
             predictionRiskAnalysisService;
 
-        _tendenciaRiscoService =
-            tendenciaRiscoService;
-
-        _tendenciaValorService =
-            tendenciaValorService;
+        _predictionTrendAnalysisService =
+            predictionTrendAnalysisService;
 
         _processoAnaliseService =
             processoAnaliseService;
@@ -1277,18 +1272,17 @@ var fatoresRisco =
                 "Não foi possível construir a interpretação operacional.");
         }
 
-        var tendenciaRisco =
-            _tendenciaRiscoService.Analisar(
-                request.ClienteId,
-                request.TagName
-            );
+var analiseTendencias =
+    _predictionTrendAnalysisService.Analisar(
+        request.ClienteId,
+        request.TagName,
+        tipoTag);
 
-        var tendenciaValor =
-            _tendenciaValorService.Analisar(
-                request.ClienteId,
-                request.TagName,
-                tipoTag
-            );
+var tendenciaRisco =
+    analiseTendencias.TendenciaRisco;
+
+var tendenciaValor =
+    analiseTendencias.TendenciaValor;
 
         var analiseFeedbacks =
             _feedbackAnomaliaAnaliseService
