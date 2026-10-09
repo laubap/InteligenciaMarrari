@@ -547,7 +547,6 @@ public sealed class PredictionServiceBehaviorShadowWiringTests
             null!,
             processoAnaliseService,
             null!,
-            null!,
             ensemble,
             historicoService,
             null!,

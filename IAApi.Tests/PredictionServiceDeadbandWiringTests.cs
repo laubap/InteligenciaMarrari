@@ -710,7 +710,6 @@ public sealed class PredictionServiceDeadbandWiringTests
             null!,
             processoAnaliseService,
             null!,
-            null!,
             ensemble,
             historicoService,
             null!,

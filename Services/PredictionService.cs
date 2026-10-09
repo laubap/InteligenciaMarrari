@@ -33,7 +33,6 @@ public class PredictionService
         _interpretacaoDependenciasService;
 
     private readonly ProcessoAnaliseService _processoAnaliseService;
-    private readonly BridgeValorAtualService _bridgeValorAtualService;
 
     private readonly FeedbackAnomaliaAnaliseService
         _feedbackAnomaliaAnaliseService;
@@ -117,7 +116,6 @@ public class PredictionService
         TendenciaValorService tendenciaValorService,
         InterpretacaoDependenciasService interpretacaoDependenciasService,
         ProcessoAnaliseService processoAnaliseService,
-        BridgeValorAtualService bridgeValorAtualService,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         EnsembleDetectionService ensembleDetectionService,
         IHistoricoService servicoHistorico,
@@ -163,9 +161,6 @@ public class PredictionService
 
         _processoAnaliseService =
             processoAnaliseService;
-
-        _bridgeValorAtualService =
-            bridgeValorAtualService;
 
         _feedbackAnomaliaAnaliseService =
             feedbackAnomaliaAnaliseService;
@@ -1690,66 +1685,6 @@ Console.WriteLine();
             Detectores =
                 detectoresExecutados
         };
-    }
-
-    public async Task<AnomaliaResponse> DetectarValorAtual(
-        string clienteId,
-        string tagName,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var valores =
-            await _bridgeValorAtualService
-                .BuscarValoresAtuais(
-                    new List<string>
-                    {
-                        tagName
-                    });
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var valorAtual =
-            valores.FirstOrDefault(x =>
-                string.Equals(
-                    x.TagName,
-                    tagName,
-                    StringComparison.OrdinalIgnoreCase
-                ));
-
-        if (
-            valorAtual == null ||
-            !valorAtual.Encontrado)
-        {
-            throw new Exception(
-                $"Valor atual da tag {tagName} " +
-                "nÃ£o encontrado no Bridge."
-            );
-        }
-
-        var request = new AnomaliaRequest
-        {
-            ClienteId =
-                clienteId,
-
-            TagName =
-                tagName,
-
-            Valor =
-                (float)valorAtual.Valor,
-
-            // B3.21.1 â€” preserva o timestamp real da leitura recebido do Bridge.
-            // Isso evita substituir o horÃ¡rio industrial da leitura pelo relÃ³gio
-            // local da API e melhora a consistÃªncia temporal de replay, gaps,
-            // cadÃªncia e decisÃµes de estabilidade do runtime.
-            DataHora =
-                valorAtual.DataHora
-        };
-
-        return await Detectar(
-            request,
-            cancellationToken
-        );
     }
 
     private static string MapearSeveridadeRisco(
