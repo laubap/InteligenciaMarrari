@@ -10,6 +10,7 @@ public static class AnomalyContextAnalysisServiceCollectionExtensions
         services.AddScoped<AnaliseRelacionadasService>();
         services.AddScoped<AnomaliaHistoricoService>();
         services.AddScoped<InterpretacaoDependenciasService>();
+        services.AddScoped<FeedbackAnomaliaAnaliseService>();
 
         return services;
     }
