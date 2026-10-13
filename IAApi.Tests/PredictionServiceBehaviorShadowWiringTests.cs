@@ -554,14 +554,11 @@ return new PredictionService(
     null!,
     null!,
     null!,
+    ensemble,
+    predictionDetectionPreparationService,
     null!,
     null!,
-    null!,
-   ensemble,
-predictionDetectionPreparationService,
-null!,
-null!,
-null!);
+    null!);
     }
 
     private static LeituraBruta[]

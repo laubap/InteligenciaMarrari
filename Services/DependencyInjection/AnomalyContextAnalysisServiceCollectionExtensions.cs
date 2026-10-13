@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Presentation;
+using IAApi.Services.AnomalyDetection.Orchestration;
 
 namespace IAApi.Services.DependencyInjection;
 
@@ -14,6 +15,7 @@ public static class AnomalyContextAnalysisServiceCollectionExtensions
     services.AddScoped<FeedbackAnomaliaAnaliseService>();
     services.AddScoped<PredictionDependencyMapper>();
     services.AddScoped<PredictionResponseBuilder>();
+    services.AddScoped<PredictionPostDecisionAnalysisService>();
 
         return services;
     }

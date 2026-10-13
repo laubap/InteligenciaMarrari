@@ -21,94 +21,60 @@ public class PredictionService
      */
     private const double LimiteEnsembleInterpretacao = 50.0;
 
-    private readonly AnaliseRelacionadasService _analiseRelacionadasService;
     private readonly AnomaliaHistoricoService _historicoService;
-    private readonly PredictionRiskAnalysisService _predictionRiskAnalysisService;
-    private readonly PredictionTrendAnalysisService _predictionTrendAnalysisService;
 
     private readonly PredictionContextLoader _predictionContextLoader;
-
-    private readonly FeedbackAnomaliaAnaliseService
-        _feedbackAnomaliaAnaliseService;
 
     private readonly EnsembleDetectionService _ensembleDetectionService;
 
     private readonly PredictionDetectionPreparationService
         _predictionDetectionPreparationService;
 
-private readonly PredictionInterpretationService
-    _predictionInterpretationService;
+    private readonly PredictionInterpretationService
+        _predictionInterpretationService;
 
-    // B3.18 â€” ponte operacional do runtime real.
-    // O DetectorResult Legacy permanece imutÃ¡vel.
     private readonly PredictionRuntimeDecisionService
-    _predictionRuntimeDecisionService;
+        _predictionRuntimeDecisionService;
+
+    private readonly PredictionPostDecisionAnalysisService
+        _predictionPostDecisionAnalysisService;
 
     private readonly RuntimeFunctionalDecisionContextProvider
         _runtimeFunctionalDecisionContextProvider;
 
-    // B3.24.2 / MV01 — caminho multivariado somente observacional.
-    // Pode ser null em testes antigos construídos manualmente.
     private readonly MultivariateShadowRuntimeCoordinator?
         _multivariateShadowRuntimeCoordinator;
 
-    // B3.24.2 / MV06 — observação da fusão counterfactual.
-    // Nunca altera a decisão operacional nesta etapa.
+    private readonly PredictionMultivariateDecisionService?
+        _predictionMultivariateDecisionService;
 
-    // B3.24.2 / MV06.3C — interpretação coerente quando a
-    // autoridade operacional vier do multivariado.
-    private readonly MultivariateOperationalInterpretationFactory?
-        _multivariateOperationalInterpretationFactory;
-
-    // B3.24.2 / MV07.5 — trava de readiness antes de qualquer
-    // autoridade operacional multivariada real.
-    //
-    // Mantidos opcionais para preservar testes/construções manuais antigos.
-private readonly PredictionMultivariateDecisionService?
-    _predictionMultivariateDecisionService;
-
-private readonly PredictionResponseBuilder
-    _predictionResponseBuilder;
+    private readonly PredictionResponseBuilder
+        _predictionResponseBuilder;
 
     public PredictionService(
         PredictionContextLoader predictionContextLoader,
-        AnaliseRelacionadasService analiseRelacionadasService,
+        PredictionPostDecisionAnalysisService predictionPostDecisionAnalysisService,
         AnomaliaHistoricoService historicoService,
-        PredictionRiskAnalysisService predictionRiskAnalysisService,
-        PredictionTrendAnalysisService predictionTrendAnalysisService,
         PredictionResponseBuilder predictionResponseBuilder,
-        FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         EnsembleDetectionService ensembleDetectionService,
         PredictionDetectionPreparationService predictionDetectionPreparationService,
         PredictionInterpretationService predictionInterpretationService,
         RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
         PredictionRuntimeDecisionService predictionRuntimeDecisionService,
-MultivariateShadowRuntimeCoordinator?
-    multivariateShadowRuntimeCoordinator = null,
-
-PredictionMultivariateDecisionService?
-    predictionMultivariateDecisionService = null,
-
-MultivariateOperationalInterpretationFactory?
-    multivariateOperationalInterpretationFactory = null)
+        MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
+        PredictionMultivariateDecisionService? predictionMultivariateDecisionService = null)
     {
         _predictionContextLoader =
-    predictionContextLoader;
+            predictionContextLoader;
 
-        _analiseRelacionadasService =
-            analiseRelacionadasService;
+        _predictionPostDecisionAnalysisService =
+            predictionPostDecisionAnalysisService;
 
         _historicoService =
             historicoService;
 
-        _predictionRiskAnalysisService =
-            predictionRiskAnalysisService;
-
-        _predictionTrendAnalysisService =
-            predictionTrendAnalysisService;
-
-        _feedbackAnomaliaAnaliseService =
-            feedbackAnomaliaAnaliseService;
+        _predictionResponseBuilder =
+            predictionResponseBuilder;
 
         _ensembleDetectionService =
             ensembleDetectionService;
@@ -116,8 +82,8 @@ MultivariateOperationalInterpretationFactory?
         _predictionDetectionPreparationService =
             predictionDetectionPreparationService;
 
- _predictionInterpretationService =
-    predictionInterpretationService;
+        _predictionInterpretationService =
+            predictionInterpretationService;
 
         _runtimeFunctionalDecisionContextProvider =
             runtimeFunctionalDecisionContextProvider;
@@ -130,14 +96,6 @@ MultivariateOperationalInterpretationFactory?
 
         _predictionMultivariateDecisionService =
             predictionMultivariateDecisionService;
-
-        _multivariateOperationalInterpretationFactory =
-            multivariateOperationalInterpretationFactory;
-
-
-
-        _predictionResponseBuilder =
-            predictionResponseBuilder;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -330,8 +288,9 @@ if (_predictionMultivariateDecisionService is not null)
             dataHoraAtual,
             multivariateShadowResults,
             resultadoDetector.Score,
-            multivariateInterpretationAvailable:
-                _multivariateOperationalInterpretationFactory is not null,
+multivariateInterpretationAvailable:
+    _predictionPostDecisionAnalysisService
+        .MultivariateInterpretationAvailable,
             cancellationToken);
 
     runtimeDecision =
@@ -399,97 +358,40 @@ var resultadoInterpretacao =
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var postDecisionAnalysis =
+            await _predictionPostDecisionAnalysisService.AnalisarAsync(
+                request,
+                tipoTag,
+                ehAnomalia,
+                score,
+                contexto,
+                resultadoInterpretacao,
+                multivariatePromotionApplied,
+                multivariateOperationalEvidence);
+
         var analiseRelacionadas =
-            await _analiseRelacionadasService.Analisar(
-                request.ClienteId,
-                request.TagName
-            );
+            postDecisionAnalysis.AnaliseRelacionadas;
 
-var analiseRisco =
-    _predictionRiskAnalysisService.Analisar(
-        ehAnomalia,
-        score,
-        contexto,
-        analiseRelacionadas);
+        var riscoProcesso =
+            postDecisionAnalysis.RiscoProcesso;
 
-var riscoProcesso =
-    analiseRisco.Risco;
+        var fatoresRisco =
+            postDecisionAnalysis.FatoresRisco;
 
-var fatoresRisco =
-    analiseRisco.Fatores;
+        resultadoInterpretacao =
+            postDecisionAnalysis.ResultadoInterpretacao;
 
-        if (multivariatePromotionApplied &&
-            multivariateOperationalEvidence is not null)
-        {
-            /*
-             * O score usado pelo RiskScoreService continua sendo o score
-             * univariado. O score 0–100 do multivariado permanece somente
-             * na evidência multivariada.
-             */
-            resultadoInterpretacao =
-                _multivariateOperationalInterpretationFactory!.Create(
-                    multivariateOperationalEvidence,
-                    score,
-            PredictionResponseFormatter.MapearSeveridadeRisco(
-                riscoProcesso.Classificacao));
+        var tendenciaRisco =
+            postDecisionAnalysis.TendenciaRisco;
 
-            fatoresRisco.Add(
-                $"Anomalia multivariada operacional no grupo " +
-                $"'{multivariateOperationalEvidence.GroupName}' " +
-                $"(score {multivariateOperationalEvidence.Score:F2}, " +
-                $"limite {multivariateOperationalEvidence.Threshold:F2}).");
-        }
-
-        if (resultadoInterpretacao is null)
-        {
-            throw new InvalidOperationException(
-                "Não foi possível construir a interpretação operacional.");
-        }
-
-var analiseTendencias =
-    _predictionTrendAnalysisService.Analisar(
-        request.ClienteId,
-        request.TagName,
-        tipoTag);
-
-var tendenciaRisco =
-    analiseTendencias.TendenciaRisco;
-
-var tendenciaValor =
-    analiseTendencias.TendenciaValor;
+        var tendenciaValor =
+            postDecisionAnalysis.TendenciaValor;
 
         var analiseFeedbacks =
-            _feedbackAnomaliaAnaliseService
-                .GerarAnaliseFeedbacks(
-                    request.ClienteId,
-                    request.TagName,
-                    score,
-                    request.Valor
-                );
+            postDecisionAnalysis.AnaliseFeedbacks;
 
-        /*
-         * A mensagem principal continua sendo gerada pela lÃ³gica
-         * existente para preservar compatibilidade com o sistema.
-         *
-         * A interpretaÃ§Ã£o detalhada serÃ¡ retornada separadamente
-         * na propriedade Interpretacao.
-         */
         var mensagem =
-            multivariatePromotionApplied &&
-            multivariateOperationalEvidence is not null
-                ? PredictionResponseFormatter.MontarMensagemMultivariada(
-                    request,
-                    contexto,
-                    riscoProcesso,
-                    multivariateOperationalEvidence)
-                : PredictionResponseFormatter.MontarMensagemCliente(
-                    request,
-                    contexto,
-                    ehAnomalia,
-                    score,
-                    riscoProcesso,
-                    tendenciaValor
-                );
+            postDecisionAnalysis.Mensagem;
 
         cancellationToken.ThrowIfCancellationRequested();
 
