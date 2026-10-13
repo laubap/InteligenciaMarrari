@@ -75,6 +75,9 @@ public static IServiceCollection AddOperationalMultivariateDecisionServices(
     services.AddScoped<
         MultivariateShadowRuntimeCoordinator>();
 
+    services.AddScoped<
+    PredictionMultivariateDecisionService>();
+
     return services;
 }
 

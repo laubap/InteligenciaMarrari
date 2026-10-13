@@ -54,16 +54,6 @@ private readonly PredictionInterpretationService
 
     // B3.24.2 / MV06 — observação da fusão counterfactual.
     // Nunca altera a decisão operacional nesta etapa.
-    private readonly MultivariateDecisionCounterfactualObserver?
-        _multivariateDecisionCounterfactualObserver;
-
-    // B3.24.2 / MV06.3 — resolver da promoção operacional.
-    // Continua protegido por feature flag própria, desligada por padrão.
-    private readonly MultivariateOperationalFusionResolver?
-        _multivariateOperationalFusionResolver;
-
-    private readonly IOptions<MultivariateOperationalPromotionOptions>?
-        _multivariateOperationalPromotionOptions;
 
     // B3.24.2 / MV06.3C — interpretação coerente quando a
     // autoridade operacional vier do multivariado.
@@ -74,11 +64,8 @@ private readonly PredictionInterpretationService
     // autoridade operacional multivariada real.
     //
     // Mantidos opcionais para preservar testes/construções manuais antigos.
-    private readonly MultivariateOperationalReadinessService?
-        _multivariateOperationalReadinessService;
-
-    private readonly IOptions<MultivariateOperationalReadinessOptions>?
-        _multivariateOperationalReadinessOptions;
+private readonly PredictionMultivariateDecisionService?
+    _predictionMultivariateDecisionService;
 
 private readonly PredictionResponseBuilder
     _predictionResponseBuilder;
@@ -96,13 +83,14 @@ private readonly PredictionResponseBuilder
         PredictionInterpretationService predictionInterpretationService,
         RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
         PredictionRuntimeDecisionService predictionRuntimeDecisionService,
-        MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
-        MultivariateDecisionCounterfactualObserver? multivariateDecisionCounterfactualObserver = null,
-        MultivariateOperationalFusionResolver? multivariateOperationalFusionResolver = null,
-        IOptions<MultivariateOperationalPromotionOptions>? multivariateOperationalPromotionOptions = null,
-        MultivariateOperationalInterpretationFactory? multivariateOperationalInterpretationFactory = null,
-        MultivariateOperationalReadinessService? multivariateOperationalReadinessService = null,
-        IOptions<MultivariateOperationalReadinessOptions>? multivariateOperationalReadinessOptions = null)
+MultivariateShadowRuntimeCoordinator?
+    multivariateShadowRuntimeCoordinator = null,
+
+PredictionMultivariateDecisionService?
+    predictionMultivariateDecisionService = null,
+
+MultivariateOperationalInterpretationFactory?
+    multivariateOperationalInterpretationFactory = null)
     {
         _predictionContextLoader =
     predictionContextLoader;
@@ -140,23 +128,13 @@ private readonly PredictionResponseBuilder
         _multivariateShadowRuntimeCoordinator =
             multivariateShadowRuntimeCoordinator;
 
-        _multivariateDecisionCounterfactualObserver =
-            multivariateDecisionCounterfactualObserver;
-
-        _multivariateOperationalFusionResolver =
-            multivariateOperationalFusionResolver;
-
-        _multivariateOperationalPromotionOptions =
-            multivariateOperationalPromotionOptions;
+        _predictionMultivariateDecisionService =
+            predictionMultivariateDecisionService;
 
         _multivariateOperationalInterpretationFactory =
             multivariateOperationalInterpretationFactory;
 
-        _multivariateOperationalReadinessService =
-            multivariateOperationalReadinessService;
 
-        _multivariateOperationalReadinessOptions =
-            multivariateOperationalReadinessOptions;
 
         _predictionResponseBuilder =
             predictionResponseBuilder;
@@ -338,200 +316,36 @@ var runtimeDecision =
          * Enquanto Enabled=false, o resolver devolve a RuntimeDecision atual
          * sem nenhuma alteração.
          */
-        MultivariateDecisionCounterfactual?
-            multivariateCounterfactual =
-                null;
+ MultivariateOperationalFusionResult?
+    multivariateOperationalFusion =
+        null;
 
-        if (_multivariateDecisionCounterfactualObserver is not null &&
-            multivariateShadowResults.Count > 0)
-        {
-            try
-            {
-                multivariateCounterfactual =
-                    _multivariateDecisionCounterfactualObserver.Observe(
-                        runtimeDecision,
-                        request.ClienteId,
-                        request.TagName,
-                        dataHoraAtual,
-                        multivariateShadowResults);
-            }
-            catch (Exception ex)
-            {
-                // Fail-open obrigatório:
-                // observabilidade multivariada jamais pode derrubar
-                // a detecção operacional existente.
-                Console.WriteLine(
-                    $"B3.24.2 MULTIVARIATE FUSION COUNTERFACTUAL FAIL-OPEN " +
-                    $"Cliente={request.ClienteId} " +
-                    $"Tag={request.TagName} " +
-                    $"Erro={ex.Message}");
-            }
-        }
+if (_predictionMultivariateDecisionService is not null)
+{
+    var multivariateDecision =
+        await _predictionMultivariateDecisionService.ResolveAsync(
+            runtimeDecision,
+            request.ClienteId,
+            request.TagName,
+            dataHoraAtual,
+            multivariateShadowResults,
+            resultadoDetector.Score,
+            multivariateInterpretationAvailable:
+                _multivariateOperationalInterpretationFactory is not null,
+            cancellationToken);
 
-        MultivariateOperationalFusionResult?
-            multivariateOperationalFusion =
-                null;
+    runtimeDecision =
+        multivariateDecision.RuntimeDecision;
 
-        if (_multivariateOperationalFusionResolver is not null &&
-            _multivariateOperationalPromotionOptions is not null &&
-            multivariateCounterfactual is not null)
-        {
-            try
-            {
-                var resolvedFusion =
-                    _multivariateOperationalFusionResolver.Resolve(
-                        runtimeDecision,
-                        multivariateCounterfactual,
-                        _multivariateOperationalPromotionOptions.Value,
-                        request.ClienteId,
-                        resultadoDetector.Score);
+    multivariateOperationalFusion =
+        multivariateDecision.OperationalFusion;
+}
 
-                /*
-                 * MV06.3C + MV07.5
-                 *
-                 * Uma promoção real só pode entrar no runtime quando:
-                 * 1) existe interpretação multivariada coerente;
-                 * 2) existe evidência multivariada identificável;
-                 * 3) o grupo/modelo está READY para autoridade operacional.
-                 *
-                 * Importante:
-                 * - o resolver estável NÃO é alterado;
-                 * - feature OFF continua sem consultar readiness;
-                 * - qualquer falha de readiness preserva a RuntimeDecision
-                 *   operacional já calculada pelo caminho existente.
-                 */
-                var podeAplicarResolvedFusion =
-                    true;
+var multivariatePromotionApplied =
+    multivariateOperationalFusion?.PromotionApplied == true;
 
-                var fusionLogSource =
-                    resolvedFusion.Source;
-
-                if (resolvedFusion.PromotionApplied)
-                {
-                    if (_multivariateOperationalInterpretationFactory is null ||
-                        resolvedFusion.MultivariateEvidence is null)
-                    {
-                        podeAplicarResolvedFusion =
-                            false;
-
-                        fusionLogSource =
-                            "MultivariateInterpretationUnavailable";
-
-                        Console.WriteLine(
-                            $"B3.24.2 MULTIVARIATE OPERATIONAL FUSION BLOCKED " +
-                            $"Cliente={request.ClienteId} " +
-                            $"Tag={request.TagName} " +
-                            "Reason=MultivariateInterpretationUnavailable");
-                    }
-                    else if (_multivariateOperationalReadinessService is null ||
-                             _multivariateOperationalReadinessOptions is null)
-                    {
-                        /*
-                         * Fail-closed para a NOVA autoridade multivariada:
-                         * se a trava de readiness não estiver disponível,
-                         * a promoção não entra.
-                         *
-                         * O runtime univariado existente continua funcionando.
-                         */
-                        podeAplicarResolvedFusion =
-                            false;
-
-                        fusionLogSource =
-                            "MultivariateOperationalReadinessUnavailable";
-
-                        Console.WriteLine(
-                            $"B3.24.2 MULTIVARIATE OPERATIONAL READINESS BLOCKED " +
-                            $"Cliente={request.ClienteId} " +
-                            $"Tag={request.TagName} " +
-                            $"Grupo={resolvedFusion.MultivariateEvidence.GroupName} " +
-                            "Reason=ReadinessServiceUnavailable");
-                    }
-                    else
-                    {
-                        var readiness =
-                            await _multivariateOperationalReadinessService
-                                .AvaliarAsync(
-                                    request.ClienteId,
-                                    resolvedFusion.MultivariateEvidence.GroupName,
-                                    _multivariateOperationalReadinessOptions.Value,
-                                    cancellationToken:
-                                        cancellationToken);
-
-                        if (!readiness.ReadyForOperationalAuthority)
-                        {
-                            podeAplicarResolvedFusion =
-                                false;
-
-                            fusionLogSource =
-                                "MultivariateOperationalReadinessBlocked";
-
-                            var blockers =
-                                readiness.Blockers.Count == 0
-                                    ? "-"
-                                    : string.Join(
-                                        ",",
-                                        readiness.Blockers);
-
-                            Console.WriteLine(
-                                $"B3.24.2 MULTIVARIATE OPERATIONAL READINESS BLOCKED " +
-                                $"Cliente={request.ClienteId} " +
-                                $"Tag={request.TagName} " +
-                                $"Grupo={resolvedFusion.MultivariateEvidence.GroupName} " +
-                                $"Blockers={blockers}");
-                        }
-                        else
-                        {
-                            Console.WriteLine(
-                                $"B3.24.2 MULTIVARIATE OPERATIONAL READINESS READY " +
-                                $"Cliente={request.ClienteId} " +
-                                $"Tag={request.TagName} " +
-                                $"Grupo={resolvedFusion.MultivariateEvidence.GroupName} " +
-                                $"SampleCount={readiness.ModelSampleCount}");
-                        }
-                    }
-                }
-
-                if (podeAplicarResolvedFusion)
-                {
-                    multivariateOperationalFusion =
-                        resolvedFusion;
-
-                    runtimeDecision =
-                        resolvedFusion.Decision;
-                }
-
-                Console.WriteLine(
-                    $"B3.24.2 MULTIVARIATE OPERATIONAL FUSION " +
-                    $"Cliente={request.ClienteId} " +
-                    $"Tag={request.TagName} " +
-                    $"Applied={multivariateOperationalFusion?.PromotionApplied ?? false} " +
-                    $"Source={fusionLogSource} " +
-                    $"EmitAnomaly={runtimeDecision.EmitAnomaly} " +
-                    $"EmitNewEvidence={runtimeDecision.EmitNewEvidence} " +
-                    $"UnivariateScore={resolvedFusion.UnivariateScore:F4} " +
-                    $"MultivariateScore=" +
-                    $"{resolvedFusion.MultivariateEvidence?.Score.ToString("F2") ?? "-"}");
-            }
-            catch (Exception ex)
-            {
-                /*
-                 * Fail-open da autoridade multivariada:
-                 * qualquer falha preserva a RuntimeDecision que já havia
-                 * sido calculada pelo caminho operacional existente.
-                 */
-                Console.WriteLine(
-                    $"B3.24.2 MULTIVARIATE OPERATIONAL FUSION FAIL-OPEN " +
-                    $"Cliente={request.ClienteId} " +
-                    $"Tag={request.TagName} " +
-                    $"Erro={ex.Message}");
-            }
-        }
-
-        var multivariatePromotionApplied =
-            multivariateOperationalFusion?.PromotionApplied == true;
-
-        var multivariateOperationalEvidence =
-            multivariateOperationalFusion?.MultivariateEvidence;
+var multivariateOperationalEvidence =
+    multivariateOperationalFusion?.MultivariateEvidence;
 
         /*
          * B3.19 â€” snapshot de auditoria.
