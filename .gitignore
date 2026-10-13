@@ -25,7 +25,9 @@ db-backups/
 # Ferramentas históricas de análise
 Tools/*
 !Tools/IAApi.Benchmarks/
-!Tools/IAApi.Benchmarks/**
+Tools/IAApi.Benchmarks/*
+!Tools/IAApi.Benchmarks/IAApi.Benchmarks.csproj
+!Tools/IAApi.Benchmarks/Program.cs
 
 # Checks/backups históricos
 B319Check/
