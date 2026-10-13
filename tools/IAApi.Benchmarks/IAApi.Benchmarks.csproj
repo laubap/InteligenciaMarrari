@@ -11,20 +11,13 @@
     <ProjectReference Include="..\..\IAApi.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\..\Benchmark\**\*.cs"
-             Link="Benchmark\%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
+<ItemGroup>
+  <Content Update="Benchmark\oracle.json"
+           CopyToOutputDirectory="PreserveNewest" />
 
-  <ItemGroup>
-    <Content Include="..\..\Benchmark\oracle.json"
-             Link="Benchmark\oracle.json"
-             CopyToOutputDirectory="PreserveNewest" />
-
-    <Content Include="..\..\Benchmark\TestData\MultivariateGroups.json"
-             Link="Benchmark\TestData\MultivariateGroups.json"
-             CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+  <Content Update="Benchmark\TestData\MultivariateGroups.json"
+           CopyToOutputDirectory="PreserveNewest" />
+</ItemGroup>
 
   <ItemGroup>
     <Content Include="..\..\appsettings.json"

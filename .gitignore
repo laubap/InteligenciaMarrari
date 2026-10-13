@@ -28,6 +28,8 @@ Tools/*
 Tools/IAApi.Benchmarks/*
 !Tools/IAApi.Benchmarks/IAApi.Benchmarks.csproj
 !Tools/IAApi.Benchmarks/Program.cs
+!Tools/IAApi.Benchmarks/Benchmark/
+!Tools/IAApi.Benchmarks/Benchmark/**
 
 # Checks/backups históricos
 B319Check/
