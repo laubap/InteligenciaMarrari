@@ -3,7 +3,6 @@ using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services;
 using IAApi.Benchmark.Cli;
-using IAApi.Benchmark.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Multivariate.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Confidence.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.DependencyInjection;
@@ -15,18 +14,13 @@ using IAApi.Services.ModelTraining.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Runtime.DependencyInjection;
 using IAApi.Services.DependencyInjection;
 
-var commandSelection = BenchmarkCommandSelection.Parse(args);
-
-var usarGruposMultivariadosDoBenchmark =
-    commandSelection.UsarGruposMultivariadosDoBenchmark;
+var benchmarkHost =
+    BenchmarkHost.Create(args);
 
 var builder = WebApplication.CreateBuilder(args);
 
-if (commandSelection.PersistenceTemporalExperiment)
-{
-    builder.Configuration[
-        "AnomalyDetection:ExperimentalPersistenceTemporalConfirmationEnabled"] = "true";
-}
+benchmarkHost.ApplyPreServiceConfiguration(
+    builder.Configuration);
 
 // Controllers da API
 builder.Services.AddControllers();
@@ -106,13 +100,9 @@ builder.Services.AddLlmConfiguration(
     builder.Configuration);
 
 // Configuração do benchmark
-var benchmarkOptions =
-    builder.Services.AddBenchmarkConfiguration(
-        builder.Configuration);
-
-builder.Services.AddBenchmarkCoreServices();
-builder.Services.AddBenchmarkLaboratoryServices();
-builder.Services.AddBenchmarkMultivariateServices();
+benchmarkHost.AddServices(
+    builder.Services,
+    builder.Configuration);
 
 // Experimental Incident API: disabled by default and strictly read-only.
 builder.Services.AddExperimentalIncidentApiServices(
@@ -135,7 +125,7 @@ builder.Services.AddOperationalMultivariateDecisionServices(
     builder.Configuration);
 
 builder.Services.AddMultivariateAnalysisProvider(
-    usarGruposMultivariadosDoBenchmark);
+    benchmarkHost.UsarGruposMultivariadosDoBenchmark);
 
 builder.Services.AddConfidenceEngineServices(
     builder.Configuration);
@@ -148,12 +138,9 @@ var app = builder.Build();
 
 await app.LoadExperimentalIncidentSnapshotAsync();
 
-if (await BenchmarkCommandOrchestrator.TryExecuteBeforePipelineAsync(
+if (await benchmarkHost.TryExecuteBeforePipelineAsync(
         app.Services,
-        args,
-        builder.Configuration,
-        commandSelection,
-        benchmarkOptions))
+        builder.Configuration))
 {
     return;
 }
@@ -171,10 +158,8 @@ app.UseCors("FrontendCors");
 
 app.MapControllers();
 
-if (await BenchmarkCommandOrchestrator.TryExecuteAfterPipelineAsync(
-        app.Services,
-        commandSelection,
-        benchmarkOptions))
+if (await benchmarkHost.TryExecuteAfterPipelineAsync(
+        app.Services))
 {
     return;
 }
