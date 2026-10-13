@@ -36,11 +36,19 @@
   <Compile Remove="IAApi.Tests\**\*.cs" />
   <Content Remove="IAApi.Tests\**\*" />
   <None Remove="IAApi.Tests\**\*" />
+
+  <Compile Remove="Benchmark\**\*.cs" />
+  <Content Remove="Benchmark\**\*" />
+  <None Remove="Benchmark\**\*" />
 </ItemGroup>
 
 <ItemGroup>
   <Compile Remove="B319Check\**\*.cs" />
    <Compile Remove="B32012ProcessCheck\**\*.cs" />
+</ItemGroup>
+
+<ItemGroup>
+  <InternalsVisibleTo Include="IAApi.Benchmarks" />
 </ItemGroup>
 
 </Project>

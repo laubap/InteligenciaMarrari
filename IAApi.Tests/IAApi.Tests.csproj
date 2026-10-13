@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\IAApi.csproj" />
+    <ProjectReference Include="..\tools\IAApi.Benchmarks\IAApi.Benchmarks.csproj" />
   </ItemGroup>
 
 </Project>
