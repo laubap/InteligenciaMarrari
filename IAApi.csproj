@@ -55,4 +55,12 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\HistoricoDetectorPoint.cs" />
+  <Compile Remove="Services\AnomalyDetection\DetectionInputQuality.cs" />
+  <Compile Remove="Services\AnomalyDetection\DetectionHistorySanitizer.cs" />
+  <Compile Remove="Services\AnomalyDetection\DetectorMath.cs" />
+  <Compile Remove="Services\AnomalyDetection\DetectorContext.cs" />
+</ItemGroup>
+
 </Project>
