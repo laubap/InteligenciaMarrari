@@ -36,6 +36,10 @@
   <Compile Remove="IAApi.Tests\**\*.cs" />
   <Content Remove="IAApi.Tests\**\*" />
   <None Remove="IAApi.Tests\**\*" />
+
+  <Compile Remove="src\**\*.cs" />
+  <Content Remove="src\**\*" />
+  <None Remove="src\**\*" />
 </ItemGroup>
 
 <ItemGroup>
@@ -45,6 +49,14 @@
 
 <ItemGroup>
   <InternalsVisibleTo Include="IAApi.Benchmarks" />
+</ItemGroup>
+
+<ItemGroup>
+  <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
+</ItemGroup>
+
+<ItemGroup>
+  <Compile Remove="RegimePolicy\**\*.cs" />
 </ItemGroup>
 
 </Project>
