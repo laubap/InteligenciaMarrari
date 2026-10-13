@@ -3,18 +3,10 @@ using System.Text.Json;
 public sealed class JsonGrupoAnaliseProvider
     : IGrupoAnaliseProvider
 {
-    private readonly IWebHostEnvironment _environment;
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
-
-    public JsonGrupoAnaliseProvider(
-        IWebHostEnvironment environment)
-    {
-        _environment = environment;
-    }
 
     public async Task<List<GrupoAnaliseDto>>
         CarregarGruposAsync(
@@ -24,7 +16,7 @@ public sealed class JsonGrupoAnaliseProvider
             clienteId);
 
         var path = Path.Combine(
-            _environment.ContentRootPath,
+            AppContext.BaseDirectory,
             "Benchmark",
             "TestData",
             "MultivariateGroups.json"

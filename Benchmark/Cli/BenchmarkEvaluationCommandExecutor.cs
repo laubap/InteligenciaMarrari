@@ -32,7 +32,7 @@ public static class BenchmarkEvaluationCommandExecutor
 
         var oraclePadrao =
             Path.Combine(
-                diretorioProjeto,
+                AppContext.BaseDirectory,
                 "Benchmark",
                 "oracle.json");
 
