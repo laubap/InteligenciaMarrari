@@ -1,14 +1,7 @@
-using IAApi.Benchmark.Cli;
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstrap;
 using IAApi.Services.DependencyInjection;
 
-var benchmarkHost =
-    BenchmarkHost.Create(args);
-
 var builder = WebApplication.CreateBuilder(args);
-
-benchmarkHost.ApplyPreServiceConfiguration(
-    builder.Configuration);
 
 // Controllers da API
 builder.Services.AddControllers();
@@ -27,8 +20,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddIAApiApplicationServices(
     builder.Configuration,
-    benchmarkHost.UsarGruposMultivariadosDoBenchmark,
-    benchmarkHost.AddServices);
+    useBenchmarkMultivariateGroups: false);
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -37,13 +29,6 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 await app.LoadExperimentalIncidentSnapshotAsync();
-
-if (await benchmarkHost.TryExecuteBeforePipelineAsync(
-        app.Services,
-        builder.Configuration))
-{
-    return;
-}
 
 // Swagger UI
 if (app.Environment.IsDevelopment())
@@ -58,9 +43,4 @@ app.UseCors("FrontendCors");
 
 app.MapControllers();
 
-if (await benchmarkHost.TryExecuteAfterPipelineAsync(
-        app.Services))
-{
-    return;
-}
 app.Run();
