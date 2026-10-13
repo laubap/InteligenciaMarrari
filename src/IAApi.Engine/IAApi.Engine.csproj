@@ -6,12 +6,4 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-  <ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\RegimeRuntimeState.cs"
-           Link="Runtime\Regime\RegimeRuntimeState.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\RegimeShadowLifecycle.cs"
-           Link="Runtime\Regime\RegimeShadowLifecycle.cs" />
-</ItemGroup>
-
 </Project>

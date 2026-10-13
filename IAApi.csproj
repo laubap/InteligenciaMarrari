@@ -55,9 +55,4 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\RegimeRuntimeState.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\RegimeShadowLifecycle.cs" />
-</ItemGroup>
-
 </Project>
