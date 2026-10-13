@@ -716,7 +716,6 @@ return new PredictionService(
     predictionContextLoader,
     null!,
     null!,
-    null!,
     ensemble,
     predictionDetectionPreparationService,
     null!,

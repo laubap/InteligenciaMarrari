@@ -16,6 +16,7 @@ public static class AnomalyContextAnalysisServiceCollectionExtensions
     services.AddScoped<PredictionDependencyMapper>();
     services.AddScoped<PredictionResponseBuilder>();
     services.AddScoped<PredictionPostDecisionAnalysisService>();
+    services.AddScoped<PredictionFinalizationService>();
 
         return services;
     }

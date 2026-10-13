@@ -10,8 +10,6 @@ public class PredictionService
 {
     private const double LimiteEnsembleInterpretacao = 50.0;
 
-    private readonly AnomaliaHistoricoService _historicoService;
-
     private readonly PredictionContextLoader _predictionContextLoader;
 
     private readonly EnsembleDetectionService _ensembleDetectionService;
@@ -37,14 +35,13 @@ public class PredictionService
     private readonly PredictionMultivariateDecisionService?
         _predictionMultivariateDecisionService;
 
-    private readonly PredictionResponseBuilder
-        _predictionResponseBuilder;
+    private readonly PredictionFinalizationService
+        _predictionFinalizationService;
 
     public PredictionService(
         PredictionContextLoader predictionContextLoader,
         PredictionPostDecisionAnalysisService predictionPostDecisionAnalysisService,
-        AnomaliaHistoricoService historicoService,
-        PredictionResponseBuilder predictionResponseBuilder,
+        PredictionFinalizationService predictionFinalizationService,
         EnsembleDetectionService ensembleDetectionService,
         PredictionDetectionPreparationService predictionDetectionPreparationService,
         PredictionInterpretationService predictionInterpretationService,
@@ -59,11 +56,8 @@ public class PredictionService
         _predictionPostDecisionAnalysisService =
             predictionPostDecisionAnalysisService;
 
-        _historicoService =
-            historicoService;
-
-        _predictionResponseBuilder =
-            predictionResponseBuilder;
+        _predictionFinalizationService =
+            predictionFinalizationService;
 
         _ensembleDetectionService =
             ensembleDetectionService;
@@ -286,105 +280,27 @@ var resultadoInterpretacao =
                 multivariatePromotionApplied,
                 multivariateOperationalEvidence);
 
-        var analiseRelacionadas =
-            postDecisionAnalysis.AnaliseRelacionadas;
-
-        var riscoProcesso =
-            postDecisionAnalysis.RiscoProcesso;
-
-        var fatoresRisco =
-            postDecisionAnalysis.FatoresRisco;
-
-        resultadoInterpretacao =
-            postDecisionAnalysis.ResultadoInterpretacao;
-
-        var tendenciaRisco =
-            postDecisionAnalysis.TendenciaRisco;
-
-        var tendenciaValor =
-            postDecisionAnalysis.TendenciaValor;
-
-        var analiseFeedbacks =
-            postDecisionAnalysis.AnaliseFeedbacks;
-
-        var mensagem =
-            postDecisionAnalysis.Mensagem;
-
         cancellationToken.ThrowIfCancellationRequested();
 
-        _historicoService.Registrar(
-            request.ClienteId,
-            request.TagName,
-            tipoTag,
-            request.Valor,
-            score,
-            ehAnomalia,
-            mensagem,
-            contexto?.Criticidade,
-            analiseRelacionadas,
-            riscoProcesso.ScoreRisco,
-            riscoProcesso.Classificacao,
-            tendenciaRisco.Tendencia,
-            tendenciaValor.Tendencia,
-            runtimeAudit
-        );
-
-var detectoresExecutados =
-    PredictionResponseMapper.MapearDetectores(
-        resultadoDetector.DetalhesDetectores);
-
-                Console.WriteLine();
-Console.WriteLine("========== INTERPRETAÃ‡ÃƒO FINAL ==========");
-Console.WriteLine($"Resumo: {resultadoInterpretacao.Resumo}");
-Console.WriteLine($"InterpretaÃ§Ã£o: {resultadoInterpretacao.InterpretacaoTecnica}");
-Console.WriteLine($"Severidade: {resultadoInterpretacao.Severidade}");
-Console.WriteLine($"Gerado por LLM: {resultadoInterpretacao.GeradoPorLlm}");
-
-Console.WriteLine("EvidÃªncias:");
-foreach (var item in resultadoInterpretacao.Evidencias)
-{
-    Console.WriteLine($" - {item}");
-}
-
-Console.WriteLine("PossÃ­veis causas:");
-foreach (var item in resultadoInterpretacao.PossiveisCausas)
-{
-    Console.WriteLine($" - {item}");
-}
-
-Console.WriteLine("RecomendaÃ§Ãµes:");
-foreach (var item in resultadoInterpretacao.Recomendacoes)
-{
-    Console.WriteLine($" - {item}");
-}
-
-Console.WriteLine("=========================================");
-Console.WriteLine();
-
-return _predictionResponseBuilder.Build(
-    request,
-    tipoTag,
-    ehAnomalia,
-    score,
-    mensagem,
-    analiseFeedbacks,
-    comportamentoReconhecido,
-    classificacaoComportamentoReconhecido,
-    mediaHistoricaDetector,
-    limiteInferior,
-    limiteSuperior,
-    contexto,
-    resultadoInterpretacao,
-    processo,
-    analiseRelacionadas,
-    riscoProcesso,
-    fatoresRisco,
-    tendenciaRisco,
-    tendenciaValor,
-    multivariatePromotionApplied,
-    multivariateOperationalEvidence,
-    runtimeDecision.Source,
-    detectoresExecutados);
+        return _predictionFinalizationService.Finalizar(
+            new PredictionFinalizationInput(
+                request,
+                tipoTag,
+                ehAnomalia,
+                score,
+                comportamentoReconhecido,
+                classificacaoComportamentoReconhecido,
+                mediaHistoricaDetector,
+                limiteInferior,
+                limiteSuperior,
+                contexto,
+                processo,
+                postDecisionAnalysis,
+                multivariatePromotionApplied,
+                multivariateOperationalEvidence,
+                runtimeDecision.Source,
+                resultadoDetector,
+                runtimeAudit));
 
     }
 }
