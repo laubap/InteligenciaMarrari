@@ -6,19 +6,8 @@ using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Services.AnomalyDetection.Presentation;
 using IAApi.Services.AnomalyDetection.Orchestration;
 
-// ServiÃ§o principal de detecÃ§Ã£o de anomalias.
 public class PredictionService
 {
-    /*
-     * Limite usado somente para classificar a severidade da interpretaÃ§Ã£o.
-     *
-     * O ensemble continua sendo o Ãºnico responsÃ¡vel por decidir se existe
-     * ou nÃ£o uma anomalia.
-     *
-     * Caso o limite real usado pelo EnsembleDetectionService seja diferente
-     * de 50, altere este valor para manter a classificaÃ§Ã£o de severidade
-     * consistente com o ensemble.
-     */
     private const double LimiteEnsembleInterpretacao = 50.0;
 
     private readonly AnomaliaHistoricoService _historicoService;
@@ -120,17 +109,6 @@ var config =
             );
         }
 
-        /*
-         * B3.24.2 / MV01 — MULTIVARIATE SHADOW.
-         *
-         * A leitura entra no caminho multivariado assim que confirmamos
-         * que a tag está ativa. O coordinator é fail-open e não participa
-         * de EhAnomalia, Score, Risco, RuntimeDecision ou LLM.
-         *
-         * Executamos antes da exigência do perfil univariado para que uma
-         * falha posterior no caminho univariado não faça o buffer perder
-         * uma leitura multivariada válida.
-         */
         var dataHoraAtual =
             request.DataHora == default
                 ? DateTime.Now
@@ -209,46 +187,16 @@ var processo =
         var mediaHistoricaDetector =
             preparation.MediaHistoricaDetector;
 
-        /*
-         * O ensemble executa os detectores e continua sendo o Ãºnico
-         * responsÃ¡vel pela decisÃ£o de anomalia.
-         */
         var resultadoDetector =
             _ensembleDetectionService.Detectar(
                 entradaDetector
             );
 
-        /*
-         * B3.18 â€” contexto funcional REAL do runtime.
-         *
-         * Mantemos o DetectorResult Legacy imutÃ¡vel e alimentamos a mesma
-         * cadeia de regime/candidate/incidente validada no benchmark.
-         *
-         * O provider mantÃ©m estado efÃªmero por cliente/tag e devolve apenas
-         * o contexto necessÃ¡rio para a decisÃ£o funcional.
-         */
         var runtimeFunctionalContext =
             _runtimeFunctionalDecisionContextProvider.Evaluate(
                 entradaDetector,
                 resultadoDetector);
 
-        /*
-         * B3.25 - CONTEXTO COMPORTAMENTAL PROPAGADO AO PONTO DE DECISÃO.
-         *
-         * Nesta etapa a informação é apenas observacional.
-         * Ela NÃO altera:
-         * - RuntimeFunctionalDecisionContext;
-         * - RuntimeFunctionalDecisionCandidate;
-         * - RuntimeDecision;
-         * - EhAnomalia;
-         * - score;
-         * - severidade;
-         * - lifecycle de incidente.
-         *
-         * O objetivo é deixar explícito, no mesmo ponto em que o runtime
-         * funcional é avaliado, qual comportamento foi reconhecido e qual
-         * sua classificação semântica.
-         */
         Console.WriteLine(
             $"B3.25 RUNTIME BEHAVIOR CONTEXT " +
             $"Cliente={request.ClienteId} " +
@@ -264,16 +212,6 @@ var runtimeDecision =
         runtimeFunctionalContext,
         request.ClienteId);
 
-        /*
-         * B3.24.2 / MV06.2 + MV06.3B
-         *
-         * 1) Calcula a decisão counterfactual.
-         * 2) Passa essa proposta pelo resolver operacional independente.
-         *
-         * A promoção operacional continua protegida por feature flag própria.
-         * Enquanto Enabled=false, o resolver devolve a RuntimeDecision atual
-         * sem nenhuma alteração.
-         */
  MultivariateOperationalFusionResult?
     multivariateOperationalFusion =
         null;
@@ -306,25 +244,11 @@ var multivariatePromotionApplied =
 var multivariateOperationalEvidence =
     multivariateOperationalFusion?.MultivariateEvidence;
 
-        /*
-         * B3.19 â€” snapshot de auditoria.
-         *
-         * A decisÃ£o Legacy original, a decisÃ£o operacional e o contexto
-         * funcional sÃ£o preservados separadamente para persistÃªncia.
-         */
         var runtimeAudit =
             RuntimeDecisionAuditData.From(
                 runtimeDecision,
                 runtimeFunctionalContext);
 
-        /*
-         * ConstrÃ³i o contexto consolidado para interpretaÃ§Ã£o.
-         *
-         * Essa etapa combina:
-         * - resultado tÃ©cnico do ensemble;
-         * - dados histÃ³ricos;
-         * - informaÃ§Ãµes operacionais cadastradas para a tag.
-         */
 var resultadoInterpretacao =
     await _predictionInterpretationService.InterpretarAsync(
         entradaDetector,
@@ -343,13 +267,6 @@ var resultadoInterpretacao =
         var limiteSuperior =
             resultadoDetector.LimiteSuperior;
 
-        /*
-         * A partir daqui os efeitos externos usam a decisÃ£o operacional.
-         *
-         * Na etapa atual da B3.18 ela Ã© semanticamente idÃªntica ao Legacy.
-         * O valor original continua disponÃ­vel em
-         * resultadoDetector.EhAnomalia e nÃ£o Ã© alterado.
-         */
         var ehAnomalia =
             runtimeDecision.EmitAnomaly;
 
