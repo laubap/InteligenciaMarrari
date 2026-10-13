@@ -23,7 +23,9 @@ Artifacts/
 db-backups/
 
 # Ferramentas históricas de análise
-Tools/
+Tools/*
+!Tools/IAApi.Benchmarks/
+!Tools/IAApi.Benchmarks/**
 
 # Checks/backups históricos
 B319Check/
