@@ -148,107 +148,10 @@ var app = builder.Build();
 
 await app.LoadExperimentalIncidentSnapshotAsync();
 
-var benchmarkCommandContext =
-    BenchmarkCommandContext.Create(
+if (await BenchmarkCommandOrchestrator.TryExecuteBeforePipelineAsync(
+        app.Services,
         args,
         builder.Configuration,
-        commandSelection);
-
-BenchmarkCommandValidator.Validate(
-    commandSelection,
-    benchmarkCommandContext);
-
-var functionalValidationMessages =
-    BenchmarkCommandValidator.ValidateFunctional(
-        commandSelection,
-        benchmarkCommandContext);
-
-if (functionalValidationMessages.Length > 0)
-{
-    foreach (var message in functionalValidationMessages)
-    {
-        Console.WriteLine(message);
-    }
-
-    return;
-}
-
-var modeSelectionValidationMessage =
-    BenchmarkCommandValidator.ValidateModeSelection(
-        commandSelection);
-
-if (modeSelectionValidationMessage is not null)
-{
-    Console.WriteLine();
-    Console.WriteLine(
-        modeSelectionValidationMessage);
-
-    return;
-}
-
-if (await BenchmarkUtilityCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection))
-{
-    return;
-}
-
-if (await BenchmarkRunCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection))
-{
-    return;
-}
-
-if (await BenchmarkFastCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection,
-        benchmarkCommandContext))
-{
-    return;
-}
-
-if (await BenchmarkDeadbandImpactCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection,
-        benchmarkOptions))
-{
-    return;
-}
-
-if (await BenchmarkCleanInvestigationCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection,
-        benchmarkOptions))
-{
-    return;
-}
-
-if (await BenchmarkCleanEvaluationCommandExecutor.TryExecuteAsync(
-        app.Services,
-        args,
-        commandSelection))
-{
-    return;
-}
-
-if (await BenchmarkFunctionalOracleEvaluationCommandExecutor.TryExecuteAsync(
-        args,
-        commandSelection))
-{
-    return;
-}
-
-if (await BenchmarkEvaluationCommandExecutor.TryExecuteAsync(
-        app.Services,
-        args,
-        commandSelection))
-{
-    return;
-}
-
-if (await BenchmarkDetectorSensitivityCommandExecutor.TryExecuteAsync(
-        app.Services,
         commandSelection,
         benchmarkOptions))
 {
@@ -268,31 +171,7 @@ app.UseCors("FrontendCors");
 
 app.MapControllers();
 
-if (await BenchmarkResultsAnalysisCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection,
-        benchmarkOptions))
-{
-    return;
-}
-
-if (await BenchmarkAdaptiveEnsembleCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection,
-        benchmarkOptions))
-{
-    return;
-}
-
-if (await BenchmarkFamilyConsensusCommandExecutor.TryExecuteAsync(
-        app.Services,
-        commandSelection,
-        benchmarkOptions))
-{
-    return;
-}
-
-if (await BenchmarkConfidenceCommandExecutor.TryExecuteAsync(
+if (await BenchmarkCommandOrchestrator.TryExecuteAfterPipelineAsync(
         app.Services,
         commandSelection,
         benchmarkOptions))
