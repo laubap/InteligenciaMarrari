@@ -8,32 +8,19 @@ using IAApi.Services.AnomalyDetection.Orchestration;
 
 public class PredictionService
 {
-    private const double LimiteEnsembleInterpretacao = 50.0;
-
     private readonly PredictionContextLoader _predictionContextLoader;
-
-    private readonly EnsembleDetectionService _ensembleDetectionService;
 
     private readonly PredictionDetectionPreparationService
         _predictionDetectionPreparationService;
 
-    private readonly PredictionInterpretationService
-        _predictionInterpretationService;
-
-    private readonly PredictionRuntimeDecisionService
-        _predictionRuntimeDecisionService;
-
     private readonly PredictionPostDecisionAnalysisService
         _predictionPostDecisionAnalysisService;
 
-    private readonly RuntimeFunctionalDecisionContextProvider
-        _runtimeFunctionalDecisionContextProvider;
+    private readonly PredictionDecisionOrchestrationService
+        _predictionDecisionOrchestrationService;
 
     private readonly MultivariateShadowRuntimeCoordinator?
         _multivariateShadowRuntimeCoordinator;
-
-    private readonly PredictionMultivariateDecisionService?
-        _predictionMultivariateDecisionService;
 
     private readonly PredictionFinalizationService
         _predictionFinalizationService;
@@ -42,13 +29,9 @@ public class PredictionService
         PredictionContextLoader predictionContextLoader,
         PredictionPostDecisionAnalysisService predictionPostDecisionAnalysisService,
         PredictionFinalizationService predictionFinalizationService,
-        EnsembleDetectionService ensembleDetectionService,
+        PredictionDecisionOrchestrationService predictionDecisionOrchestrationService,
         PredictionDetectionPreparationService predictionDetectionPreparationService,
-        PredictionInterpretationService predictionInterpretationService,
-        RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
-        PredictionRuntimeDecisionService predictionRuntimeDecisionService,
-        MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
-        PredictionMultivariateDecisionService? predictionMultivariateDecisionService = null)
+        MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null)
     {
         _predictionContextLoader =
             predictionContextLoader;
@@ -59,26 +42,14 @@ public class PredictionService
         _predictionFinalizationService =
             predictionFinalizationService;
 
-        _ensembleDetectionService =
-            ensembleDetectionService;
+        _predictionDecisionOrchestrationService =
+            predictionDecisionOrchestrationService;
 
         _predictionDetectionPreparationService =
             predictionDetectionPreparationService;
 
-        _predictionInterpretationService =
-            predictionInterpretationService;
-
-        _runtimeFunctionalDecisionContextProvider =
-            runtimeFunctionalDecisionContextProvider;
-
-        _predictionRuntimeDecisionService =
-            predictionRuntimeDecisionService;
-
         _multivariateShadowRuntimeCoordinator =
             multivariateShadowRuntimeCoordinator;
-
-        _predictionMultivariateDecisionService =
-            predictionMultivariateDecisionService;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -89,10 +60,10 @@ public class PredictionService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-var config =
-    _predictionContextLoader.BuscarConfiguracaoAtiva(
-        request.ClienteId,
-        request.TagName);
+        var config =
+            _predictionContextLoader.BuscarConfiguracaoAtiva(
+                request.ClienteId,
+                request.TagName);
 
         if (config == null)
         {
@@ -126,10 +97,10 @@ var config =
 
         cancellationToken.ThrowIfCancellationRequested();
 
-var perfil =
-    _predictionContextLoader.BuscarPerfil(
-        request.ClienteId,
-        request.TagName);
+        var perfil =
+            _predictionContextLoader.BuscarPerfil(
+                request.ClienteId,
+                request.TagName);
 
         if (perfil == null)
         {
@@ -140,16 +111,16 @@ var perfil =
             );
         }
 
-var contextoOperacional =
-    _predictionContextLoader.CarregarContextoOperacional(
-        request.ClienteId,
-        request.TagName);
+        var contextoOperacional =
+            _predictionContextLoader.CarregarContextoOperacional(
+                request.ClienteId,
+                request.TagName);
 
-var contexto =
-    contextoOperacional.Contexto;
+        var contexto =
+            contextoOperacional.Contexto;
 
-var processo =
-    contextoOperacional.Processo;
+        var processo =
+            contextoOperacional.Processo;
 
         var tipoTag =
             contexto?.TipoRepresentacao
@@ -181,79 +152,36 @@ var processo =
         var mediaHistoricaDetector =
             preparation.MediaHistoricaDetector;
 
+var decisionOrchestration =
+    await _predictionDecisionOrchestrationService.ExecutarAsync(
+        request,
+        entradaDetector,
+        dataHoraAtual,
+        multivariateShadowResults,
+        baselineComportamentalAplicado,
+        comportamentoReconhecido,
+        codigoComportamentoReconhecido,
+        classificacaoComportamentoReconhecido,
+        _predictionPostDecisionAnalysisService,
+        cancellationToken);
+
         var resultadoDetector =
-            _ensembleDetectionService.Detectar(
-                entradaDetector
-            );
+            decisionOrchestration.ResultadoDetector;
 
-        var runtimeFunctionalContext =
-            _runtimeFunctionalDecisionContextProvider.Evaluate(
-                entradaDetector,
-                resultadoDetector);
-
-        Console.WriteLine(
-            $"B3.25 RUNTIME BEHAVIOR CONTEXT " +
-            $"Cliente={request.ClienteId} " +
-            $"Tag={request.TagName} " +
-            $"Recognized={comportamentoReconhecido} " +
-            $"Behavior={codigoComportamentoReconhecido ?? "-"} " +
-            $"Classification={classificacaoComportamentoReconhecido ?? "-"} " +
-            $"BaselineApplied={baselineComportamentalAplicado}");
-
-var runtimeDecision =
-    _predictionRuntimeDecisionService.Resolve(
-        resultadoDetector,
-        runtimeFunctionalContext,
-        request.ClienteId);
-
- MultivariateOperationalFusionResult?
-    multivariateOperationalFusion =
-        null;
-
-if (_predictionMultivariateDecisionService is not null)
-{
-    var multivariateDecision =
-        await _predictionMultivariateDecisionService.ResolveAsync(
-            runtimeDecision,
-            request.ClienteId,
-            request.TagName,
-            dataHoraAtual,
-            multivariateShadowResults,
-            resultadoDetector.Score,
-multivariateInterpretationAvailable:
-    _predictionPostDecisionAnalysisService
-        .MultivariateInterpretationAvailable,
-            cancellationToken);
-
-    runtimeDecision =
-        multivariateDecision.RuntimeDecision;
-
-    multivariateOperationalFusion =
-        multivariateDecision.OperationalFusion;
-}
-
-var multivariatePromotionApplied =
-    multivariateOperationalFusion?.PromotionApplied == true;
-
-var multivariateOperationalEvidence =
-    multivariateOperationalFusion?.MultivariateEvidence;
+        var runtimeDecision =
+            decisionOrchestration.RuntimeDecision;
 
         var runtimeAudit =
-            RuntimeDecisionAuditData.From(
-                runtimeDecision,
-                runtimeFunctionalContext);
+            decisionOrchestration.RuntimeAudit;
 
-var resultadoInterpretacao =
-    await _predictionInterpretationService.InterpretarAsync(
-        entradaDetector,
-        resultadoDetector,
-        runtimeDecision,
-        LimiteEnsembleInterpretacao,
-        multivariatePromotionApplied,
-        comportamentoReconhecido,
-        classificacaoComportamentoReconhecido,
-        codigoComportamentoReconhecido,
-        cancellationToken);
+        var resultadoInterpretacao =
+            decisionOrchestration.ResultadoInterpretacao;
+
+        var multivariatePromotionApplied =
+            decisionOrchestration.MultivariatePromotionApplied;
+
+        var multivariateOperationalEvidence =
+            decisionOrchestration.MultivariateOperationalEvidence;
 
         var limiteInferior =
             resultadoDetector.LimiteInferior;
@@ -301,6 +229,5 @@ var resultadoInterpretacao =
                 runtimeDecision.Source,
                 resultadoDetector,
                 runtimeAudit));
-
     }
 }

@@ -549,14 +549,19 @@ var predictionDetectionPreparationService =
         behaviorRuntimeBaselineProvider:
             behaviorProvider);
 
+var predictionDecisionOrchestrationService =
+    new PredictionDecisionOrchestrationService(
+        ensemble,
+        null!,
+        null!,
+        null!);
+
 return new PredictionService(
     predictionContextLoader,
     null!,
     null!,
-    ensemble,
+    predictionDecisionOrchestrationService,
     predictionDetectionPreparationService,
-    null!,
-    null!,
     null!);
     }
 
