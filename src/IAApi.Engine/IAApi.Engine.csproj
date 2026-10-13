@@ -5,21 +5,5 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\HistoricoDetectorPoint.cs"
-           Link="Detection\Core\HistoricoDetectorPoint.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\DetectionInputQuality.cs"
-           Link="Detection\Core\DetectionInputQuality.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\DetectionHistorySanitizer.cs"
-           Link="Detection\Core\DetectionHistorySanitizer.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\DetectorMath.cs"
-           Link="Detection\Core\DetectorMath.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\DetectorContext.cs"
-           Link="Detection\Core\DetectorContext.cs" />
-</ItemGroup>
 
 </Project>
