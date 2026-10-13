@@ -55,8 +55,4 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
-<ItemGroup>
-  <Compile Remove="RegimePolicy\**\*.cs" />
-</ItemGroup>
-
 </Project>
