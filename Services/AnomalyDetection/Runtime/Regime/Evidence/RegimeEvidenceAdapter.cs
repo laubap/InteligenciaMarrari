@@ -20,7 +20,7 @@ public sealed class RegimeEvidenceAdapter
     public RegimeShadowAdaptation Adapt(
         long sequence,
         DetectorInput input,
-        DetectorResult result,
+        RegimeLegacyEvidenceInput legacyEvidence,
         RegimePolicyState policy,
         CandidateEvidenceState prior,
         RegimeShadowOptions options)
@@ -53,35 +53,18 @@ public sealed class RegimeEvidenceAdapter
                 input,
                 context.Mediana);
 
-        var roc =
-            Find(
-                result,
-                "Taxa de varia");
-
-        var level =
-            Find(
-                result,
-                "patamar");
-
-        var persistence =
-            Find(
-                result,
-                "Persist");
-
         var rawRocEdge =
-            roc?.Aplicavel == true &&
-            roc.VotouAnomalia;
+            legacyEvidence.RocApplicable &&
+            legacyEvidence.RocVotedAnomaly;
 
         /*
          * ConfirmaÃ§Ã£o bruta produzida pelo Level Shift Detector.
          * A arbitragem com Slow Drift Ã© feita mais abaixo.
          */
         var rawLevelConfirmed =
-            level?.Aplicavel == true &&
-            level.VotouAnomalia &&
-            Metric(
-                level,
-                "possuiGapCriticoNasJanelas") < .5;
+            legacyEvidence.LevelApplicable &&
+            legacyEvidence.LevelVotedAnomaly &&
+            !legacyEvidence.LevelHasCriticalGap;
 
         var cadence =
             context.IntervaloMedianoMinutos;
@@ -105,13 +88,13 @@ public sealed class RegimeEvidenceAdapter
             frozenSensor;
 
         var persistent =
-            persistence?.Aplicavel == true &&
+            legacyEvidence.PersistenceApplicable &&
             (
-                persistence.VotouAnomalia ||
-                Metric(
-                    persistence,
-                    "duracaoMinutos") > 0
-            );        var slowDriftCalculation =
+                legacyEvidence.PersistenceVotedAnomaly ||
+                legacyEvidence.PersistenceDurationMinutes > 0
+            );
+
+        var slowDriftCalculation =
             _slowDrift.Calculate(
                 input,
                 kind,
@@ -945,9 +928,7 @@ public sealed class RegimeEvidenceAdapter
                     duration,
 
                 ["persistenceSourceUsesMad"] =
-                    Metric(
-                        persistence,
-                        "usaMad") >= .5,
+                    legacyEvidence.PersistenceUsesMad,
 
                 ["profileType"] =
                     profile.Type.ToString(),
@@ -1053,28 +1034,6 @@ public sealed class RegimeEvidenceAdapter
                 0
         };
     }
-
-    private static DetectorDebugItem?
-        Find(
-            DetectorResult result,
-            string fragment) =>
-        result.DetalhesDetectores
-            .FirstOrDefault(
-                detector =>
-                    detector.Nome.Contains(
-                        fragment,
-                        StringComparison
-                            .OrdinalIgnoreCase));
-
-    private static double Metric(
-        DetectorDebugItem? item,
-        string name) =>
-        item is not null &&
-        item.Metricas.TryGetValue(
-            name,
-            out var value)
-            ? value
-            : 0;
 
     private static string[] Sources(
         bool edge,

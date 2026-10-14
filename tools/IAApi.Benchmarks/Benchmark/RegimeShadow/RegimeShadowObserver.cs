@@ -107,7 +107,8 @@ var adaptation =
     _adapter.Adapt(
         minute,
         shadowInput,
-        original,
+        RegimeLegacyEvidenceMapper.Map(
+            original),
         current.PolicyState,
         current.CandidateEvidence,
         _options);

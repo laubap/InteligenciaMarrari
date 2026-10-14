@@ -80,13 +80,14 @@ public sealed class RuntimeFunctionalDecisionContextProvider
             var shadowInput =
                 CreateContiguousRuntimeInput(input);
 
-            var adaptation = _regimeAdapter.Adapt(
-                sequence,
-                shadowInput,
-                legacyResult,
-                state.Regime.PolicyState,
-                state.Regime.CandidateEvidence,
-                _regimeOptions);
+var adaptation = _regimeAdapter.Adapt(
+    sequence,
+    shadowInput,
+    RegimeLegacyEvidenceMapper.Map(
+        legacyResult),
+    state.Regime.PolicyState,
+    state.Regime.CandidateEvidence,
+    _regimeOptions);
 
             /*
              * B3.22.5 V3a - transporta o estado de Increasing Noise
