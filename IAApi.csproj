@@ -55,11 +55,4 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\DualBaseline\DualBaselineModels.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\DualBaseline\DualBaselineTraceRecord.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\DualBaseline\Decision\DualBaselineDecisionClassification.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\DualBaseline\Decision\DualBaselineDecisionClassifier.cs" />
-</ItemGroup>
-
 </Project>
