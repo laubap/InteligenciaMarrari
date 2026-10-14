@@ -55,4 +55,9 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
+
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeAnomalyDecision.cs" />
+</ItemGroup>
+
 </Project>
