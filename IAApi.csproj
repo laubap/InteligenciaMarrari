@@ -55,4 +55,8 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\BaselineProtectionProfile.cs" />
+</ItemGroup>
+
 </Project>
