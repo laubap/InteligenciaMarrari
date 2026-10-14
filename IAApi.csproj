@@ -55,4 +55,11 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
+
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\EvidenceSemantics.cs" />
+</ItemGroup>
+
+
+
 </Project>

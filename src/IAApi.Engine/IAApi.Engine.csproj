@@ -7,4 +7,9 @@
   </PropertyGroup>
 
 
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\EvidenceSemantics.cs"
+           Link="Detection\Core\EvidenceSemantics.cs" />
+</ItemGroup>
+
 </Project>
