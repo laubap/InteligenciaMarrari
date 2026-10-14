@@ -55,4 +55,8 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\DualBaseline\DualBaselineMath.cs" />
+</ItemGroup>
+
 </Project>
