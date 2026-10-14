@@ -55,4 +55,13 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\Evidence\CandidateStabilityCalculator.cs" />
+  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\Evidence\FrozenSensorEvidenceCalculator.cs" />
+  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\Evidence\IncreasingNoiseEvidenceCalculator.cs" />
+  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\Evidence\SlowDriftEvidenceCalculator.cs" />
+</ItemGroup>
+
+
+
 </Project>
