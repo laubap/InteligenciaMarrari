@@ -6,4 +6,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Incidents\Experimental\ExperimentalIncidentContracts.cs"
+           Link="Runtime\Incidents\Experimental\ExperimentalIncidentContracts.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Incidents\Experimental\ExperimentalIncidentCoordinator.cs"
+           Link="Runtime\Incidents\Experimental\ExperimentalIncidentCoordinator.cs" />
+</ItemGroup>
+
+
+
 </Project>

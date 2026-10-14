@@ -56,4 +56,10 @@
 </ItemGroup>
 
 
+
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Runtime\Incidents\Experimental\ExperimentalIncidentContracts.cs" />
+  <Compile Remove="Services\AnomalyDetection\Runtime\Incidents\Experimental\ExperimentalIncidentCoordinator.cs" />
+</ItemGroup>
+
 </Project>
