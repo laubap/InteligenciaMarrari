@@ -55,11 +55,4 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\DetectorInput.cs" />
-  <Compile Remove="Services\AnomalyDetection\TagBehaviorType.cs" />
-  <Compile Remove="Services\AnomalyDetection\TagBehaviorProfile.cs" />
-  <Compile Remove="Services\AnomalyDetection\TagBehaviorProfileResolver.cs" />
-</ItemGroup>
-
 </Project>
