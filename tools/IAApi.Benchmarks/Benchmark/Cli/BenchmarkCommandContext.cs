@@ -28,8 +28,8 @@ public sealed record BenchmarkCommandContext(
         var baselineDiagnosticOptions =
             BaselineDiagnosticOptions.Parse(args);
 
-        var regimeShadowOptions =
-            RegimeShadowOptions.Parse(args);
+var regimeShadowOptions =
+    RegimeShadowOptionsParser.Parse(args);
 
         var detectorOptionsForDualBaseline =
             configuration
