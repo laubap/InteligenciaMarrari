@@ -37,10 +37,10 @@ public sealed record BenchmarkCommandContext(
                 .Get<AnomalyDetectionOptions>()
             ?? new AnomalyDetectionOptions();
 
-        var dualBaselineShadowOptions =
-            DualBaselineShadowOptions.Parse(
-                args,
-                detectorOptionsForDualBaseline);
+var dualBaselineShadowOptions =
+    DualBaselineShadowOptionsParser.Parse(
+        args,
+        detectorOptionsForDualBaseline);
 
         var behaviorProfileObservabilityOptions =
             BenchmarkBehaviorProfileOptions.Parse(args);
