@@ -6,12 +6,4 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeAnomalyDecision.cs"
-           Link="Runtime\Decision\RuntimeAnomalyDecision.cs" />
-</ItemGroup>
-
-
-
 </Project>
