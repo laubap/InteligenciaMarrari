@@ -5,5 +5,18 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\DetectorInput.cs"
+           Link="Detection\Input\DetectorInput.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\TagBehaviorType.cs"
+           Link="Detection\Behavior\TagBehaviorType.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\TagBehaviorProfile.cs"
+           Link="Detection\Behavior\TagBehaviorProfile.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\TagBehaviorProfileResolver.cs"
+           Link="Detection\Behavior\TagBehaviorProfileResolver.cs" />
+</ItemGroup>
 
 </Project>
