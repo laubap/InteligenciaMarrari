@@ -5,4 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\Evidence\RegimeEvidenceAdapter.cs"
+           Link="Runtime\Regime\Evidence\RegimeEvidenceAdapter.cs" />
+</ItemGroup>
+
 </Project>
