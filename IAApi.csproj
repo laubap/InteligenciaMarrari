@@ -55,10 +55,4 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
-
-
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\Regime\Evidence\RegimeEvidenceAdapter.cs" />
-</ItemGroup>
-
 </Project>
