@@ -76,13 +76,15 @@ public string? ExperimentalAnomalyDecisionSummaryPath => _decisionObserver?.Expe
                 _states[input.TagName] = state;
             }
             var record =
-                _engine.Evaluate(
-                    _window,
-                    minute,
-                    input,
-                    original,
-                    decision,
-                    state)
+_engine.Evaluate(
+    _window,
+    minute,
+    input,
+    new DualBaselineOriginalDecision(
+        original.EhAnomalia,
+        original.Score),
+    decision,
+    state)
                 with
                 {
                     IncreasingNoiseEvidence =

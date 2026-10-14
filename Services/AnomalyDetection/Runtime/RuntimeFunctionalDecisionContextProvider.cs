@@ -140,13 +140,15 @@ public sealed class RuntimeFunctionalDecisionContextProvider
                 adaptation.Evidence,
                 adaptation.NextCandidateState);
 
-            var row = _dualBaseline.Evaluate(
-                RuntimeWindow,
-                sequence,
-                shadowInput,
-                legacyResult,
-                policyDecision,
-                state.DualBaseline);
+var row = _dualBaseline.Evaluate(
+    RuntimeWindow,
+    sequence,
+    shadowInput,
+    new DualBaselineOriginalDecision(
+        legacyResult.EhAnomalia,
+        legacyResult.Score),
+    policyDecision,
+    state.DualBaseline);
 
             UpdateDecisionEpisode(state, row);
 

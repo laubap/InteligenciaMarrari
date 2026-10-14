@@ -13,7 +13,7 @@ public sealed class DualBaselineShadowEngine
     public DualBaselineShadowEngine(DualBaselineShadowOptions options) => _options = options;
 
     public DualBaselineTraceRecord Evaluate(
-        int window, long minute, DetectorInput input, DetectorResult original,
+        int window, long minute, DetectorInput input, DualBaselineOriginalDecision original,
         RegimePolicyDecision policy, DualBaselineTagState state)
     {
         var point = new DualBaselinePoint(minute, input.DataHoraAtual, input.ValorAtual);
@@ -134,7 +134,7 @@ public sealed class DualBaselineShadowEngine
             CurrentReadingInActiveReference = currentInActive,
             CurrentReadingInCandidateReference = currentInCandidate,
             OperationalBaselineChanged = false, Promotion = false, Legitimacy = "None",
-            OriginalFinalAnomaly = original.EhAnomalia, OriginalFinalScore = original.Score,
+            OriginalFinalAnomaly = original.IsAnomaly, OriginalFinalScore = original.Score,
             CandidateResetReason = state.LastResetReason
         };
         ApplyAfterEvaluation(point, policy, state);
