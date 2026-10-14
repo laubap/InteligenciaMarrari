@@ -6,5 +6,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\DualBaseline\DualBaselineModels.cs"
+           Link="Runtime\Regime\DualBaseline\DualBaselineModels.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\DualBaseline\DualBaselineTraceRecord.cs"
+           Link="Runtime\Regime\DualBaseline\DualBaselineTraceRecord.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\DualBaseline\Decision\DualBaselineDecisionClassification.cs"
+           Link="Runtime\Regime\DualBaseline\Decision\DualBaselineDecisionClassification.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\DualBaseline\Decision\DualBaselineDecisionClassifier.cs"
+           Link="Runtime\Regime\DualBaseline\Decision\DualBaselineDecisionClassifier.cs" />
+</ItemGroup>
 
 </Project>
