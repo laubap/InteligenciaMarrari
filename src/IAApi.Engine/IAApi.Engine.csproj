@@ -5,5 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\DualBaseline\DualBaselineShadowOptions.cs"
+           Link="Runtime\Regime\DualBaseline\DualBaselineShadowOptions.cs" />
+</ItemGroup>
 </Project>
