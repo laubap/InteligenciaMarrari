@@ -55,4 +55,13 @@
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
 </ItemGroup>
 
+
+
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Runtime\Incidents\StableDeviation\StableDeviationIncidentContracts.cs" />
+  <Compile Remove="Services\AnomalyDetection\Runtime\Incidents\StableDeviation\StableDeviationIncidentEngine.cs" />
+  <Compile Remove="Services\AnomalyDetection\Runtime\Incidents\StableDeviation\StableDeviationIncidentLifecycle.cs" />
+</ItemGroup>
+
+
 </Project>

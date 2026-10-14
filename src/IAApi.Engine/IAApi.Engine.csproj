@@ -6,4 +6,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Incidents\StableDeviation\StableDeviationIncidentContracts.cs"
+           Link="Runtime\Incidents\StableDeviation\StableDeviationIncidentContracts.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Incidents\StableDeviation\StableDeviationIncidentEngine.cs"
+           Link="Runtime\Incidents\StableDeviation\StableDeviationIncidentEngine.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Incidents\StableDeviation\StableDeviationIncidentLifecycle.cs"
+           Link="Runtime\Incidents\StableDeviation\StableDeviationIncidentLifecycle.cs" />
+</ItemGroup>
+
+
 </Project>
