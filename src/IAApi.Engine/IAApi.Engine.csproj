@@ -6,9 +6,4 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Regime\RegimeShadowOptions.cs"
-           Link="Runtime\Regime\RegimeShadowOptions.cs" />
-</ItemGroup>
-
 </Project>
