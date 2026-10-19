@@ -10,12 +10,6 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeDecisionMetrics.cs"
-           Link="Runtime\Observability\RuntimeDecisionMetrics.cs" />
 
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeDecisionMetricsSnapshot.cs"
-           Link="Runtime\Observability\RuntimeDecisionMetricsSnapshot.cs" />
-</ItemGroup>
 
 </Project>

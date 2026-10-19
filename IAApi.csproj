@@ -57,9 +57,6 @@
 </ItemGroup>
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeDecisionMetrics.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeDecisionMetricsSnapshot.cs" />
-</ItemGroup>
+
 
 </Project>
