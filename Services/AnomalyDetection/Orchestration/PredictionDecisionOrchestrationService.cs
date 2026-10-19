@@ -76,11 +76,11 @@ public async Task<PredictionDecisionOrchestrationResult> ExecutarAsync(
             $"Classification={classificacaoComportamentoReconhecido ?? "-"} " +
             $"BaselineApplied={baselineComportamentalAplicado}");
 
-        var runtimeDecision =
-            _predictionRuntimeDecisionService.Resolve(
-                resultadoDetector,
-                runtimeFunctionalContext,
-                request.ClienteId);
+var runtimeDecision =
+    _predictionRuntimeDecisionService.Resolve(
+        resultadoDetector.EhAnomalia,
+        runtimeFunctionalContext,
+        request.ClienteId);
 
         MultivariateOperationalFusionResult?
             multivariateOperationalFusion =

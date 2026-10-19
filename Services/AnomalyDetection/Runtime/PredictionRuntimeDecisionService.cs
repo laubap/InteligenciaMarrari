@@ -39,26 +39,26 @@ public sealed class PredictionRuntimeDecisionService
             runtimeDecisionMetrics;
     }
 
-    public RuntimeAnomalyDecision Resolve(
-        DetectorResult resultadoDetector,
-        RuntimeFunctionalDecisionContext? runtimeFunctionalContext,
-        string clienteId)
-    {
-var runtimeFunctionalCandidate =
-    _runtimeFunctionalDecisionCandidateFactory.Create(
-        resultadoDetector.EhAnomalia,
-        runtimeFunctionalContext);
+public RuntimeAnomalyDecision Resolve(
+    bool legacyFinalAnomaly,
+    RuntimeFunctionalDecisionContext? runtimeFunctionalContext,
+    string clienteId)
+{
+    var runtimeFunctionalCandidate =
+        _runtimeFunctionalDecisionCandidateFactory.Create(
+            legacyFinalAnomaly,
+            runtimeFunctionalContext);
 
-        var runtimeDecision =
-_runtimeDecisionResolver.Resolve(
-    resultadoDetector.EhAnomalia,
-    _runtimeDecisionOptions.Value,
-    clienteId,
-    runtimeFunctionalCandidate);
+    var runtimeDecision =
+        _runtimeDecisionResolver.Resolve(
+            legacyFinalAnomaly,
+            _runtimeDecisionOptions.Value,
+            clienteId,
+            runtimeFunctionalCandidate);
 
-        _runtimeDecisionMetrics.Record(
-            runtimeDecision);
+    _runtimeDecisionMetrics.Record(
+        runtimeDecision);
 
-        return runtimeDecision;
-    }
+    return runtimeDecision;
+}
 }
