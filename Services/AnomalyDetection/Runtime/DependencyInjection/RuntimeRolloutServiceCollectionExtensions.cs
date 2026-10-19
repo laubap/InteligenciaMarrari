@@ -1,6 +1,7 @@
 using IAApi.Services.AnomalyDetection.Runtime;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using IAApi.Services.AnomalyDetection.Runtime.Persistence;
 
 namespace IAApi.Services.AnomalyDetection.Runtime.DependencyInjection;
 
@@ -46,6 +47,10 @@ public static class RuntimeRolloutServiceCollectionExtensions
 
     services.AddScoped<
         RuntimeRolloutEvolutionService>();
+
+    services.AddScoped<
+    IRuntimeRolloutSnapshotReader,
+    EfRuntimeRolloutSnapshotReader>();
 
     services.AddScoped<
         RuntimeRolloutHistoryService>();

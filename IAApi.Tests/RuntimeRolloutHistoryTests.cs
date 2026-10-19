@@ -1,4 +1,5 @@
 using IAApi.Services.AnomalyDetection.Runtime;
+using IAApi.Services.AnomalyDetection.Runtime.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +33,11 @@ public sealed class RuntimeRolloutHistoryTests
 
         await fixture.Context.SaveChangesAsync();
 
-        var service = new RuntimeRolloutHistoryService(fixture.Context);
+        var service =
+            new RuntimeRolloutHistoryService(
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context));
+
         var result = await service.GetLatestAsync(limit: 2);
 
         Assert.Equal(2, result.Count);
@@ -46,8 +51,14 @@ public sealed class RuntimeRolloutHistoryTests
         await using var fixture = await CreateFixtureAsync();
 
         var controller = new RuntimeRolloutHistoryController(
-            new RuntimeRolloutHistoryService(fixture.Context),
-            Options.Create(new RuntimeDecisionMetricsEndpointOptions { Enabled = false }));
+            new RuntimeRolloutHistoryService(
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context)),
+            Options.Create(
+                new RuntimeDecisionMetricsEndpointOptions
+                {
+                    Enabled = false
+                }));
 
         var result = await controller.GetHistory();
 
@@ -65,8 +76,14 @@ public sealed class RuntimeRolloutHistoryTests
         await fixture.Context.SaveChangesAsync();
 
         var controller = new RuntimeRolloutHistoryController(
-            new RuntimeRolloutHistoryService(fixture.Context),
-            Options.Create(new RuntimeDecisionMetricsEndpointOptions { Enabled = true }));
+            new RuntimeRolloutHistoryService(
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context)),
+            Options.Create(
+                new RuntimeDecisionMetricsEndpointOptions
+                {
+                    Enabled = true
+                }));
 
         var result = await controller.GetHistory();
 
@@ -103,28 +120,39 @@ public sealed class RuntimeRolloutHistoryTests
 
     private static async Task<Fixture> CreateFixtureAsync()
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
+        var connection =
+            new SqliteConnection(
+                "Data Source=:memory:");
+
         await connection.OpenAsync();
 
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var options =
+            new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite(connection)
+                .Options;
 
-        var context = new AppDbContext(options);
+        var context =
+            new AppDbContext(options);
+
         await context.Database.EnsureCreatedAsync();
 
-        return new Fixture(connection, context);
+        return new Fixture(
+            connection,
+            context);
     }
 
     private sealed class Fixture : IAsyncDisposable
     {
-        public Fixture(SqliteConnection connection, AppDbContext context)
+        public Fixture(
+            SqliteConnection connection,
+            AppDbContext context)
         {
             Connection = connection;
             Context = context;
         }
 
         public SqliteConnection Connection { get; }
+
         public AppDbContext Context { get; }
 
         public async ValueTask DisposeAsync()

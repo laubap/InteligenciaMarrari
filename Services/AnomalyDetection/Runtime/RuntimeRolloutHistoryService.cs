@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-
 namespace IAApi.Services.AnomalyDetection.Runtime;
 
 /// <summary>
@@ -10,55 +8,24 @@ public sealed class RuntimeRolloutHistoryService
     public const int DefaultLimit = 20;
     public const int MaximumLimit = 100;
 
-    private readonly AppDbContext _context;
+    private readonly IRuntimeRolloutSnapshotReader _snapshotReader;
 
     public RuntimeRolloutHistoryService(
-        AppDbContext context)
+        IRuntimeRolloutSnapshotReader snapshotReader)
     {
-        _context = context;
+        _snapshotReader = snapshotReader;
     }
 
-    public async Task<IReadOnlyList<RuntimeRolloutHistoryItemResponse>> GetLatestAsync(
+    public Task<IReadOnlyList<RuntimeRolloutHistoryItemResponse>> GetLatestAsync(
         int? limit = null,
         CancellationToken cancellationToken = default)
     {
         var normalizedLimit =
             NormalizeLimit(limit);
 
-        // SQLite/EF Core não traduz ORDER BY diretamente sobre DateTimeOffset.
-        // Usamos SQL nativo somente para a ordenação/limite, mantendo a
-        // projeção tipada e AsNoTracking no EF.
-        return await _context.RuntimeRolloutSnapshots
-            .FromSqlInterpolated($"""
-                SELECT *
-                FROM RuntimeRolloutSnapshots
-                ORDER BY GeneratedAtUtc DESC, Id DESC
-                LIMIT {normalizedLimit}
-                """)
-            .AsNoTracking()
-            .Select(x =>
-                new RuntimeRolloutHistoryItemResponse
-                {
-                    Id = x.Id,
-                    GeneratedAtUtc = x.GeneratedAtUtc,
-                    RuntimeDecisionEnabled = x.RuntimeDecisionEnabled,
-                    CanaryOnly = x.CanaryOnly,
-                    AllowedClientIdsJson = x.AllowedClientIdsJson,
-                    Status = x.Status,
-                    ReadyToExpand = x.ReadyToExpand,
-                    TotalDecisions = x.TotalDecisions,
-                    ObservationMinutes = x.ObservationMinutes,
-                    LegacyFallbackRate = x.LegacyFallbackRate,
-                    DataQualityUncertainRate = x.DataQualityUncertainRate,
-                    CandidateMismatchRate = x.CandidateMismatchRate,
-                    StableUnresolvedContinuationRate =
-                        x.StableUnresolvedContinuationRate,
-                    ReasonsJson = x.ReasonsJson,
-                    FirstDecisionAtUtc = x.FirstDecisionAtUtc,
-                    LastDecisionAtUtc = x.LastDecisionAtUtc
-                })
-            .ToListAsync(
-                cancellationToken);
+        return _snapshotReader.GetLatestAsync(
+            normalizedLimit,
+            cancellationToken);
     }
 
     public static int NormalizeLimit(
