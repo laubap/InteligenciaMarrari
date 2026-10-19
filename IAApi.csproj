@@ -56,4 +56,9 @@
   <ProjectReference Include="src\IAApi.Application\IAApi.Application.csproj" />
 </ItemGroup>
 
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeAnomalyDecisionOptions.cs" />
+  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeDecisionAuditData.cs" />
+</ItemGroup>
+
 </Project>

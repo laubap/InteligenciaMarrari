@@ -11,4 +11,12 @@
   </ItemGroup>
 
 
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeAnomalyDecisionOptions.cs"
+           Link="Runtime\Decision\RuntimeAnomalyDecisionOptions.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeDecisionAuditData.cs"
+           Link="Runtime\Decision\RuntimeDecisionAuditData.cs" />
+</ItemGroup>
+
 </Project>
