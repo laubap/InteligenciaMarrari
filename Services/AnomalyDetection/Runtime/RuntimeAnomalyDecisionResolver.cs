@@ -9,30 +9,29 @@ namespace IAApi.Services.AnomalyDetection.Runtime;
 public sealed class RuntimeAnomalyDecisionResolver
 {
     public RuntimeAnomalyDecision Resolve(
-        DetectorResult legacyResult,
+        bool legacyFinalAnomaly,
         RuntimeAnomalyDecisionOptions options,
         RuntimeFunctionalDecisionCandidate? functionalCandidate = null)
     {
         return Resolve(
-            legacyResult,
+            legacyFinalAnomaly,
             options,
             clientId: null,
             functionalCandidate);
     }
 
     public RuntimeAnomalyDecision Resolve(
-        DetectorResult legacyResult,
+        bool legacyFinalAnomaly,
         RuntimeAnomalyDecisionOptions options,
         string? clientId,
         RuntimeFunctionalDecisionCandidate? functionalCandidate = null)
     {
-        ArgumentNullException.ThrowIfNull(legacyResult);
         ArgumentNullException.ThrowIfNull(options);
 
         if (!options.Enabled)
         {
             return Legacy(
-                legacyResult.EhAnomalia,
+                legacyFinalAnomaly,
                 source: "LegacyFeatureDisabled",
                 reason: "RuntimeDecisionDisabled");
         }
@@ -43,7 +42,7 @@ public sealed class RuntimeAnomalyDecisionResolver
                 options.AllowedClientIds))
         {
             return Legacy(
-                legacyResult.EhAnomalia,
+                legacyFinalAnomaly,
                 source: "LegacyCanaryExcluded",
                 reason: "ClientNotEnabledForRuntimeDecision");
         }
@@ -51,14 +50,14 @@ public sealed class RuntimeAnomalyDecisionResolver
         if (functionalCandidate is null)
         {
             return Legacy(
-                legacyResult.EhAnomalia,
+                legacyFinalAnomaly,
                 source: "LegacyFallback",
                 reason: "FunctionalDecisionUnavailable");
         }
 
         return new RuntimeAnomalyDecision(
             LegacyFinalAnomaly:
-                legacyResult.EhAnomalia,
+                legacyFinalAnomaly,
             EmitAnomaly:
                 functionalCandidate.EmitAnomaly,
             EmitNewEvidence:

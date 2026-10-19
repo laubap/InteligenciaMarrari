@@ -50,11 +50,11 @@ var runtimeFunctionalCandidate =
         runtimeFunctionalContext);
 
         var runtimeDecision =
-            _runtimeDecisionResolver.Resolve(
-                resultadoDetector,
-                _runtimeDecisionOptions.Value,
-                clienteId,
-                runtimeFunctionalCandidate);
+_runtimeDecisionResolver.Resolve(
+    resultadoDetector.EhAnomalia,
+    _runtimeDecisionOptions.Value,
+    clienteId,
+    runtimeFunctionalCandidate);
 
         _runtimeDecisionMetrics.Record(
             runtimeDecision);

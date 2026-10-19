@@ -1,4 +1,3 @@
-using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Runtime;
 using Xunit;
 
@@ -12,15 +11,9 @@ public sealed class RuntimeAnomalyDecisionResolverTests
     [Fact]
     public void FlagOff_LegacyAnomalo_PreservaExatamenteLegacy()
     {
-        var legacy =
-            new DetectorResult
-            {
-                EhAnomalia = true
-            };
-
         var result =
             _resolver.Resolve(
-                legacy,
+                legacyFinalAnomaly: true,
                 new RuntimeAnomalyDecisionOptions
                 {
                     Enabled = false
@@ -37,15 +30,9 @@ public sealed class RuntimeAnomalyDecisionResolverTests
     [Fact]
     public void FlagOff_LegacyNormal_NaoInventaAnomalia()
     {
-        var legacy =
-            new DetectorResult
-            {
-                EhAnomalia = false
-            };
-
         var result =
             _resolver.Resolve(
-                legacy,
+                legacyFinalAnomaly: false,
                 new RuntimeAnomalyDecisionOptions
                 {
                     Enabled = false
@@ -60,15 +47,9 @@ public sealed class RuntimeAnomalyDecisionResolverTests
     [Fact]
     public void FlagOn_SemDecisaoFuncional_LegacyAnomaloFazFallback()
     {
-        var legacy =
-            new DetectorResult
-            {
-                EhAnomalia = true
-            };
-
         var result =
             _resolver.Resolve(
-                legacy,
+                legacyFinalAnomaly: true,
                 new RuntimeAnomalyDecisionOptions
                 {
                     Enabled = true
@@ -87,15 +68,9 @@ public sealed class RuntimeAnomalyDecisionResolverTests
     [Fact]
     public void FlagOn_SemDecisaoFuncional_LegacyNormalPermaneceNormal()
     {
-        var legacy =
-            new DetectorResult
-            {
-                EhAnomalia = false
-            };
-
         var result =
             _resolver.Resolve(
-                legacy,
+                legacyFinalAnomaly: false,
                 new RuntimeAnomalyDecisionOptions
                 {
                     Enabled = true
@@ -110,12 +85,6 @@ public sealed class RuntimeAnomalyDecisionResolverTests
     [Fact]
     public void FlagOn_ComCandidatoFuncional_UsaDecisaoFuncional()
     {
-        var legacy =
-            new DetectorResult
-            {
-                EhAnomalia = true
-            };
-
         var candidate =
             new RuntimeFunctionalDecisionCandidate(
                 EmitAnomaly: false,
@@ -126,7 +95,7 @@ public sealed class RuntimeAnomalyDecisionResolverTests
 
         var result =
             _resolver.Resolve(
-                legacy,
+                legacyFinalAnomaly: true,
                 new RuntimeAnomalyDecisionOptions
                 {
                     Enabled = true
@@ -142,16 +111,10 @@ public sealed class RuntimeAnomalyDecisionResolverTests
             "RuntimeFunctionalDecisionAccepted",
             result.Reasons);
     }
-
-    [Fact]
-    public void CandidatoFuncional_NaoMutaDetectorResultLegacy()
+    
+        [Fact]
+    public void CandidatoFuncional_PreservaDecisaoLegacyOriginal()
     {
-        var legacy =
-            new DetectorResult
-            {
-                EhAnomalia = true
-            };
-
         var candidate =
             new RuntimeFunctionalDecisionCandidate(
                 EmitAnomaly: false,
@@ -160,14 +123,18 @@ public sealed class RuntimeAnomalyDecisionResolverTests
                 Reasons:
                     ["StableUnresolvedContinuation"]);
 
-        _resolver.Resolve(
-            legacy,
-            new RuntimeAnomalyDecisionOptions
-            {
-                Enabled = true
-            },
-            candidate);
+        var result =
+            _resolver.Resolve(
+                legacyFinalAnomaly: true,
+                new RuntimeAnomalyDecisionOptions
+                {
+                    Enabled = true
+                },
+                candidate);
 
-        Assert.True(legacy.EhAnomalia);
+        Assert.True(result.LegacyFinalAnomaly);
+        Assert.False(result.EmitAnomaly);
+        Assert.False(result.EmitNewEvidence);
+        Assert.False(result.UsedLegacyFallback);
     }
 }

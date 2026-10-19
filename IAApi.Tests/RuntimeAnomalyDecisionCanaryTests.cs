@@ -1,4 +1,3 @@
-using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Runtime;
 using Xunit;
 
@@ -13,7 +12,7 @@ public sealed class RuntimeAnomalyDecisionCanaryTests
 
         var result =
             resolver.Resolve(
-                Legacy(anomaly: true),
+                true,
                 Options(
                     canaryOnly: true,
                     allowedClientIds: ["PK7"]),
@@ -35,7 +34,7 @@ public sealed class RuntimeAnomalyDecisionCanaryTests
 
         var result =
             resolver.Resolve(
-                Legacy(anomaly: true),
+                true,
                 Options(
                     canaryOnly: true,
                     allowedClientIds: ["PK7"]),
@@ -62,7 +61,7 @@ public sealed class RuntimeAnomalyDecisionCanaryTests
 
         var result =
             resolver.Resolve(
-                Legacy(anomaly: true),
+                true,
                 Options(
                     canaryOnly: true,
                     allowedClientIds: []),
@@ -86,7 +85,7 @@ public sealed class RuntimeAnomalyDecisionCanaryTests
 
         var result =
             resolver.Resolve(
-                Legacy(anomaly: true),
+                true,
                 Options(
                     canaryOnly: false,
                     allowedClientIds: []),
@@ -112,12 +111,6 @@ public sealed class RuntimeAnomalyDecisionCanaryTests
             AllowedClientIds = allowedClientIds
         };
     }
-
-    private static DetectorResult Legacy(bool anomaly) => new()
-    {
-        EhAnomalia = anomaly,
-        Score = anomaly ? 4 : 0
-    };
 
     private static RuntimeFunctionalDecisionCandidate Functional(
         bool emitAnomaly,
