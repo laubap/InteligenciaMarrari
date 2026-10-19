@@ -57,10 +57,4 @@
 </ItemGroup>
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutReadinessEvaluator.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutReadinessOptions.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutReadinessResponse.cs" />
-</ItemGroup>
-
 </Project>
