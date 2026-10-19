@@ -58,8 +58,6 @@
 
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\PredictionRuntimeDecisionService.cs" />
-</ItemGroup>
+
 
 </Project>

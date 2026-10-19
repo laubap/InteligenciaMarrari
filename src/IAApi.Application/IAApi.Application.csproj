@@ -12,9 +12,6 @@
 
 
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\PredictionRuntimeDecisionService.cs"
-           Link="Runtime\Decision\PredictionRuntimeDecisionService.cs" />
-</ItemGroup>
+
 
 </Project>
