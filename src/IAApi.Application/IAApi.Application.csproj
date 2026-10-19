@@ -10,11 +10,4 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
-
-
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutSnapshotFactory.cs"
-           Link="Runtime\Rollout\Snapshots\RuntimeRolloutSnapshotFactory.cs" />
-</ItemGroup>
-
 </Project>
