@@ -1,16 +1,16 @@
-using Microsoft.EntityFrameworkCore;
 
 namespace IAApi.Services.AnomalyDetection.Runtime;
 
 public sealed class RuntimeRolloutEvolutionService
 {
-    private readonly AppDbContext _context;
+private readonly IRuntimeRolloutSnapshotReader
+    _snapshotReader;
 
-    public RuntimeRolloutEvolutionService(
-        AppDbContext context)
-    {
-        _context = context;
-    }
+public RuntimeRolloutEvolutionService(
+    IRuntimeRolloutSnapshotReader snapshotReader)
+{
+    _snapshotReader = snapshotReader;
+}
 
     public async Task<RuntimeRolloutEvolutionResponse> GetEvolutionAsync(
         int? limit = null,
@@ -19,24 +19,17 @@ public sealed class RuntimeRolloutEvolutionService
         var normalizedLimit =
             RuntimeRolloutHistoryService.NormalizeLimit(limit);
 
-        var snapshots =
-            await _context.RuntimeRolloutSnapshots
-                .FromSqlInterpolated($"""
-                    SELECT *
-                    FROM RuntimeRolloutSnapshots
-                    ORDER BY GeneratedAtUtc DESC, Id DESC
-                    LIMIT {normalizedLimit}
-                    """)
-                .AsNoTracking()
-                .ToListAsync(
-                    cancellationToken);
+var snapshots =
+    (await _snapshotReader.GetLatestAsync(
+        normalizedLimit,
+        cancellationToken))
+    .Reverse()
+    .ToList();
 
         if (snapshots.Count == 0)
         {
             return new RuntimeRolloutEvolutionResponse();
         }
-
-        snapshots.Reverse();
 
         var changes =
             new List<RuntimeRolloutEvolutionItemResponse>();
@@ -216,9 +209,9 @@ public sealed class RuntimeRolloutEvolutionService
         };
     }
 
-    private static bool IsRestartBoundary(
-        RuntimeRolloutSnapshot previous,
-        RuntimeRolloutSnapshot current)
+private static bool IsRestartBoundary(
+    RuntimeRolloutHistoryItemResponse previous,
+    RuntimeRolloutHistoryItemResponse current)
     {
         if (current.TotalDecisions <
             previous.TotalDecisions)
@@ -248,9 +241,9 @@ public sealed class RuntimeRolloutEvolutionService
         return false;
     }
 
-    private static string TrendWithinLatestSession(
-        IReadOnlyList<RuntimeRolloutSnapshot> snapshots,
-        Func<RuntimeRolloutSnapshot, double> selector)
+private static string TrendWithinLatestSession(
+    IReadOnlyList<RuntimeRolloutHistoryItemResponse> snapshots,
+    Func<RuntimeRolloutHistoryItemResponse, double> selector)
     {
         if (snapshots.Count < 2)
         {

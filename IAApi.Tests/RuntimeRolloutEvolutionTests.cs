@@ -1,4 +1,5 @@
 using IAApi.Services.AnomalyDetection.Runtime;
+using IAApi.Services.AnomalyDetection.Runtime.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +18,8 @@ public sealed class RuntimeRolloutEvolutionTests
 
         var service =
             new RuntimeRolloutEvolutionService(
-                fixture.Context);
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context));
 
         var result =
             await service.GetEvolutionAsync();
@@ -42,7 +44,8 @@ public sealed class RuntimeRolloutEvolutionTests
 
         var result =
             await new RuntimeRolloutEvolutionService(
-                fixture.Context)
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context))
                 .GetEvolutionAsync();
 
         Assert.Equal(15, result.ObservedDecisionGrowth);
@@ -70,7 +73,8 @@ public sealed class RuntimeRolloutEvolutionTests
 
         var result =
             await new RuntimeRolloutEvolutionService(
-                fixture.Context)
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context))
                 .GetEvolutionAsync();
 
         Assert.Equal(1, result.ProcessRestartCount);
@@ -102,7 +106,8 @@ public sealed class RuntimeRolloutEvolutionTests
 
         var result =
             await new RuntimeRolloutEvolutionService(
-                fixture.Context)
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context))
                 .GetEvolutionAsync();
 
         Assert.Equal(31, result.ObservedDecisionGrowth);
@@ -125,7 +130,8 @@ public sealed class RuntimeRolloutEvolutionTests
 
         var result =
             await new RuntimeRolloutEvolutionService(
-                fixture.Context)
+                new EfRuntimeRolloutSnapshotReader(
+                    fixture.Context))
                 .GetEvolutionAsync();
 
         Assert.Equal(
@@ -145,7 +151,8 @@ public sealed class RuntimeRolloutEvolutionTests
         var controller =
             new RuntimeRolloutEvolutionController(
                 new RuntimeRolloutEvolutionService(
-                    fixture.Context),
+                    new EfRuntimeRolloutSnapshotReader(
+                        fixture.Context)),
                 Options.Create(
                     new RuntimeDecisionMetricsEndpointOptions
                     {
@@ -168,7 +175,8 @@ public sealed class RuntimeRolloutEvolutionTests
         var controller =
             new RuntimeRolloutEvolutionController(
                 new RuntimeRolloutEvolutionService(
-                    fixture.Context),
+                    new EfRuntimeRolloutSnapshotReader(
+                        fixture.Context)),
                 Options.Create(
                     new RuntimeDecisionMetricsEndpointOptions
                     {
