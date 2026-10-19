@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace IAApi.Services.AnomalyDetection.Runtime.DependencyInjection;
 
@@ -12,6 +13,12 @@ public static class RuntimeAnomalyDecisionServiceCollectionExtensions
         services.Configure<RuntimeAnomalyDecisionOptions>(
             configuration.GetSection(
                 RuntimeAnomalyDecisionOptions.SectionName));
+
+        services.AddSingleton<RuntimeAnomalyDecisionOptions>(
+    serviceProvider =>
+        serviceProvider
+            .GetRequiredService<IOptions<RuntimeAnomalyDecisionOptions>>()
+            .Value);
 
         services.AddSingleton<
             RuntimeAnomalyDecisionResolver>();

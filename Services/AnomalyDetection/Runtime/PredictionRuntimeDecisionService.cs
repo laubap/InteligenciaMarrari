@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Options;
-
 namespace IAApi.Services.AnomalyDetection.Runtime;
 
 public sealed class PredictionRuntimeDecisionService
@@ -10,8 +8,8 @@ public sealed class PredictionRuntimeDecisionService
     private readonly RuntimeAnomalyDecisionResolver
         _runtimeDecisionResolver;
 
-    private readonly IOptions<RuntimeAnomalyDecisionOptions>
-        _runtimeDecisionOptions;
+private readonly RuntimeAnomalyDecisionOptions
+    _runtimeDecisionOptions;
 
     private readonly RuntimeDecisionMetrics
         _runtimeDecisionMetrics;
@@ -21,8 +19,8 @@ public sealed class PredictionRuntimeDecisionService
             runtimeFunctionalDecisionCandidateFactory,
         RuntimeAnomalyDecisionResolver
             runtimeDecisionResolver,
-        IOptions<RuntimeAnomalyDecisionOptions>
-            runtimeDecisionOptions,
+RuntimeAnomalyDecisionOptions
+    runtimeDecisionOptions,
         RuntimeDecisionMetrics
             runtimeDecisionMetrics)
     {
@@ -52,7 +50,7 @@ public RuntimeAnomalyDecision Resolve(
     var runtimeDecision =
         _runtimeDecisionResolver.Resolve(
             legacyFinalAnomaly,
-            _runtimeDecisionOptions.Value,
+            _runtimeDecisionOptions,
             clienteId,
             runtimeFunctionalCandidate);
 
