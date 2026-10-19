@@ -10,10 +10,4 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
-
-  <ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeAnomalyDecisionResolver.cs"
-           Link="Runtime\Decision\RuntimeAnomalyDecisionResolver.cs" />
-</ItemGroup>
-
 </Project>

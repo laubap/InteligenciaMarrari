@@ -57,9 +57,4 @@
 </ItemGroup>
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeAnomalyDecisionResolver.cs" />
-</ItemGroup>
-
-
 </Project>
