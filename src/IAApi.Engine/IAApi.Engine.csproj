@@ -6,4 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeFunctionalDecisionContext.cs"
+           Link="Runtime\Decision\RuntimeFunctionalDecisionContext.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeFunctionalDecisionCandidateFactory.cs"
+           Link="Runtime\Decision\RuntimeFunctionalDecisionCandidateFactory.cs" />
+</ItemGroup>
+
 </Project>
