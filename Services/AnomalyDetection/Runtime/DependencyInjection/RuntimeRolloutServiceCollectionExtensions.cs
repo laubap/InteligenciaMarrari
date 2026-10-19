@@ -2,6 +2,7 @@ using IAApi.Services.AnomalyDetection.Runtime;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Runtime.Persistence;
+using Microsoft.Extensions.Options;
 
 namespace IAApi.Services.AnomalyDetection.Runtime.DependencyInjection;
 
@@ -23,6 +24,14 @@ public static class RuntimeRolloutServiceCollectionExtensions
             RuntimeRolloutReadinessOptions>(
             configuration.GetSection(
                 RuntimeRolloutReadinessOptions.SectionName));
+
+        services.AddSingleton<
+    RuntimeRolloutReadinessOptions>(
+    serviceProvider =>
+        serviceProvider
+            .GetRequiredService<
+                IOptions<RuntimeRolloutReadinessOptions>>()
+            .Value);
 
         services.AddSingleton<
             RuntimeRolloutReadinessEvaluator>();

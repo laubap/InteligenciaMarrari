@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Options;
-
 namespace IAApi.Services.AnomalyDetection.Runtime;
 
 /// <summary>
@@ -14,10 +12,10 @@ public sealed class RuntimeRolloutSnapshotService
     private readonly RuntimeDecisionMetrics
         _metrics;
 
-    private readonly IOptions<RuntimeAnomalyDecisionOptions>
+    private readonly RuntimeAnomalyDecisionOptions
         _runtimeOptions;
 
-    private readonly IOptions<RuntimeRolloutReadinessOptions>
+    private readonly RuntimeRolloutReadinessOptions
         _readinessOptions;
 
     private readonly RuntimeRolloutSnapshotFactory
@@ -26,8 +24,8 @@ public sealed class RuntimeRolloutSnapshotService
     public RuntimeRolloutSnapshotService(
         IRuntimeRolloutSnapshotWriter snapshotWriter,
         RuntimeDecisionMetrics metrics,
-        IOptions<RuntimeAnomalyDecisionOptions> runtimeOptions,
-        IOptions<RuntimeRolloutReadinessOptions> readinessOptions,
+        RuntimeAnomalyDecisionOptions runtimeOptions,
+        RuntimeRolloutReadinessOptions readinessOptions,
         RuntimeRolloutSnapshotFactory factory)
     {
         _snapshotWriter = snapshotWriter;
@@ -42,9 +40,9 @@ public sealed class RuntimeRolloutSnapshotService
     {
         var snapshot =
             _factory.Create(
-                _runtimeOptions.Value,
+                _runtimeOptions,
                 _metrics.Snapshot(),
-                _readinessOptions.Value,
+                _readinessOptions,
                 DateTimeOffset.UtcNow);
 
         await _snapshotWriter.SaveAsync(
