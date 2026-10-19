@@ -57,11 +57,4 @@
   <ProjectReference Include="src\IAApi.Infrastructure\IAApi.Infrastructure.csproj" />
 </ItemGroup>
 
-
-
-
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutSnapshotService.cs" />
-</ItemGroup>
-
 </Project>
