@@ -10,16 +10,5 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutEvolutionItemResponse.cs"
-           Link="Runtime\Rollout\Queries\RuntimeRolloutEvolutionItemResponse.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutEvolutionResponse.cs"
-           Link="Runtime\Rollout\Queries\RuntimeRolloutEvolutionResponse.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutHistoryItemResponse.cs"
-           Link="Runtime\Rollout\Queries\RuntimeRolloutHistoryItemResponse.cs" />
-</ItemGroup>
-
 
 </Project>

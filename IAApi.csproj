@@ -56,12 +56,4 @@
   <ProjectReference Include="src\IAApi.Application\IAApi.Application.csproj" />
 </ItemGroup>
 
-
-
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutEvolutionItemResponse.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutEvolutionResponse.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutHistoryItemResponse.cs" />
-</ItemGroup>
-
 </Project>
