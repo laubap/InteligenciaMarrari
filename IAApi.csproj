@@ -53,6 +53,7 @@
 
 <ItemGroup>
   <ProjectReference Include="src\IAApi.Engine\IAApi.Engine.csproj" />
+  <ProjectReference Include="src\IAApi.Application\IAApi.Application.csproj" />
 </ItemGroup>
 
 </Project>
