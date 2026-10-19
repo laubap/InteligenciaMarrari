@@ -17,16 +17,15 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
     private const double MinimumLegacyScoreForRecovery = 50.0;
     private const double MinimumStrongDetectorScore = 90.0;
 
-    public RuntimeFunctionalDecisionCandidate Create(
-        DetectorResult legacyResult,
-        RuntimeFunctionalDecisionContext? context)
-    {
-        ArgumentNullException.ThrowIfNull(legacyResult);
+public RuntimeFunctionalDecisionCandidate Create(
+    bool legacyFinalAnomaly,
+    RuntimeFunctionalDecisionContext? context)
+{
 
         if (context?.FrozenSensor == true)
         {
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 new RuntimeFunctionalDecisionCandidate(
                     EmitAnomaly: true,
@@ -40,12 +39,12 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
                         "IndependentDataQualityEvidence"
                     ]));
         }
-        if (!legacyResult.EhAnomalia &&
+        if (!legacyFinalAnomaly &&
             context is not null &&
             IsStrongLegacyFalseNegative(context))
         {
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 new RuntimeFunctionalDecisionCandidate(
                     EmitAnomaly: true,
@@ -62,13 +61,13 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
                     ]));
         }
 
-        if (!legacyResult.EhAnomalia &&
+        if (!legacyFinalAnomaly &&
             context?.IncreasingNoise == true &&
             context.IncreasingNoiseStarted &&
             !context.CriticalGap)
         {
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 new RuntimeFunctionalDecisionCandidate(
                     EmitAnomaly: true,
@@ -82,13 +81,13 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
                     ]));
         }
 
-        if (!legacyResult.EhAnomalia &&
+        if (!legacyFinalAnomaly &&
             context?.IncreasingNoise == true &&
             context.IncreasingNoiseContinuation &&
             !context.CriticalGap)
         {
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 new RuntimeFunctionalDecisionCandidate(
                     EmitAnomaly: true,
@@ -100,24 +99,24 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
                         "IncreasingNoiseStillActive"
                     ]));
         }
-        if (!legacyResult.EhAnomalia)
-        {
-            return Trace(
-                legacyResult,
-                context,
-                new RuntimeFunctionalDecisionCandidate(
-                    EmitAnomaly: false,
-                    EmitNewEvidence: false,
-                    Source:
-                        RuntimeFunctionalDecisionSources.LegacyNormal,
-                    Reasons:
-                        ["LegacyFinalAnomalyFalse"]));
-        }
+if (!legacyFinalAnomaly)
+{
+    return Trace(
+        legacyFinalAnomaly,
+        context,
+        new RuntimeFunctionalDecisionCandidate(
+            EmitAnomaly: false,
+            EmitNewEvidence: false,
+            Source:
+                RuntimeFunctionalDecisionSources.LegacyNormal,
+            Reasons:
+                ["LegacyFinalAnomalyFalse"]));
+}
 
         if (context is null)
         {
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 PreserveAsNewAnomaly(
                     "RuntimeFunctionalContextUnavailable"));
@@ -126,7 +125,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
         if (context.CriticalGap)
         {
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 new RuntimeFunctionalDecisionCandidate(
                     EmitAnomaly: true,
@@ -157,7 +156,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
                 reasons.Add("ZAgainstCandidateAbnormal");
 
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 new RuntimeFunctionalDecisionCandidate(
                     EmitAnomaly: false,
@@ -215,7 +214,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
                 reasons.Add("EwmaOnlyTemporalMismatch");
 
             return Trace(
-                legacyResult,
+                legacyFinalAnomaly,
                 context,
                 new RuntimeFunctionalDecisionCandidate(
                     EmitAnomaly: false,
@@ -252,7 +251,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
             fallbackReasons.Add("CandidatePromoted");
 
         return Trace(
-            legacyResult,
+             legacyFinalAnomaly,
             context,
             new RuntimeFunctionalDecisionCandidate(
                 EmitAnomaly: true,
@@ -288,10 +287,10 @@ public sealed class RuntimeFunctionalDecisionCandidateFactory
                 MinimumStrongDetectorScore;
     }
 
-    private static RuntimeFunctionalDecisionCandidate Trace(
-        DetectorResult legacyResult,
-        RuntimeFunctionalDecisionContext? context,
-        RuntimeFunctionalDecisionCandidate candidate)
+private static RuntimeFunctionalDecisionCandidate Trace(
+    bool legacyFinalAnomaly,
+    RuntimeFunctionalDecisionContext? context,
+    RuntimeFunctionalDecisionCandidate candidate)
     {
         return candidate;
     }

@@ -80,10 +80,10 @@ public sealed class RuntimeDataQualityUncertainIntegrationTests
             "SuspendedByDataQuality",
             context.RegimeState);
 
-        var candidate =
-            factory.Create(
-                legacy,
-                context);
+       var candidate =
+    factory.Create(
+        legacy.EhAnomalia,
+        context);
 
         Assert.Equal(
             RuntimeFunctionalDecisionSources

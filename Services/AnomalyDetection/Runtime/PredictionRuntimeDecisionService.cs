@@ -44,10 +44,10 @@ public sealed class PredictionRuntimeDecisionService
         RuntimeFunctionalDecisionContext? runtimeFunctionalContext,
         string clienteId)
     {
-        var runtimeFunctionalCandidate =
-            _runtimeFunctionalDecisionCandidateFactory.Create(
-                resultadoDetector,
-                runtimeFunctionalContext);
+var runtimeFunctionalCandidate =
+    _runtimeFunctionalDecisionCandidateFactory.Create(
+        resultadoDetector.EhAnomalia,
+        runtimeFunctionalContext);
 
         var runtimeDecision =
             _runtimeDecisionResolver.Resolve(

@@ -1,5 +1,4 @@
-﻿using IAApi.Services.AnomalyDetection;
-using IAApi.Services.AnomalyDetection.Runtime;
+﻿using IAApi.Services.AnomalyDetection.Runtime;
 using Xunit;
 
 namespace IAApi.Tests;
@@ -13,9 +12,9 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     public void LegacyNormal_NaoInventaEvento()
     {
         var result =
-            _factory.Create(
-                Legacy(false),
-                context: null);
+_factory.Create(
+    false,
+    context: null);
 
         Assert.False(result.EmitAnomaly);
         Assert.False(result.EmitNewEvidence);
@@ -29,7 +28,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false, 54.67),
+                    false,
                 Context(
                     zActiveVote: true,
                     zActiveScore: 100,
@@ -63,7 +62,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false, 54.67),
+                    false,
                 Context(
                     zActiveVote: true,
                     zActiveScore: 100,
@@ -85,7 +84,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false, 54.67),
+                    false,
                 Context(
                     zActiveVote: true,
                     zActiveScore: 100,
@@ -107,7 +106,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false, 49.99),
+                false,
                 Context(
                     zActiveVote: true,
                     zActiveScore: 100,
@@ -129,7 +128,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false, 54.67),
+                    false,
                 Context(
                     criticalGap: true,
                     zActiveVote: true,
@@ -152,7 +151,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(true),
+                true,
                 context: null);
 
         Assert.True(result.EmitAnomaly);
@@ -170,7 +169,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(true),
+                true,
                 Context(
                     criticalGap: true,
                     madCandidateVote: true));
@@ -188,7 +187,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(true),
+                true,
                 Context(
                     madCandidateVote: true));
 
@@ -205,7 +204,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(true),
+                true,
                 Context());
 
         Assert.False(result.EmitAnomaly);
@@ -221,7 +220,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(true),
+                true,
                 Context(
                     ewmaCandidateVote: true));
 
@@ -237,7 +236,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(true),
+                true,
                 Context(
                     candidateBaselineReady: false));
 
@@ -256,7 +255,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false),
+                false,
                 Context(
                     increasingNoise: true,
                     increasingNoiseStarted: true));
@@ -279,7 +278,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false),
+                false,
                 Context(
                     increasingNoise: true,
                     increasingNoiseContinuation: true));
@@ -299,7 +298,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(true),
+                true,
                 Context(
                     increasingNoise: true,
                     increasingNoiseContinuation: true,
@@ -317,7 +316,7 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
     {
         var result =
             _factory.Create(
-                Legacy(false),
+                false,
                 Context(
                     increasingNoise: false));
 
@@ -329,16 +328,6 @@ public sealed class RuntimeFunctionalDecisionCandidateFactoryTests
         Assert.Contains(
             "LegacyFinalAnomalyFalse",
             result.Reasons);
-    }
-    private static DetectorResult Legacy(
-        bool anomaly,
-        double scoreNormalizado = 0)
-    {
-        return new DetectorResult
-        {
-            EhAnomalia = anomaly,
-            ScoreNormalizado = scoreNormalizado
-        };
     }
 
     private static RuntimeFunctionalDecisionContext Context(
