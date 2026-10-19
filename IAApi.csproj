@@ -58,10 +58,5 @@
 </ItemGroup>
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutHistoryService.cs" />
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutEvolutionService.cs" />
-</ItemGroup>
-
 
 </Project>

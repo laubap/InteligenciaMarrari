@@ -11,13 +11,4 @@
   </ItemGroup>
 
 
-
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutHistoryService.cs"
-           Link="Runtime\Rollout\Queries\RuntimeRolloutHistoryService.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutEvolutionService.cs"
-           Link="Runtime\Rollout\Queries\RuntimeRolloutEvolutionService.cs" />
-</ItemGroup>
-
 </Project>
