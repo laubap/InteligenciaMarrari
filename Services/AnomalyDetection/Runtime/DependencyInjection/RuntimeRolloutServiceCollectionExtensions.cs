@@ -53,6 +53,10 @@ public static class RuntimeRolloutServiceCollectionExtensions
     EfRuntimeRolloutSnapshotReader>();
 
     services.AddScoped<
+    IRuntimeRolloutSnapshotWriter,
+    EfRuntimeRolloutSnapshotWriter>();
+
+    services.AddScoped<
         RuntimeRolloutHistoryService>();
 
     services.AddHostedService<

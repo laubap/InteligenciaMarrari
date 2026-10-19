@@ -3,13 +3,13 @@ using Microsoft.Extensions.Options;
 namespace IAApi.Services.AnomalyDetection.Runtime;
 
 /// <summary>
-/// B3.20.8 — persiste snapshots agregados do rollout no SQLite.
+/// B3.20.8 — persiste snapshots agregados do rollout.
 /// Persistência separada do histórico de anomalias.
 /// </summary>
 public sealed class RuntimeRolloutSnapshotService
 {
-    private readonly AppDbContext
-        _context;
+    private readonly IRuntimeRolloutSnapshotWriter
+        _snapshotWriter;
 
     private readonly RuntimeDecisionMetrics
         _metrics;
@@ -24,20 +24,20 @@ public sealed class RuntimeRolloutSnapshotService
         _factory;
 
     public RuntimeRolloutSnapshotService(
-        AppDbContext context,
+        IRuntimeRolloutSnapshotWriter snapshotWriter,
         RuntimeDecisionMetrics metrics,
         IOptions<RuntimeAnomalyDecisionOptions> runtimeOptions,
         IOptions<RuntimeRolloutReadinessOptions> readinessOptions,
         RuntimeRolloutSnapshotFactory factory)
     {
-        _context = context;
+        _snapshotWriter = snapshotWriter;
         _metrics = metrics;
         _runtimeOptions = runtimeOptions;
         _readinessOptions = readinessOptions;
         _factory = factory;
     }
 
-    public async Task<RuntimeRolloutSnapshot> SaveCurrentAsync(
+    public async Task<RuntimeRolloutSnapshotData> SaveCurrentAsync(
         CancellationToken cancellationToken = default)
     {
         var snapshot =
@@ -47,10 +47,8 @@ public sealed class RuntimeRolloutSnapshotService
                 _readinessOptions.Value,
                 DateTimeOffset.UtcNow);
 
-        _context.RuntimeRolloutSnapshots.Add(
-            snapshot);
-
-        await _context.SaveChangesAsync(
+        await _snapshotWriter.SaveAsync(
+            snapshot,
             cancellationToken);
 
         return snapshot;

@@ -17,11 +17,11 @@ public sealed class RuntimeRolloutSnapshotFactory
         _readinessEvaluator = readinessEvaluator;
     }
 
-    public RuntimeRolloutSnapshot Create(
-        RuntimeAnomalyDecisionOptions runtimeOptions,
-        RuntimeDecisionMetricsSnapshot metrics,
-        RuntimeRolloutReadinessOptions readinessOptions,
-        DateTimeOffset generatedAtUtc)
+public RuntimeRolloutSnapshotData Create(
+    RuntimeAnomalyDecisionOptions runtimeOptions,
+    RuntimeDecisionMetricsSnapshot metrics,
+    RuntimeRolloutReadinessOptions readinessOptions,
+    DateTimeOffset generatedAtUtc)
     {
         var readiness =
             _readinessEvaluator.Evaluate(
@@ -38,7 +38,7 @@ public sealed class RuntimeRolloutSnapshotFactory
                 .ToArray()
             ?? Array.Empty<string>();
 
-        return new RuntimeRolloutSnapshot
+return new RuntimeRolloutSnapshotData
         {
             GeneratedAtUtc =
                 generatedAtUtc,
