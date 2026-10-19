@@ -10,6 +10,15 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutReadinessEvaluator.cs"
+           Link="Runtime\Rollout\RuntimeRolloutReadinessEvaluator.cs" />
 
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutReadinessOptions.cs"
+           Link="Runtime\Rollout\RuntimeRolloutReadinessOptions.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutReadinessResponse.cs"
+           Link="Runtime\Rollout\RuntimeRolloutReadinessResponse.cs" />
+</ItemGroup>
 
 </Project>
