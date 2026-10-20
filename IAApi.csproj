@@ -59,11 +59,4 @@
 
 
 
-
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Runtime\RuntimeRolloutSnapshot.cs" />
-</ItemGroup>
-
-
-
 </Project>

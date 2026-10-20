@@ -10,9 +10,5 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\RuntimeRolloutSnapshot.cs"
-           Link="Runtime\Rollout\Persistence\RuntimeRolloutSnapshot.cs" />
-</ItemGroup>
 
 </Project>
