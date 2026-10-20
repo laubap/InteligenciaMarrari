@@ -3,6 +3,7 @@ using IAApi.Infrastructure.Llm.Providers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
+using IAApi.Application.Llm.Contracts;
 
 namespace IAApi.Infrastructure.Llm.DependencyInjection;
 

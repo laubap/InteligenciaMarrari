@@ -1,6 +1,4 @@
-using IAApi.Infrastructure.Llm.Models;
-
-namespace IAApi.Infrastructure.Llm.Providers;
+namespace IAApi.Application.Llm.Contracts;
 
 public interface ILlmProvider
 {

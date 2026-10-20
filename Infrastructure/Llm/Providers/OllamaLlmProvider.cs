@@ -3,6 +3,7 @@ using System.Text.Json;
 using IAApi.Infrastructure.Llm.Configuration;
 using IAApi.Infrastructure.Llm.Models;
 using Microsoft.Extensions.Options;
+using IAApi.Application.Llm.Contracts;
 
 namespace IAApi.Infrastructure.Llm.Providers;
 

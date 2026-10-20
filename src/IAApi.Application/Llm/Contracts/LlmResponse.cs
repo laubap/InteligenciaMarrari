@@ -1,4 +1,4 @@
-namespace IAApi.Infrastructure.Llm.Models;
+namespace IAApi.Application.Llm.Contracts;
 
 public sealed class LlmResponse
 {

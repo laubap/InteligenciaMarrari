@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using IAApi.Infrastructure.Llm.Configuration;
-using IAApi.Infrastructure.Llm.Models;
+using IAApi.Application.Llm.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace IAApi.Infrastructure.Llm.Providers;

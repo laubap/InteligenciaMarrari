@@ -1,6 +1,5 @@
 using System.Text.Json;
-using IAApi.Infrastructure.Llm.Models;
-using IAApi.Infrastructure.Llm.Providers;
+using IAApi.Application.Llm.Contracts;
 using IAApi.Services.AnomalyDetection.Interpretation.Builders;
 
 namespace IAApi.Services.AnomalyDetection.Interpretation;
