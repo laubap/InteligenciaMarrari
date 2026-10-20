@@ -58,4 +58,14 @@
 </ItemGroup>
 
 
+
+
+<ItemGroup>
+  <Compile Remove="Infrastructure\Llm\Configuration\LlmOptions.cs" />
+  <Compile Remove="Infrastructure\Llm\Models\LlmChatMessage.cs" />
+  <Compile Remove="Infrastructure\Llm\Models\OllamaChatRequest.cs" />
+  <Compile Remove="Infrastructure\Llm\Models\OllamaChatResponse.cs" />
+  <Compile Remove="Infrastructure\Llm\Providers\LmStudioLlmProvider.cs" />
+  <Compile Remove="Infrastructure\Llm\Providers\OllamaLlmProvider.cs" />
+</ItemGroup>
 </Project>
