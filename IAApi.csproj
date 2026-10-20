@@ -58,5 +58,7 @@
 </ItemGroup>
 
 
-
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\DetectorFamily.cs" />
+</ItemGroup>
 </Project>
