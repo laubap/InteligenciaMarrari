@@ -8,5 +8,8 @@
 
 
 
-
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Confidence\ConfidenceEngineModels.cs"
+           Link="Detection\Confidence\ConfidenceEngineModels.cs" />
+</ItemGroup>
 </Project>

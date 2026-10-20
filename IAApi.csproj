@@ -58,5 +58,7 @@
 </ItemGroup>
 
 
-
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Confidence\ConfidenceEngineModels.cs" />
+</ItemGroup>
 </Project>
