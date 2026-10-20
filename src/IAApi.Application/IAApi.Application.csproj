@@ -10,4 +10,13 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
+
+
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelContracts.cs"
+           Link="Incidents\Experimental\ReadModels\IncidentReadModelContracts.cs" />
+
+  <Compile Include="..\..\Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelProjector.cs"
+           Link="Incidents\Experimental\ReadModels\IncidentReadModelProjector.cs" />
+</ItemGroup>
 </Project>
