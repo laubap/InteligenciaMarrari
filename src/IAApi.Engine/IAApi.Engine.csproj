@@ -6,4 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+
+
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Evidence\EvidenceStrength.cs"
+           Link="Detection\Evidence\EvidenceStrength.cs" />
+</ItemGroup>
 </Project>
