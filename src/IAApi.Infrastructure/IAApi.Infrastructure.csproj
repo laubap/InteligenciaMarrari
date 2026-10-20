@@ -17,8 +17,4 @@
 
 
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelSnapshotLoader.cs"
-           Link="Incidents\Experimental\ReadModels\IncidentReadModelSnapshotLoader.cs" />
-</ItemGroup>
 </Project>

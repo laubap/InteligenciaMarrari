@@ -59,7 +59,4 @@
 
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelSnapshotLoader.cs" />
-</ItemGroup>
 </Project>
