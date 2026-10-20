@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
+using IAApi.Application.Incidents.Experimental.ReadModels;
 
 namespace IAApi.Benchmark.ExperimentalIncidents.ReadModels;
 

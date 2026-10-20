@@ -1,5 +1,4 @@
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
-
+namespace IAApi.Application.Incidents.Experimental.ReadModels;
 public interface IIncidentReadModelStore
 {
     void Upsert(IncidentReadModel model);

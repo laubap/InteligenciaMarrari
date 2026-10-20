@@ -1,5 +1,7 @@
 namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 
+using IAApi.Application.Incidents.Experimental.ReadModels;
+
 public sealed class InMemoryIncidentReadModelStore : IIncidentReadModelStore
 {
     private readonly Dictionary<string, IncidentReadModel> _models =

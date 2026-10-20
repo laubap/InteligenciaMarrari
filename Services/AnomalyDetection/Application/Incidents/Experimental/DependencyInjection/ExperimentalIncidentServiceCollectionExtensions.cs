@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using IAApi.Application.Incidents.Experimental.Queries;
 using Microsoft.Extensions.Options;
+using IAApi.Application.Incidents.Experimental.ReadModels;
 
 namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.DependencyInjection;
 

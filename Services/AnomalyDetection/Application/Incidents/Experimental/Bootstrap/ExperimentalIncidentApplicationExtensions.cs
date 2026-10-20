@@ -3,6 +3,7 @@ using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadMod
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using IAApi.Application.Incidents.Experimental.ReadModels;
 
 namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstrap;
 

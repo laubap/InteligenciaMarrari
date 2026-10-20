@@ -1,7 +1,7 @@
 using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 using IAApi.Services.AnomalyDetection.Runtime.Incidents.Experimental;
 
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
+namespace IAApi.Application.Incidents.Experimental.ReadModels;
 
 public enum IncidentMilestoneKind
 {

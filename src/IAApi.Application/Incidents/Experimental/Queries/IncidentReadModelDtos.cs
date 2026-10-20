@@ -1,4 +1,5 @@
 using IAApi.Services.AnomalyDetection.Runtime.Incidents.Experimental;
+using IAApi.Application.Incidents.Experimental.ReadModels;
 namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 
 public sealed record IncidentListItemDto(

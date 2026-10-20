@@ -10,6 +10,7 @@ using IAApi.Services.AnomalyDetection.Runtime.Regime.DualBaseline.Decision;
 using IAApi.Services.AnomalyDetection.Runtime.Incidents.StableDeviation;
 using IAApi.Services.AnomalyDetection.Runtime.Incidents.Experimental;
 using IAApi.Benchmark.ExperimentalIncidents.ReadModels;
+using IAApi.Application.Incidents.Experimental.ReadModels;
 
 namespace IAApi.Benchmark.ExperimentalIncidents;
 
