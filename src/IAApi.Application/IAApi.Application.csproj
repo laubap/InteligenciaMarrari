@@ -10,18 +10,4 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
-
-
-
-
-<ItemGroup>
-  <Compile Include="..\..\Infrastructure\Llm\Providers\ILlmProvider.cs"
-           Link="Llm\Contracts\ILlmProvider.cs" />
-
-  <Compile Include="..\..\Infrastructure\Llm\Models\LlmRequest.cs"
-           Link="Llm\Contracts\LlmRequest.cs" />
-
-  <Compile Include="..\..\Infrastructure\Llm\Models\LlmResponse.cs"
-           Link="Llm\Contracts\LlmResponse.cs" />
-</ItemGroup>
 </Project>

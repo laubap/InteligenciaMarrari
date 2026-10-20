@@ -58,13 +58,4 @@
 </ItemGroup>
 
 
-
-
-
-<ItemGroup>
-  <Compile Remove="Infrastructure\Llm\Providers\ILlmProvider.cs" />
-  <Compile Remove="Infrastructure\Llm\Models\LlmRequest.cs" />
-  <Compile Remove="Infrastructure\Llm\Models\LlmResponse.cs" />
-</ItemGroup>
-
 </Project>
