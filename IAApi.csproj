@@ -57,4 +57,9 @@
   <ProjectReference Include="src\IAApi.Infrastructure\IAApi.Infrastructure.csproj" />
 </ItemGroup>
 
+
+
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelStore.cs" />
+</ItemGroup>
 </Project>
