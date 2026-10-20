@@ -58,9 +58,4 @@
 </ItemGroup>
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Application\Incidents\Experimental\Api\ExperimentalIncidentApiContracts.cs" />
-
-  <Compile Remove="Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelDtos.cs" />
-</ItemGroup>
 </Project>
