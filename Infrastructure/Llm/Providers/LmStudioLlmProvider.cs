@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using IAApi.Infrastructure.Llm.Configuration;
 using IAApi.Application.Llm.Contracts;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 
 namespace IAApi.Infrastructure.Llm.Providers;
 
