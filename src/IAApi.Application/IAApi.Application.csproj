@@ -10,9 +10,4 @@
     <ProjectReference Include="..\IAApi.Engine\IAApi.Engine.csproj" />
   </ItemGroup>
 
-
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Application\Incidents\Experimental\Api\ExperimentalIncidentQueryService.cs"
-           Link="Incidents\Experimental\Queries\ExperimentalIncidentQueryService.cs" />
-</ItemGroup>
 </Project>
