@@ -16,24 +16,4 @@
 
 
 
-
-<ItemGroup>
-  <Compile Include="..\..\Infrastructure\Llm\Configuration\LlmOptions.cs"
-           Link="Llm\Configuration\LlmOptions.cs" />
-
-  <Compile Include="..\..\Infrastructure\Llm\Models\LlmChatMessage.cs"
-           Link="Llm\Models\LlmChatMessage.cs" />
-
-  <Compile Include="..\..\Infrastructure\Llm\Models\OllamaChatRequest.cs"
-           Link="Llm\Models\OllamaChatRequest.cs" />
-
-  <Compile Include="..\..\Infrastructure\Llm\Models\OllamaChatResponse.cs"
-           Link="Llm\Models\OllamaChatResponse.cs" />
-
-  <Compile Include="..\..\Infrastructure\Llm\Providers\LmStudioLlmProvider.cs"
-           Link="Llm\Providers\LmStudioLlmProvider.cs" />
-
-  <Compile Include="..\..\Infrastructure\Llm\Providers\OllamaLlmProvider.cs"
-           Link="Llm\Providers\OllamaLlmProvider.cs" />
-</ItemGroup>
 </Project>
