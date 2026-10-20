@@ -1,6 +1,5 @@
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
-using Microsoft.Extensions.Options;
-
+using IAApi.Application.Incidents.Experimental.Queries;
 namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
 
 public interface IExperimentalIncidentQueryService
@@ -12,14 +11,15 @@ public interface IExperimentalIncidentQueryService
 public sealed class ExperimentalIncidentQueryService : IExperimentalIncidentQueryService
 {
     private readonly IIncidentReadModelStore _store;
-    private readonly ExperimentalIncidentApiOptions _options;
+    private readonly ExperimentalIncidentQueryOptions _options;
 
-    public ExperimentalIncidentQueryService(IIncidentReadModelStore store,
-        IOptions<ExperimentalIncidentApiOptions> options)
-    {
-        _store = store;
-        _options = options.Value;
-    }
+public ExperimentalIncidentQueryService(
+    IIncidentReadModelStore store,
+    ExperimentalIncidentQueryOptions options)
+{
+    _store = store;
+    _options = options;
+}
 
     public IncidentQueryResult<PagedIncidentResult> List(
         ExperimentalIncidentListRequest request)
