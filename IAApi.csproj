@@ -58,6 +58,9 @@
 </ItemGroup>
 
 
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\InMemoryIncidentReadModelStore.cs" />
+</ItemGroup>
 
 <ItemGroup>
   <Compile Remove="Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelStore.cs" />

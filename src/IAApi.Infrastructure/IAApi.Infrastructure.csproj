@@ -16,4 +16,10 @@
 
 
 
+
+
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\InMemoryIncidentReadModelStore.cs"
+           Link="Incidents\Experimental\ReadModels\InMemoryIncidentReadModelStore.cs" />
+</ItemGroup>
 </Project>
