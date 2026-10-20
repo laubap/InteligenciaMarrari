@@ -58,7 +58,5 @@
 </ItemGroup>
 
 
-<ItemGroup>
-  <Compile Remove="Services\AnomalyDetection\Evidence\EvidenceStrength.cs" />
-</ItemGroup>
+
 </Project>
