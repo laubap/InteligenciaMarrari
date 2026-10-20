@@ -42,6 +42,12 @@ public static class RuntimeRolloutServiceCollectionExtensions
         services.AddScoped<
             RuntimeRolloutSnapshotService>();
 
+        services.AddScoped<
+    IRuntimeRolloutDbContext>(
+    serviceProvider =>
+        serviceProvider
+            .GetRequiredService<AppDbContext>());
+
         return services;
     }
 

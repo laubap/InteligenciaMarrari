@@ -5,13 +5,13 @@ namespace IAApi.Services.AnomalyDetection.Runtime.Persistence;
 public sealed class EfRuntimeRolloutSnapshotWriter
     : IRuntimeRolloutSnapshotWriter
 {
-    private readonly AppDbContext _context;
+private readonly IRuntimeRolloutDbContext _context;
 
-    public EfRuntimeRolloutSnapshotWriter(
-        AppDbContext context)
-    {
-        _context = context;
-    }
+public EfRuntimeRolloutSnapshotWriter(
+    IRuntimeRolloutDbContext context)
+{
+    _context = context;
+}
 
     public async Task SaveAsync(
         RuntimeRolloutSnapshotData snapshot,

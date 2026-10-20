@@ -6,13 +6,13 @@ namespace IAApi.Services.AnomalyDetection.Runtime.Persistence;
 public sealed class EfRuntimeRolloutSnapshotReader
     : IRuntimeRolloutSnapshotReader
 {
-    private readonly AppDbContext _context;
+private readonly IRuntimeRolloutDbContext _context;
 
-    public EfRuntimeRolloutSnapshotReader(
-        AppDbContext context)
-    {
-        _context = context;
-    }
+public EfRuntimeRolloutSnapshotReader(
+    IRuntimeRolloutDbContext context)
+{
+    _context = context;
+}
 
     public async Task<IReadOnlyList<RuntimeRolloutHistoryItemResponse>> GetLatestAsync(
         int limit,
