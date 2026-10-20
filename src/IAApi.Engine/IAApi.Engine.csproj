@@ -8,8 +8,5 @@
 
 
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Confidence\ConfidenceLevel.cs"
-           Link="Detection\Confidence\ConfidenceLevel.cs" />
-</ItemGroup>
+
 </Project>
