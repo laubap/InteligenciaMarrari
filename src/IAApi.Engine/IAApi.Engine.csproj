@@ -8,8 +8,5 @@
 
 
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Evidence\EvidenceBuilder.cs"
-           Link="Detection\Evidence\EvidenceBuilder.cs" />
-</ItemGroup>
+
 </Project>
