@@ -13,5 +13,11 @@
 
 
 
+<ItemGroup>
+  <Compile Include="..\..\Services\AnomalyDetection\Application\Incidents\Experimental\Api\ExperimentalIncidentApiContracts.cs"
+           Link="Incidents\Experimental\Queries\ExperimentalIncidentQueryContracts.cs" />
 
+  <Compile Include="..\..\Services\AnomalyDetection\Application\Incidents\Experimental\ReadModels\IncidentReadModelDtos.cs"
+           Link="Incidents\Experimental\Queries\IncidentReadModelDtos.cs" />
+</ItemGroup>
 </Project>
