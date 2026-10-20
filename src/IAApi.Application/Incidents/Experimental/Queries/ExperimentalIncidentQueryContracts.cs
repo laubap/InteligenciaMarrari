@@ -1,6 +1,6 @@
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
+
+namespace IAApi.Application.Incidents.Experimental.Queries;
 
 public sealed record ExperimentalIncidentListRequest(
     string? Status = null,

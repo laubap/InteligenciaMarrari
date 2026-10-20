@@ -1,7 +1,6 @@
 using IAApi.Application.Incidents.Experimental.ReadModels;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
 using IAApi.Application.Incidents.Experimental.Queries;
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
+namespace IAApi.Application.Incidents.Experimental.Queries;
 
 public interface IExperimentalIncidentQueryService
 {
