@@ -8,8 +8,5 @@
 
 
 
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\LimitesDetector.cs"
-           Link="Detection\LimitesDetector.cs" />
-</ItemGroup>
+
 </Project>
