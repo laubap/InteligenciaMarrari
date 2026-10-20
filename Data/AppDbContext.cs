@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using IAApi.Services.AnomalyDetection.Runtime;
 using IAApi.Services.AnomalyDetection.Multivariate;
+using IAApi.Services.AnomalyDetection.Runtime.Persistence;
 
-public class AppDbContext : DbContext
+public class AppDbContext :
+    DbContext,
+    IRuntimeRolloutDbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
