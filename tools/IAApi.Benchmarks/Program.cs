@@ -1,5 +1,5 @@
 using IAApi.Benchmark.Cli;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstrap;
+using IAApi.Hosting.ExperimentalIncidents;
 using IAApi.Services.DependencyInjection;
 
 var benchmarkHost =

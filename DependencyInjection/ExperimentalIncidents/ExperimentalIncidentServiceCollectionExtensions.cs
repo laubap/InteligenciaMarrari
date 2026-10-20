@@ -1,4 +1,4 @@
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
+using IAApi.Configuration.ExperimentalIncidents;
 using IAApi.Infrastructure.Incidents.Experimental.ReadModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,7 +6,7 @@ using IAApi.Application.Incidents.Experimental.Queries;
 using Microsoft.Extensions.Options;
 using IAApi.Application.Incidents.Experimental.ReadModels;
 
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.DependencyInjection;
+namespace IAApi.DependencyInjection.ExperimentalIncidents;
 
 public static class ExperimentalIncidentServiceCollectionExtensions
 {

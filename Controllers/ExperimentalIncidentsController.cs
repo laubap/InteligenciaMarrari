@@ -1,4 +1,4 @@
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
+using IAApi.Configuration.ExperimentalIncidents;
 using IAApi.Application.Incidents.Experimental.Queries;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;

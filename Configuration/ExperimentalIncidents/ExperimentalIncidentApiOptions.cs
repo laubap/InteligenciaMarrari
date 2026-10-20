@@ -1,4 +1,4 @@
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
+namespace IAApi.Configuration.ExperimentalIncidents;
 
 public sealed record ExperimentalIncidentApiOptions
 {

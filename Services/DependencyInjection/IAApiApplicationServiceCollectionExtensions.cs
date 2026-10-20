@@ -1,7 +1,7 @@
 using IAApi.Infrastructure.Llm.DependencyInjection;
 using IAApi.Services;
 using IAApi.Services.AnomalyDetection;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.DependencyInjection;
+using IAApi.DependencyInjection.ExperimentalIncidents;
 using IAApi.Services.AnomalyDetection.Confidence.DependencyInjection;
 using IAApi.Services.AnomalyDetection.DependencyInjection;
 using IAApi.Services.AnomalyDetection.Interpretation;

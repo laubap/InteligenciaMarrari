@@ -1,11 +1,11 @@
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
+using IAApi.Configuration.ExperimentalIncidents;
 using IAApi.Infrastructure.Incidents.Experimental.ReadModels;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using IAApi.Application.Incidents.Experimental.ReadModels;
 
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Bootstrap;
+namespace IAApi.Hosting.ExperimentalIncidents;
 
 public static class ExperimentalIncidentApplicationExtensions
 {
