@@ -18,12 +18,4 @@
 
 
 
-
-<ItemGroup>
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Persistence\EfRuntimeRolloutSnapshotReader.cs"
-           Link="Runtime\Rollout\Persistence\EfRuntimeRolloutSnapshotReader.cs" />
-
-  <Compile Include="..\..\Services\AnomalyDetection\Runtime\Persistence\EfRuntimeRolloutSnapshotWriter.cs"
-           Link="Runtime\Rollout\Persistence\EfRuntimeRolloutSnapshotWriter.cs" />
-</ItemGroup>
 </Project>
