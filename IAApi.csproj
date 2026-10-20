@@ -58,4 +58,8 @@
 </ItemGroup>
 
 
+
+<ItemGroup>
+  <Compile Remove="Services\AnomalyDetection\Application\Incidents\Experimental\Api\ExperimentalIncidentQueryService.cs" />
+</ItemGroup>
 </Project>
