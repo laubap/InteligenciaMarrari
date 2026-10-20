@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using IAApi.Application.Incidents.Experimental.ReadModels;
 
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
+namespace IAApi.Infrastructure.Incidents.Experimental.ReadModels;
 
 public sealed class IncidentReadModelSnapshotLoader
 {

@@ -1,4 +1,4 @@
-namespace IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
+namespace IAApi.Infrastructure.Incidents.Experimental.ReadModels;
 
 using IAApi.Application.Incidents.Experimental.ReadModels;
 

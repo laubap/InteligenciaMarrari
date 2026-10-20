@@ -1,5 +1,5 @@
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
+using IAApi.Infrastructure.Incidents.Experimental.ReadModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using IAApi.Application.Incidents.Experimental.Queries;

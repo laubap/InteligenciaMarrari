@@ -1,5 +1,5 @@
 using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.Api;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
+using IAApi.Infrastructure.Incidents.Experimental.ReadModels;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

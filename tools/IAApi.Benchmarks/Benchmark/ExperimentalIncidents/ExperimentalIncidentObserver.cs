@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
-using IAApi.Services.AnomalyDetection.Application.Incidents.Experimental.ReadModels;
+using IAApi.Infrastructure.Incidents.Experimental.ReadModels;
 using IAApi.Benchmark.RegimeShadow.DualBaseline;
 using IAApi.Benchmark.RegimeShadow.DualBaseline.DecisionCounterfactual;
 using IAApi.Benchmark.RegimeShadow.StableDeviationIncidents;
