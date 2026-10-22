@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Options;
-
 namespace IAApi.Services.AnomalyDetection;
 
 public class PersistenceDetector : IAnomalyDetector
@@ -9,9 +7,11 @@ public class PersistenceDetector : IAnomalyDetector
     private readonly AnomalyDetectionOptions _options;
 
     public PersistenceDetector(
-        IOptions<AnomalyDetectionOptions> options)
+        AnomalyDetectionOptions options)
     {
-        _options = options.Value;
+        ArgumentNullException.ThrowIfNull(options);
+
+        _options = options;
     }
 
     public string Nome => "Persistência";

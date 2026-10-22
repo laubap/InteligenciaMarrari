@@ -33,9 +33,11 @@ services.AddScoped<IAnomalyDetector>(provider =>
                     .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
                     .Value));
 
-        services.AddScoped<
-            IAnomalyDetector,
-            PersistenceDetector>();
+        services.AddScoped<IAnomalyDetector>(provider =>
+            new PersistenceDetector(
+                provider
+                    .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
+                    .Value));
 
         services.AddScoped<
             IAnomalyDetector,
