@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Options;
-
 namespace IAApi.Services.AnomalyDetection;
 
 public class RateOfChangeDetector : IAnomalyDetector
@@ -7,9 +5,11 @@ public class RateOfChangeDetector : IAnomalyDetector
     private readonly AnomalyDetectionOptions _options;
 
     public RateOfChangeDetector(
-        IOptions<AnomalyDetectionOptions> options)
+        AnomalyDetectionOptions options)
     {
-        _options = options.Value;
+        ArgumentNullException.ThrowIfNull(options);
+
+        _options = options;
     }
 
     public string Nome => "Taxa de variação";

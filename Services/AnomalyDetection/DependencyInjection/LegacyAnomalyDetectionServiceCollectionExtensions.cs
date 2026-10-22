@@ -27,9 +27,11 @@ services.AddScoped<IAnomalyDetector>(provider =>
                     .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
                     .Value));
 
-        services.AddScoped<
-            IAnomalyDetector,
-            RateOfChangeDetector>();
+        services.AddScoped<IAnomalyDetector>(provider =>
+            new RateOfChangeDetector(
+                provider
+                    .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
+                    .Value));
 
         services.AddScoped<
             IAnomalyDetector,
