@@ -4,13 +4,13 @@ public class MadDetector : IAnomalyDetector
 {
     private readonly AnomalyDetectionOptions _options;
 
-public MadDetector(
-    AnomalyDetectionOptions options)
-{
-    ArgumentNullException.ThrowIfNull(options);
+    public MadDetector(
+        AnomalyDetectionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
 
-    _options = options;
-}
+        _options = options;
+    }
 
     public string Nome =>
         "Mediana e MAD";
