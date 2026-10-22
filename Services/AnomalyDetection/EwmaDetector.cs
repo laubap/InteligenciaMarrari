@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Options;
 
 namespace IAApi.Services.AnomalyDetection;
 
@@ -6,10 +5,12 @@ public class EwmaDetector : IAnomalyDetector
 {
     private readonly AnomalyDetectionOptions _options;
 
-    public EwmaDetector(IOptions<AnomalyDetectionOptions> options)
-    {
-        _options = options.Value;
-    }
+public EwmaDetector(AnomalyDetectionOptions options)
+{
+    ArgumentNullException.ThrowIfNull(options);
+
+    _options = options;
+}
 
     public string Nome => "EWMA";
     public double Peso => _options.EwmaWeight;

@@ -21,9 +21,11 @@ services.AddScoped<IAnomalyDetector>(provider =>
             .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
             .Value));
 
-        services.AddScoped<
-            IAnomalyDetector,
-            EwmaDetector>();
+        services.AddScoped<IAnomalyDetector>(provider =>
+            new EwmaDetector(
+                provider
+                    .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
+                    .Value));
 
         services.AddScoped<
             IAnomalyDetector,
