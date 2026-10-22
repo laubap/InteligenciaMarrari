@@ -39,9 +39,11 @@ services.AddScoped<IAnomalyDetector>(provider =>
                     .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
                     .Value));
 
-        services.AddScoped<
-            IAnomalyDetector,
-            LevelShiftDetector>();
+              services.AddScoped<IAnomalyDetector>(provider =>
+            new LevelShiftDetector(
+                provider
+                    .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
+                    .Value));
 
         services.AddScoped<
             EnsembleDetectionService>();
