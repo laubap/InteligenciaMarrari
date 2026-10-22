@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+
 
 namespace IAApi.Services.AnomalyDetection;
 
@@ -21,13 +21,13 @@ public sealed class ConfidenceEngine
     private readonly EvidenceBuilder _evidenceBuilder;
 
     public ConfidenceEngine(
-        IOptions<ConfidenceEngineOptions> options,
+        ConfidenceEngineOptions options,
         EvidenceBuilder evidenceBuilder)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(evidenceBuilder);
 
-        _options = options.Value;
+        _options = options;
         _options.Validate();
 
         _evidenceBuilder = evidenceBuilder;
