@@ -6,13 +6,14 @@ public class StatisticalDetector : IAnomalyDetector
 {
     private readonly AnomalyDetectionOptions _options;
 
-public StatisticalDetector(
-    AnomalyDetectionOptions options)
-{
-    ArgumentNullException.ThrowIfNull(options);
+    public StatisticalDetector(
+        AnomalyDetectionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
 
-    _options = options;
-}
+        _options = options;
+    }
+
     public string Nome => "Z-Score";
 
     public double Peso =>
