@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+
 
 namespace IAApi.Services.AnomalyDetection;
 
@@ -6,12 +6,13 @@ public class StatisticalDetector : IAnomalyDetector
 {
     private readonly AnomalyDetectionOptions _options;
 
-    public StatisticalDetector(
-        IOptions<AnomalyDetectionOptions> options)
-    {
-        _options = options.Value;
-    }
+public StatisticalDetector(
+    AnomalyDetectionOptions options)
+{
+    ArgumentNullException.ThrowIfNull(options);
 
+    _options = options;
+}
     public string Nome => "Z-Score";
 
     public double Peso =>
