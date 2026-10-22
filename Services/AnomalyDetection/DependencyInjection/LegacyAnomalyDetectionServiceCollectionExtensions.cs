@@ -15,9 +15,11 @@ services.AddScoped<IAnomalyDetector>(provider =>
             .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
             .Value));
 
-        services.AddScoped<
-            IAnomalyDetector,
-            MadDetector>();
+services.AddScoped<IAnomalyDetector>(provider =>
+    new MadDetector(
+        provider
+            .GetRequiredService<IOptions<AnomalyDetectionOptions>>()
+            .Value));
 
         services.AddScoped<
             IAnomalyDetector,

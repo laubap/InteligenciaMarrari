@@ -1,16 +1,16 @@
-using Microsoft.Extensions.Options;
-
 namespace IAApi.Services.AnomalyDetection;
 
 public class MadDetector : IAnomalyDetector
 {
     private readonly AnomalyDetectionOptions _options;
 
-    public MadDetector(
-        IOptions<AnomalyDetectionOptions> options)
-    {
-        _options = options.Value;
-    }
+public MadDetector(
+    AnomalyDetectionOptions options)
+{
+    ArgumentNullException.ThrowIfNull(options);
+
+    _options = options;
+}
 
     public string Nome =>
         "Mediana e MAD";
