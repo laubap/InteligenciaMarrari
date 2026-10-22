@@ -21,7 +21,7 @@ public static class ConfidenceServiceCollectionExtensions
                     .GetRequiredService<IOptions<ConfidenceEngineOptions>>()
                     .Value,
                 provider.GetRequiredService<EvidenceBuilder>()));
-        services.AddSingleton<LegacyDetectorResultV2Adapter>();
+    
         services.AddSingleton<EvidenceBuilder>();
 
         return services;
