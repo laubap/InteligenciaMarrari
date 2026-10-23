@@ -153,6 +153,14 @@ public sealed record DetectorDiagnostic
                 nameof(votedAnomaly));
         }
 
+        if (status == DetectorDiagnosticStatus.Failed &&
+            string.IsNullOrWhiteSpace(justification))
+        {
+            throw new ArgumentException(
+                "Um detector com falha precisa informar uma justificativa segura.",
+                nameof(justification));
+        }
+
         Name = name.Trim();
         Status = status;
         VotedAnomaly = votedAnomaly;
@@ -342,13 +350,36 @@ public sealed record HistoryQualityDiagnostic
     public bool HasCriticalGap { get; }
 }
 
-public sealed record TemporalConfirmationDiagnostic(
-    string Status,
-    int ConsecutivePoints,
-    double DurationMinutes,
-    double RequiredDurationMinutes,
-    int RequiredPoints,
-    bool InterruptedByGap);
+public sealed record TemporalConfirmationDiagnostic
+{
+    public TemporalConfirmationDiagnostic(
+        string status,
+        int consecutivePoints,
+        double durationMinutes,
+        double requiredDurationMinutes,
+        int requiredPoints,
+        bool interruptedByGap)
+    {
+        Status = DiagnosticContractGuard.Required(status, nameof(status));
+        DiagnosticContractGuard.NonNegative(consecutivePoints, nameof(consecutivePoints));
+        DiagnosticContractGuard.NonNegativeFinite(durationMinutes, nameof(durationMinutes));
+        DiagnosticContractGuard.NonNegativeFinite(requiredDurationMinutes, nameof(requiredDurationMinutes));
+        DiagnosticContractGuard.NonNegative(requiredPoints, nameof(requiredPoints));
+
+        ConsecutivePoints = consecutivePoints;
+        DurationMinutes = durationMinutes;
+        RequiredDurationMinutes = requiredDurationMinutes;
+        RequiredPoints = requiredPoints;
+        InterruptedByGap = interruptedByGap;
+    }
+
+    public string Status { get; }
+    public int ConsecutivePoints { get; }
+    public double DurationMinutes { get; }
+    public double RequiredDurationMinutes { get; }
+    public int RequiredPoints { get; }
+    public bool InterruptedByGap { get; }
+}
 
 public sealed record RuntimeDecisionDiagnostic
 {
@@ -419,6 +450,13 @@ public sealed record MultivariateDiagnostic
             throw new ArgumentOutOfRangeException(nameof(normalizedScore));
         }
 
+        if (!applicable && anomaly)
+        {
+            throw new ArgumentException(
+                "Uma análise multivariada não aplicável não pode votar anomalia.",
+                nameof(anomaly));
+        }
+
         DiagnosticContractGuard.NonNegative(ageMinutes, nameof(ageMinutes));
         Applicable = applicable;
         Anomaly = anomaly;
@@ -473,11 +511,25 @@ public sealed record DiagnosticTiming
     public IReadOnlyDictionary<string, TimeSpan> Stages { get; }
 }
 
-public sealed record DiagnosticFailure(
-    string Stage,
-    string Code,
-    string SafeMessage,
-    bool AffectedOperationalResponse);
+public sealed record DiagnosticFailure
+{
+    public DiagnosticFailure(
+        string stage,
+        string code,
+        string safeMessage,
+        bool affectedOperationalResponse)
+    {
+        Stage = DiagnosticContractGuard.Required(stage, nameof(stage));
+        Code = DiagnosticContractGuard.Required(code, nameof(code));
+        SafeMessage = DiagnosticContractGuard.Required(safeMessage, nameof(safeMessage));
+        AffectedOperationalResponse = affectedOperationalResponse;
+    }
+
+    public string Stage { get; }
+    public string Code { get; }
+    public string SafeMessage { get; }
+    public bool AffectedOperationalResponse { get; }
+}
 
 public sealed record IntelligenceLabReadingDiagnostic
 {

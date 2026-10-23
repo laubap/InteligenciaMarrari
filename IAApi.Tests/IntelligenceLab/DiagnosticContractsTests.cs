@@ -237,4 +237,85 @@ public sealed class DiagnosticContractsTests
             justification: "Sem voto.");
         Assert.Throws<ArgumentException>(() => CreateReading([noVote]));
     }
+
+    [Fact]
+    public void DetectorDiagnostic_FailedRequiresSafeJustification()
+    {
+        Assert.Throws<ArgumentException>(() => new DetectorDiagnostic(
+            "EWMA",
+            DetectorDiagnosticStatus.Failed,
+            votedAnomaly: false,
+            weight: 0.15,
+            originalScore: null,
+            normalizedScore: null,
+            threshold: null,
+            justification: "  "));
+
+        var failed = new DetectorDiagnostic(
+            "EWMA",
+            DetectorDiagnosticStatus.Failed,
+            votedAnomaly: false,
+            weight: 0.15,
+            originalScore: null,
+            normalizedScore: null,
+            threshold: null,
+            justification: "  Modelo não disponível.  ");
+
+        Assert.Equal("Modelo não disponível.", failed.Justification);
+        Assert.False(failed.VotedAnomaly);
+    }
+
+    [Fact]
+    public void MultivariateDiagnostic_NotApplicableCannotVoteAnomaly()
+    {
+        Assert.Throws<ArgumentException>(() => new MultivariateDiagnostic(
+            groupName: "BOMBA_PRESSAO_VAZAO",
+            applicable: false,
+            anomaly: true,
+            normalizedScore: null,
+            threshold: null,
+            mahalanobisSquared: null,
+            minuteIndex: 10,
+            ageMinutes: 0,
+            tags: ["BOMBA.PRESSAO", "BOMBA.VAZAO"],
+            reason: "Grupo sem histórico suficiente."));
+    }
+
+    [Fact]
+    public void TemporalConfirmationDiagnostic_RejectsInvalidDurationsAndCounts()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TemporalConfirmationDiagnostic(
+            "Pending", -1, 0, 4, 5, false));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TemporalConfirmationDiagnostic(
+            "Pending", 1, double.NaN, 4, 5, false));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TemporalConfirmationDiagnostic(
+            "Pending", 1, 1, -4, 5, false));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TemporalConfirmationDiagnostic(
+            "Pending", 1, 1, 4, -5, false));
+        Assert.Throws<ArgumentException>(() => new TemporalConfirmationDiagnostic(
+            " ", 1, 1, 4, 5, false));
+
+        var confirmation = new TemporalConfirmationDiagnostic(
+            " Confirmed ", 5, 4, 4, 5, false);
+        Assert.Equal("Confirmed", confirmation.Status);
+        Assert.Equal(5, confirmation.ConsecutivePoints);
+    }
+
+    [Fact]
+    public void DiagnosticFailure_RequiresStageCodeAndSafeMessage()
+    {
+        Assert.Throws<ArgumentException>(() => new DiagnosticFailure(
+            " ", "DIAG_ERROR", "Mensagem segura", false));
+        Assert.Throws<ArgumentException>(() => new DiagnosticFailure(
+            "Publisher", " ", "Mensagem segura", false));
+        Assert.Throws<ArgumentException>(() => new DiagnosticFailure(
+            "Publisher", "DIAG_ERROR", " ", false));
+
+        var failure = new DiagnosticFailure(
+            " Publisher ", " DIAG_ERROR ", " Não foi possível publicar. ", false);
+        Assert.Equal("Publisher", failure.Stage);
+        Assert.Equal("DIAG_ERROR", failure.Code);
+        Assert.Equal("Não foi possível publicar.", failure.SafeMessage);
+        Assert.False(failure.AffectedOperationalResponse);
+    }
 }
