@@ -1,4 +1,8 @@
-﻿using Microsoft.Extensions.Options;
+﻿using System.Diagnostics;
+using IAApi.IntelligenceLab.Observability;
+using IAApi.IntelligenceLab.Observability.Application;
+using IAApi.Services.AnomalyDetection.Observability;
+using Microsoft.Extensions.Options;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Runtime;
@@ -9,6 +13,9 @@ using IAApi.Services.AnomalyDetection.Orchestration;
 public class PredictionService
 {
     private readonly PredictionContextLoader _predictionContextLoader;
+
+    private readonly IIntelligenceLabDiagnosticCollector? _diagnosticCollector;
+    private readonly DiagnosticVersionMetadata? _diagnosticVersion;
 
     private readonly PredictionDetectionPreparationService
         _predictionDetectionPreparationService;
@@ -31,7 +38,9 @@ public class PredictionService
         PredictionFinalizationService predictionFinalizationService,
         PredictionDecisionOrchestrationService predictionDecisionOrchestrationService,
         PredictionDetectionPreparationService predictionDetectionPreparationService,
-        MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null)
+        MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
+        IIntelligenceLabDiagnosticCollector? diagnosticCollector = null,
+        DiagnosticVersionMetadata? diagnosticVersion = null)
     {
         _predictionContextLoader =
             predictionContextLoader;
@@ -50,6 +59,9 @@ public class PredictionService
 
         _multivariateShadowRuntimeCoordinator =
             multivariateShadowRuntimeCoordinator;
+
+        _diagnosticCollector = diagnosticCollector;
+        _diagnosticVersion = diagnosticVersion;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -59,6 +71,15 @@ public class PredictionService
         ArgumentNullException.ThrowIfNull(request);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Nenhum cronometro ou coleta na configuracao padrao.
+        var diagnosticTimer =
+            _diagnosticCollector is not null && _diagnosticVersion is not null
+                ? Stopwatch.StartNew()
+                : null;
+        var diagnosticReceivedAtUtc = diagnosticTimer is not null
+            ? DateTimeOffset.UtcNow
+            : (DateTimeOffset?)null;
 
         var config =
             _predictionContextLoader.BuscarConfiguracaoAtiva(
@@ -210,7 +231,7 @@ var decisionOrchestration =
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        return _predictionFinalizationService.Finalizar(
+        var response = _predictionFinalizationService.Finalizar(
             new PredictionFinalizationInput(
                 request,
                 tipoTag,
@@ -229,5 +250,24 @@ var decisionOrchestration =
                 runtimeDecision.Source,
                 resultadoDetector,
                 runtimeAudit));
+
+        // A decisao e a persistencia operacional ja foram finalizadas.
+        // Uma falha na telemetria nunca pode alterar o retorno HTTP.
+        if (diagnosticTimer is not null)
+        {
+            diagnosticTimer.Stop();
+            PredictionDiagnosticCapture.TryCapture(
+                _diagnosticCollector,
+                _diagnosticVersion,
+                request,
+                dataHoraAtual,
+                preparation.BaselineEfetivo,
+                resultadoDetector,
+                runtimeDecision,
+                diagnosticTimer.Elapsed,
+                diagnosticReceivedAtUtc!.Value);
+        }
+
+        return response;
     }
 }
