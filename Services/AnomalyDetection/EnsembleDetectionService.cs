@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using IAApi.IntelligenceLab.Observability;
 using Microsoft.Extensions.Options;
 
 namespace IAApi.Services.AnomalyDetection;
@@ -86,6 +87,9 @@ public class EnsembleDetectionService
         var todosResultados =
             new DetectorResult[_detectores.Length];
 
+        var statusExecucao =
+            new DetectorDiagnosticStatus[_detectores.Length];
+
         var quantidadeAplicaveis = 0;
         var quantidadeAlertas = 0;
 
@@ -117,6 +121,9 @@ public class EnsembleDetectionService
                         perfilComportamental,
                         aplicabilidade);
 
+                statusExecucao[index] =
+                    DetectorDiagnosticStatus.NotApplicable;
+
                 todosResultados[index] =
                     resultado;
 
@@ -130,10 +137,18 @@ public class EnsembleDetectionService
             {
                 resultado =
                     detector.Detectar(input);
+
+                statusExecucao[index] =
+                    resultado.Aplicavel
+                        ? DetectorDiagnosticStatus.Executed
+                        : DetectorDiagnosticStatus.NotApplicable;
             }
             catch (Exception ex)
             {
                 _errosPorDetector[index]++;
+
+                statusExecucao[index] =
+                    DetectorDiagnosticStatus.Failed;
 
                 resultado = new DetectorResult
                 {
@@ -233,7 +248,8 @@ public class EnsembleDetectionService
 
         var detalhes =
             CriarDetalhes(
-                todosResultados);
+                todosResultados,
+                statusExecucao);
 
         if (quantidadeAplicaveis == 0)
         {
@@ -600,7 +616,8 @@ public class EnsembleDetectionService
 
     private static List<DetectorDebugItem>
         CriarDetalhes(
-            IReadOnlyList<DetectorResult> resultados)
+            IReadOnlyList<DetectorResult> resultados,
+            IReadOnlyList<DetectorDiagnosticStatus> statusExecucao)
     {
         var detalhes =
             new List<DetectorDebugItem>(
@@ -648,7 +665,10 @@ public class EnsembleDetectionService
                         resultado.UnderlyingEvidenceKind,
 
                     TemporalConfirmation =
-                        resultado.TemporalConfirmation
+                        resultado.TemporalConfirmation,
+
+                    ExecutionStatus =
+                        statusExecucao[index]
                 });
         }
 

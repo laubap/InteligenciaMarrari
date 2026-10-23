@@ -1,4 +1,6 @@
 
+using System.Text.Json;
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -74,6 +76,9 @@ public class EnsembleDetectionServiceTests
         Assert.Equal(1, resultado.Metricas["somaPesosAplicaveis"]);
         Assert.Equal(1, resultado.Metricas["quantidadeDetectoresAplicaveis"]);
         Assert.Equal(2, resultado.DetalhesDetectores.Count);
+        Assert.Equal(
+            DetectorDiagnosticStatus.NotApplicable,
+            resultado.DetalhesDetectores[1].ExecutionStatus);
     }
 
     [Fact]
@@ -96,6 +101,9 @@ public class EnsembleDetectionServiceTests
         Assert.Equal(1, resultado.Metricas["quantidadeDetectoresAplicaveis"]);
 
         Assert.False(resultado.DetalhesDetectores[0].Aplicavel);
+        Assert.Equal(
+            DetectorDiagnosticStatus.Failed,
+            resultado.DetalhesDetectores[0].ExecutionStatus);
         Assert.Contains(
             "Erro simulado",
             resultado.DetalhesDetectores[0].Explicacao);
@@ -165,11 +173,90 @@ public class EnsembleDetectionServiceTests
 
         Assert.Equal("A", resultado.DetalhesDetectores[0].Nome);
         Assert.Equal(100, resultado.DetalhesDetectores[0].ScoreNormalizado);
+        Assert.Equal(
+            DetectorDiagnosticStatus.Executed,
+            resultado.DetalhesDetectores[0].ExecutionStatus);
 
         Assert.Equal("B", resultado.DetalhesDetectores[1].Nome);
         Assert.Equal(20, resultado.DetalhesDetectores[1].ScoreNormalizado);
+        Assert.Equal(
+            DetectorDiagnosticStatus.Executed,
+            resultado.DetalhesDetectores[1].ExecutionStatus);
 
         Assert.Equal(2, resultado.Metricas["quantidadeDetectoresRegistrados"]);
+    }
+
+    [Fact]
+    public void Detectar_DetectorBloqueadoPeloRoteamento_DeveRegistrarNaoAplicavelSemInvocacao()
+    {
+        var detector = CriarDetector("Bloqueado", 100, 1);
+
+        var resultado = CriarEnsemble(detector)
+            .Detectar(CriarInput(tipoTag: "digital"));
+
+        var detalhe = Assert.Single(resultado.DetalhesDetectores);
+
+        Assert.Equal(0, detector.Chamadas);
+        Assert.False(detalhe.Aplicavel);
+        Assert.Equal(
+            DetectorDiagnosticStatus.NotApplicable,
+            detalhe.ExecutionStatus);
+    }
+
+    [Fact]
+    public void Detectar_ComposicaoMista_PreservaCalculoELinhaDeStatus()
+    {
+        var executado = CriarDetector("Executado", 80, 2);
+        var naoAplicavel = new FakeDetector(
+            "NaoAplicavel",
+            5,
+            _ => new DetectorResult
+            {
+                Detector = "NaoAplicavel",
+                Aplicavel = false,
+                Peso = 5
+            });
+        var falhou = new FakeDetector(
+            "Falhou",
+            3,
+            _ => throw new InvalidOperationException("Falha simulada"));
+
+        var resultado = CriarEnsemble(executado, naoAplicavel, falhou)
+            .Detectar(CriarInput());
+
+        Assert.Equal(
+            ["Executado", "NaoAplicavel", "Falhou"],
+            resultado.DetalhesDetectores.Select(item => item.Nome));
+        Assert.Equal(
+            [
+                DetectorDiagnosticStatus.Executed,
+                DetectorDiagnosticStatus.NotApplicable,
+                DetectorDiagnosticStatus.Failed
+            ],
+            resultado.DetalhesDetectores.Select(item => item.ExecutionStatus));
+        Assert.Equal(80, resultado.ScoreNormalizado, 10);
+        Assert.Equal(4, resultado.Score);
+        Assert.True(resultado.EhAnomalia);
+        Assert.Equal(60, resultado.Metricas["limiteEnsemble"]);
+        Assert.Equal(1, resultado.Metricas["quantidadeDetectoresAplicaveis"]);
+        Assert.Equal(1, resultado.Metricas["quantidadeAlertas"]);
+        Assert.Equal(2, resultado.Metricas["somaPesosAplicaveis"]);
+        Assert.Equal(2, resultado.DetalhesDetectores[0].Peso);
+        Assert.Equal(5, resultado.DetalhesDetectores[1].Peso);
+        Assert.Equal(3, resultado.DetalhesDetectores[2].Peso);
+        Assert.True(resultado.DetalhesDetectores[0].VotouAnomalia);
+    }
+
+    [Fact]
+    public void DetectorDebugItem_ExecutionStatus_NaoEExpostoNoJson()
+    {
+        var resultado = CriarEnsemble(CriarDetector("Executado", 80, 1))
+            .Detectar(CriarInput());
+
+        var json = JsonSerializer.Serialize(resultado.DetalhesDetectores);
+
+        Assert.DoesNotContain("ExecutionStatus", json);
+        Assert.DoesNotContain("executionStatus", json);
     }
 
     [Fact]
@@ -239,7 +326,7 @@ public class EnsembleDetectionServiceTests
             new DetectorApplicabilityPolicy());
     }
 
-    private static DetectorInput CriarInput()
+    private static DetectorInput CriarInput(string tipoTag = "")
     {
         var inicio = new DateTime(
             2026, 10, 1, 12, 0, 0,
@@ -249,7 +336,7 @@ public class EnsembleDetectionServiceTests
         {
             ClienteId = "CLIENTE_TESTE",
             TagName = "TEMPERATURA_TESTE",
-            TipoTag = "",
+            TipoTag = tipoTag,
             ValorAtual = 101,
             DataHoraAtual = inicio.AddMinutes(5),
             MediaHistorica = 100,
