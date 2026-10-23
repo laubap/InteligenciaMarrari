@@ -30,6 +30,8 @@ public static class IAApiApplicationServiceCollectionExtensions
 
         services.AddTagProfileStatisticsServices();
         services.AddScoped<PerfilTagService>();
+        // Coleta local habilitada apenas quando autorizada explicitamente.
+        services.AddIntelligenceLabObservability(configuration);
         services.AddScoped<PredictionService>();
         services.AddScoped<CurrentValuePredictionService>();
         services.AddRiskAnalysisServices();
