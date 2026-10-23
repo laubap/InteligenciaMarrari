@@ -318,4 +318,59 @@ public sealed class DiagnosticContractsTests
         Assert.Equal("Não foi possível publicar.", failure.SafeMessage);
         Assert.False(failure.AffectedOperationalResponse);
     }
+
+    [Fact]
+    public void DetectorDiagnostic_ExplicitThresholdScaleDistinguishesOriginalFromNormalized()
+    {
+        var original = new DetectorDiagnostic(
+            "Isolation Forest", DetectorDiagnosticStatus.Executed,
+            votedAnomaly: true, weight: 0.25, originalScore: 0.72,
+            normalizedScore: 81.5, threshold: 0.62,
+            justification: "Modelo disponível.",
+            thresholdScale: DetectorThresholdScale.OriginalScore);
+
+        var normalized = new DetectorDiagnostic(
+            "Z-Score", DetectorDiagnosticStatus.Executed,
+            votedAnomaly: true, weight: 0.15, originalScore: 3.5,
+            normalizedScore: 80, threshold: 60,
+            justification: "Queda observada.",
+            thresholdScale: DetectorThresholdScale.NormalizedScore);
+
+        Assert.Equal(DetectorThresholdScale.OriginalScore, original.ThresholdScale);
+        Assert.Equal(0.62, original.Threshold);
+        Assert.Equal(DetectorThresholdScale.NormalizedScore, normalized.ThresholdScale);
+        Assert.Equal(60, normalized.Threshold);
+    }
+
+    [Fact]
+    public void DetectorDiagnostic_LegacyThresholdDoesNotAssumeScale()
+    {
+        var legacy = new DetectorDiagnostic(
+            "MAD", DetectorDiagnosticStatus.Executed,
+            votedAnomaly: false, weight: 0.15, originalScore: 2,
+            normalizedScore: 30, threshold: 3,
+            justification: "Limite legado sem metadado de escala.");
+
+        Assert.Equal(3, legacy.Threshold);
+        Assert.Equal(DetectorThresholdScale.Unknown, legacy.ThresholdScale);
+    }
+
+    [Fact]
+    public void DetectorDiagnostic_RejectsContradictoryThresholdMetadata()
+    {
+        DetectorDiagnostic Create(double? threshold, DetectorThresholdScale scale) => new(
+            "EWMA", DetectorDiagnosticStatus.Executed,
+            votedAnomaly: false, weight: 0.15, originalScore: 0.2,
+            normalizedScore: 20, threshold: threshold,
+            justification: "Diagnóstico simulado.", thresholdScale: scale);
+
+        Assert.Throws<ArgumentException>(() =>
+            Create(null, DetectorThresholdScale.OriginalScore));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Create(101, DetectorThresholdScale.NormalizedScore));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Create(-1, DetectorThresholdScale.NormalizedScore));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Create(20, (DetectorThresholdScale)99));
+    }
 }

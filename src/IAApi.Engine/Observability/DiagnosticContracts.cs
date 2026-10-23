@@ -10,6 +10,17 @@ public enum DetectorDiagnosticStatus
     Failed = 4
 }
 
+/// <summary>
+/// Escala do limite de um detector. Unknown preserva o significado de
+/// contratos legados, sem presumir que um threshold seja normalizado.
+/// </summary>
+public enum DetectorThresholdScale
+{
+    Unknown = 0,
+    OriginalScore = 1,
+    NormalizedScore = 2
+}
+
 public enum BaselineDiagnosticKind
 {
     Global = 1,
@@ -123,13 +134,34 @@ public sealed record DetectorDiagnostic
         double? normalizedScore,
         double? threshold,
         string? justification,
-        IReadOnlyDictionary<string, double>? metrics = null)
+        IReadOnlyDictionary<string, double>? metrics = null,
+        DetectorThresholdScale thresholdScale = DetectorThresholdScale.Unknown)
     {
         Name = DiagnosticContractGuard.Required(name, nameof(name));
         DiagnosticContractGuard.NonNegativeFinite(weight, nameof(weight));
         DiagnosticContractGuard.OptionalFinite(originalScore, nameof(originalScore));
         DiagnosticContractGuard.OptionalFinite(normalizedScore, nameof(normalizedScore));
         DiagnosticContractGuard.OptionalFinite(threshold, nameof(threshold));
+
+        if (!Enum.IsDefined(thresholdScale))
+        {
+            throw new ArgumentOutOfRangeException(nameof(thresholdScale));
+        }
+
+        if (threshold is null && thresholdScale != DetectorThresholdScale.Unknown)
+        {
+            throw new ArgumentException(
+                "A escala de um limite exige que o limite esteja presente.",
+                nameof(thresholdScale));
+        }
+
+        if (thresholdScale == DetectorThresholdScale.NormalizedScore &&
+            threshold is < 0 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(threshold),
+                "Threshold normalizado deve estar entre 0 e 100.");
+        }
 
         if (normalizedScore is < 0 or > 100)
         {
@@ -168,6 +200,7 @@ public sealed record DetectorDiagnostic
         OriginalScore = originalScore;
         NormalizedScore = normalizedScore;
         Threshold = threshold;
+        ThresholdScale = thresholdScale;
         Justification = string.IsNullOrWhiteSpace(justification)
             ? null
             : justification.Trim();
@@ -181,6 +214,7 @@ public sealed record DetectorDiagnostic
     public double? OriginalScore { get; }
     public double? NormalizedScore { get; }
     public double? Threshold { get; }
+    public DetectorThresholdScale ThresholdScale { get; }
     public string? Justification { get; }
     public IReadOnlyDictionary<string, double> Metrics { get; }
 }
