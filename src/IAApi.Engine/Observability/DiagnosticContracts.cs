@@ -135,7 +135,8 @@ public sealed record DetectorDiagnostic
         double? threshold,
         string? justification,
         IReadOnlyDictionary<string, double>? metrics = null,
-        DetectorThresholdScale thresholdScale = DetectorThresholdScale.Unknown)
+        DetectorThresholdScale thresholdScale = DetectorThresholdScale.Unknown,
+        IEnumerable<DiagnosticCalculationReference>? calculationReferences = null)
     {
         Name = DiagnosticContractGuard.Required(name, nameof(name));
         DiagnosticContractGuard.NonNegativeFinite(weight, nameof(weight));
@@ -205,6 +206,31 @@ public sealed record DetectorDiagnostic
             ? null
             : justification.Trim();
         Metrics = DiagnosticContractGuard.ReadOnlyMetrics(metrics);
+
+        // As referências explicam métricas já capturadas pelos detectores.
+        // Nenhum cálculo é repetido e nenhum valor é duplicado no contrato.
+        var references = (calculationReferences ?? []).ToArray();
+        if (status != DetectorDiagnosticStatus.Executed && references.Length > 0)
+        {
+            throw new ArgumentException(
+                "Somente detectores executados podem associar evidências de cálculo.",
+                nameof(calculationReferences));
+        }
+
+        var referencedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var reference in references)
+        {
+            if (reference is null ||
+                !Metrics.ContainsKey(reference.MetricKey) ||
+                !referencedKeys.Add(reference.MetricKey))
+            {
+                throw new ArgumentException(
+                    "Cada evidência deve referenciar uma métrica existente e única.",
+                    nameof(calculationReferences));
+            }
+        }
+
+        CalculationReferences = Array.AsReadOnly(references);
     }
 
     public string Name { get; }
@@ -217,6 +243,7 @@ public sealed record DetectorDiagnostic
     public DetectorThresholdScale ThresholdScale { get; }
     public string? Justification { get; }
     public IReadOnlyDictionary<string, double> Metrics { get; }
+    public IReadOnlyList<DiagnosticCalculationReference> CalculationReferences { get; }
 }
 
 public sealed record EnsembleDiagnostic
