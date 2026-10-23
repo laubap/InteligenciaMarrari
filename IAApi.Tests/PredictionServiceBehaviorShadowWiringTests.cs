@@ -1,4 +1,5 @@
 using IAApi.Services.AnomalyDetection;
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Discovery;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.History;
@@ -215,6 +216,46 @@ public sealed class PredictionServiceBehaviorShadowWiringTests
                 DataHora =
                     behaviorHistory[^1].DataHora
             };
+
+        var preparationResult =
+            await new PredictionDetectionPreparationService(
+                    new FakeHistoricoService(
+                        behaviorHistory.ToList()),
+                    operationalRegimeBaselineProvider: null,
+                    behaviorRuntimeBaselineProvider:
+                        behaviorProvider)
+                .PrepararAsync(
+                    request,
+                    await context.PerfisIa.SingleAsync(),
+                    "Analogica",
+                    request.DataHora);
+
+        Assert.NotNull(
+            preparationResult.BaselineEfetivo);
+
+        Assert.Equal(
+            BaselineDiagnosticKind.BehaviorMemory,
+            preparationResult.BaselineEfetivo!.Kind);
+
+        Assert.True(
+            preparationResult.BaselineEfetivo.Applied);
+
+        Assert.Equal(
+            resolution.BehaviorCode,
+            preparationResult.BaselineEfetivo.BehaviorCode);
+
+        Assert.Equal(
+            resolution.SnapshotVersion,
+            preparationResult.BaselineEfetivo.BehaviorSnapshotVersion);
+
+        Assert.Equal(
+            resolution.Media!.Value,
+            preparationResult.BaselineEfetivo.Mean,
+            precision: 6);
+
+        Assert.Equal(
+            preparationResult.EntradaDetector.Historico.Count,
+            preparationResult.BaselineEfetivo.SampleCount);
 
         await Assert.ThrowsAsync<NullReferenceException>(
             async () =>

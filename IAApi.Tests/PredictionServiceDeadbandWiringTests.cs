@@ -1,4 +1,5 @@
 using IAApi.Services.AnomalyDetection;
+using IAApi.IntelligenceLab.Observability;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -143,6 +144,37 @@ public sealed class PredictionServiceDeadbandWiringTests
                         2026, 8, 21, 13, 0, 0,
                         DateTimeKind.Utc)
             };
+
+        var preparationResult =
+            await new PredictionDetectionPreparationService(
+                    historicoService)
+                .PrepararAsync(
+                    request,
+                    await context.PerfisIa.SingleAsync(),
+                    "Analogica",
+                    request.DataHora);
+
+        Assert.NotNull(
+            preparationResult.BaselineEfetivo);
+
+        Assert.Equal(
+            BaselineDiagnosticKind.Global,
+            preparationResult.BaselineEfetivo!.Kind);
+
+        Assert.True(
+            preparationResult.BaselineEfetivo.Applied);
+
+        Assert.Equal(
+            "Baseline global do perfil ativo selecionado.",
+            preparationResult.BaselineEfetivo.Reason);
+
+        Assert.Equal(
+            preparationResult.EntradaDetector.MediaHistorica,
+            preparationResult.BaselineEfetivo.Mean);
+
+        Assert.Equal(
+            preparationResult.EntradaDetector.Historico.Count,
+            preparationResult.BaselineEfetivo.SampleCount);
 
         /*
          * O NullReferenceException é esperado neste teste,
@@ -310,6 +342,35 @@ public sealed class PredictionServiceDeadbandWiringTests
                         2026, 8, 21, 13, 0, 0,
                         DateTimeKind.Utc)
             };
+
+        var preparationResult =
+            await new PredictionDetectionPreparationService(
+                    historicoService,
+                    regimeProvider)
+                .PrepararAsync(
+                    request,
+                    await context.PerfisIa.SingleAsync(),
+                    "Analogica",
+                    request.DataHora);
+
+        Assert.NotNull(
+            preparationResult.BaselineEfetivo);
+
+        Assert.Equal(
+            BaselineDiagnosticKind.Global,
+            preparationResult.BaselineEfetivo!.Kind);
+
+        Assert.Equal(
+            "Baseline global do perfil ativo mantido porque o baseline de regime operacional não foi aplicado.",
+            preparationResult.BaselineEfetivo.Reason);
+
+        Assert.Equal(
+            preparationResult.EntradaDetector.MediaHistorica,
+            preparationResult.BaselineEfetivo.Mean);
+
+        Assert.Equal(
+            preparationResult.EntradaDetector.Historico.Count,
+            preparationResult.BaselineEfetivo.SampleCount);
 
         await Assert.ThrowsAsync<NullReferenceException>(
             async () =>
@@ -584,6 +645,42 @@ public sealed class PredictionServiceDeadbandWiringTests
                     requestTimestamp
             };
 
+        var preparationResult =
+            await new PredictionDetectionPreparationService(
+                    historicoService,
+                    regimeProvider)
+                .PrepararAsync(
+                    request,
+                    await context.PerfisIa.SingleAsync(),
+                    "Analogica",
+                    request.DataHora);
+
+        var expectedStatistics =
+            expectedBaseline.Statistics!;
+
+        Assert.NotNull(
+            preparationResult.BaselineEfetivo);
+
+        Assert.Equal(
+            BaselineDiagnosticKind.OperationalRegime,
+            preparationResult.BaselineEfetivo!.Kind);
+
+        Assert.True(
+            preparationResult.BaselineEfetivo.Applied);
+
+        Assert.Equal(
+            expectedBaseline.CurrentRegimeValue,
+            preparationResult.BaselineEfetivo.RegimeValue);
+
+        Assert.Equal(
+            expectedStatistics.Media,
+            preparationResult.BaselineEfetivo.Mean,
+            precision: 10);
+
+        Assert.Equal(
+            preparationResult.EntradaDetector.Historico.Count,
+            preparationResult.BaselineEfetivo.SampleCount);
+
         await Assert.ThrowsAsync<NullReferenceException>(
             async () =>
                 await predictionService.Detectar(
@@ -594,9 +691,6 @@ public sealed class PredictionServiceDeadbandWiringTests
 
         var captured =
             captureDetector.CapturedInput!;
-
-        var expectedStatistics =
-            expectedBaseline.Statistics!;
 
         /*
          * O DetectorInput deve refletir o baseline OFF,

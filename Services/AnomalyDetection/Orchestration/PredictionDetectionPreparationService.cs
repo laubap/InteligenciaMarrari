@@ -1,3 +1,4 @@
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
 
 namespace IAApi.Services.AnomalyDetection.Orchestration;
@@ -86,6 +87,18 @@ public sealed class PredictionDetectionPreparationService
         var baselineComportamentalAplicado =
             false;
 
+        var baselineRegimeNaoAplicado =
+            false;
+
+        var baselineRegimeFalhou =
+            false;
+
+        var baselineComportamentalNaoAplicado =
+            false;
+
+        var baselineComportamentalFalhou =
+            false;
+
         var comportamentoReconhecido =
             false;
 
@@ -151,9 +164,17 @@ public sealed class PredictionDetectionPreparationService
                         $"Deadband={variacaoMinimaRelevanteDetector:G6} " +
                         $"Confianca={confiancaVariacaoMinimaDetector:F1}");
                 }
+                else
+                {
+                    baselineRegimeNaoAplicado =
+                        true;
+                }
             }
             catch (Exception ex)
             {
+                baselineRegimeFalhou =
+                    true;
+
                 Console.WriteLine(
                     $"BASELINE POR REGIME FAIL-OPEN " +
                     $"Cliente={request.ClienteId} " +
@@ -250,6 +271,11 @@ public sealed class PredictionDetectionPreparationService
                         $"Confianca={confiancaVariacaoMinimaDetector:F1} " +
                         $"Amostras={behaviorHistory.Count}");
                 }
+                else
+                {
+                    baselineComportamentalNaoAplicado =
+                        true;
+                }
             }
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
@@ -258,6 +284,9 @@ public sealed class PredictionDetectionPreparationService
             }
             catch (Exception ex)
             {
+                baselineComportamentalFalhou =
+                    true;
+
                 Console.WriteLine(
                     $"B3.25 BEHAVIOR SHADOW FAIL-OPEN " +
                     $"Cliente={request.ClienteId} " +
@@ -402,13 +431,132 @@ public sealed class PredictionDetectionPreparationService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var baselineEfetivo =
+            CriarBaselineEfetivo(
+                entradaDetector,
+                baselineRegimeAplicado,
+                baselineComportamentalAplicado,
+                valorRegimeOperacional,
+                comportamentoAplicado,
+                snapshotComportamentalAplicado,
+                baselineRegimeNaoAplicado,
+                baselineRegimeFalhou,
+                baselineComportamentalNaoAplicado,
+                baselineComportamentalFalhou);
+
         return new PredictionDetectionPreparationResult(
             entradaDetector,
             baselineComportamentalAplicado,
             comportamentoReconhecido,
             codigoComportamentoReconhecido,
             classificacaoComportamentoReconhecido,
-            mediaHistoricaDetector);
+            mediaHistoricaDetector,
+            baselineEfetivo);
+    }
+
+    private static BaselineDiagnostic? CriarBaselineEfetivo(
+        DetectorInput entradaDetector,
+        bool baselineRegimeAplicado,
+        bool baselineComportamentalAplicado,
+        double? valorRegimeOperacional,
+        string? comportamentoAplicado,
+        int? snapshotComportamentalAplicado,
+        bool baselineRegimeNaoAplicado,
+        bool baselineRegimeFalhou,
+        bool baselineComportamentalNaoAplicado,
+        bool baselineComportamentalFalhou)
+    {
+        var kind =
+            baselineRegimeAplicado
+                ? BaselineDiagnosticKind.OperationalRegime
+                : baselineComportamentalAplicado
+                    ? BaselineDiagnosticKind.BehaviorMemory
+                    : BaselineDiagnosticKind.Global;
+
+        var reason =
+            CriarMotivoBaselineEfetivo(
+                kind,
+                baselineRegimeNaoAplicado,
+                baselineRegimeFalhou,
+                baselineComportamentalNaoAplicado,
+                baselineComportamentalFalhou);
+
+        try
+        {
+            return new BaselineDiagnostic(
+                kind,
+                true,
+                reason,
+                entradaDetector.MediaHistorica,
+                entradaDetector.DesvioPadraoHistorico,
+                entradaDetector.VariacaoMinimaRelevante,
+                entradaDetector.ConfiancaVariacaoMinima,
+                entradaDetector.Historico.Count,
+                baselineRegimeAplicado
+                    ? valorRegimeOperacional
+                    : null,
+                baselineComportamentalAplicado
+                    ? comportamentoAplicado
+                    : null,
+                baselineComportamentalAplicado
+                    ? snapshotComportamentalAplicado
+                    : null);
+        }
+        catch (ArgumentException)
+        {
+            /*
+             * O contrato diagnóstico possui invariantes mais restritivas
+             * do que o DetectorInput legado. A indisponibilidade de um
+             * snapshot jamais pode interferir na detecção operacional.
+             */
+            return null;
+        }
+    }
+
+    private static string CriarMotivoBaselineEfetivo(
+        BaselineDiagnosticKind kind,
+        bool baselineRegimeNaoAplicado,
+        bool baselineRegimeFalhou,
+        bool baselineComportamentalNaoAplicado,
+        bool baselineComportamentalFalhou)
+    {
+        return kind switch
+        {
+            BaselineDiagnosticKind.OperationalRegime =>
+                "Baseline de regime operacional aplicado.",
+
+            BaselineDiagnosticKind.BehaviorMemory when baselineRegimeFalhou =>
+                "Baseline de memória comportamental aplicado após falha na resolução do regime operacional.",
+
+            BaselineDiagnosticKind.BehaviorMemory when baselineRegimeNaoAplicado =>
+                "Baseline de memória comportamental aplicado após o regime operacional não ser aplicado.",
+
+            BaselineDiagnosticKind.BehaviorMemory =>
+                "Baseline de memória comportamental aplicado.",
+
+            BaselineDiagnosticKind.Global when baselineRegimeFalhou &&
+                baselineComportamentalFalhou =>
+                "Baseline global do perfil ativo mantido após falhas nas resoluções de regime operacional e memória comportamental.",
+
+            BaselineDiagnosticKind.Global when baselineRegimeFalhou =>
+                "Baseline global do perfil ativo mantido após falha na resolução do regime operacional.",
+
+            BaselineDiagnosticKind.Global when baselineComportamentalFalhou =>
+                "Baseline global do perfil ativo mantido após falha na resolução da memória comportamental.",
+
+            BaselineDiagnosticKind.Global when baselineRegimeNaoAplicado &&
+                baselineComportamentalNaoAplicado =>
+                "Baseline global do perfil ativo mantido porque os baselines de regime operacional e memória comportamental não foram aplicados.",
+
+            BaselineDiagnosticKind.Global when baselineRegimeNaoAplicado =>
+                "Baseline global do perfil ativo mantido porque o baseline de regime operacional não foi aplicado.",
+
+            BaselineDiagnosticKind.Global when baselineComportamentalNaoAplicado =>
+                "Baseline global do perfil ativo mantido porque o baseline de memória comportamental não foi aplicado.",
+
+            _ =>
+                "Baseline global do perfil ativo selecionado."
+        };
     }
 }
 
@@ -418,4 +566,5 @@ public sealed record PredictionDetectionPreparationResult(
     bool ComportamentoReconhecido,
     string? CodigoComportamentoReconhecido,
     string? ClassificacaoComportamentoReconhecido,
-    double MediaHistoricaDetector);
+    double MediaHistoricaDetector,
+    BaselineDiagnostic? BaselineEfetivo);
