@@ -1,3 +1,4 @@
+using IAApi.Infrastructure.Observability;
 using IAApi.IntelligenceLab.Observability;
 using IAApi.IntelligenceLab.Observability.Application;
 using IAApi.Services.AnomalyDetection.Runtime;
@@ -20,20 +21,25 @@ public static class PredictionDiagnosticCapture
         DetectorResult ensembleResult,
         RuntimeAnomalyDecision runtimeDecision,
         TimeSpan elapsed,
-        DateTimeOffset receivedAtUtc)
+        DateTimeOffset receivedAtUtc,
+        IntelligenceLabHealthMetrics? health = null)
     {
         if (collector is null || version is null)
         {
             return;
         }
 
+        // A tentativa e contabilizada apenas quando ha coletor e versao ativos.
+        // Nunca incluir dados da leitura, scores ou excecoes nesses contadores.
         try
         {
+            health?.RecordCaptureAttempt();
             // Unspecified nao possui fuso definido. Nao inventar UTC.
             if (readingTimestamp.Kind == DateTimeKind.Unspecified ||
                 !double.IsFinite(request.Valor) ||
                 elapsed < TimeSpan.Zero)
             {
+                health?.RecordRejected();
                 return;
             }
 
@@ -92,7 +98,14 @@ public static class PredictionDiagnosticCapture
         catch (Exception)
         {
             // Fail-open: diagnostico e inteiramente opcional e nao afeta a resposta.
-            // Contabilizacao de perdas sera instrumentada em incremento proprio.
+            try
+            {
+                health?.RecordCaptureFailure();
+            }
+            catch (Exception)
+            {
+                // Ate uma falha na instrumentacao de saude permanece fail-open.
+            }
         }
     }
 

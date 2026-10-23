@@ -13,7 +13,10 @@ public sealed class BoundedDiagnosticBuffer
     private readonly Queue<IntelligenceLabReadingDiagnostic> _diagnostics = new();
     private long _evictedCount;
 
-    public BoundedDiagnosticBuffer(int capacity = 100, bool enabled = false)
+    public BoundedDiagnosticBuffer(
+        int capacity = 100,
+        bool enabled = false,
+        IntelligenceLabHealthMetrics? health = null)
     {
         if (capacity <= 0)
         {
@@ -22,11 +25,14 @@ public sealed class BoundedDiagnosticBuffer
 
         Capacity = capacity;
         Enabled = enabled;
+        Health = health ?? new IntelligenceLabHealthMetrics();
     }
 
     public int Capacity { get; }
 
     public bool Enabled { get; }
+
+    public IntelligenceLabHealthMetrics Health { get; }
 
     public int Count
     {
@@ -57,8 +63,15 @@ public sealed class BoundedDiagnosticBuffer
     /// </summary>
     public bool TryAdd(IntelligenceLabReadingDiagnostic? diagnostic)
     {
-        if (!Enabled || diagnostic is null)
+        if (!Enabled)
         {
+            Health.RecordSkippedDisabled();
+            return false;
+        }
+
+        if (diagnostic is null)
+        {
+            Health.RecordRejected();
             return false;
         }
 
@@ -71,6 +84,7 @@ public sealed class BoundedDiagnosticBuffer
             }
 
             _diagnostics.Enqueue(diagnostic);
+            Health.RecordStored();
             return true;
         }
     }

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using IAApi.Infrastructure.Observability;
 using IAApi.IntelligenceLab.Observability;
 using IAApi.IntelligenceLab.Observability.Application;
 using IAApi.Services.AnomalyDetection.Observability;
@@ -16,6 +17,7 @@ public class PredictionService
 
     private readonly IIntelligenceLabDiagnosticCollector? _diagnosticCollector;
     private readonly DiagnosticVersionMetadata? _diagnosticVersion;
+    private readonly IntelligenceLabHealthMetrics? _diagnosticHealth;
 
     private readonly PredictionDetectionPreparationService
         _predictionDetectionPreparationService;
@@ -40,7 +42,8 @@ public class PredictionService
         PredictionDetectionPreparationService predictionDetectionPreparationService,
         MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
         IIntelligenceLabDiagnosticCollector? diagnosticCollector = null,
-        DiagnosticVersionMetadata? diagnosticVersion = null)
+        DiagnosticVersionMetadata? diagnosticVersion = null,
+        IntelligenceLabHealthMetrics? diagnosticHealth = null)
     {
         _predictionContextLoader =
             predictionContextLoader;
@@ -62,6 +65,7 @@ public class PredictionService
 
         _diagnosticCollector = diagnosticCollector;
         _diagnosticVersion = diagnosticVersion;
+        _diagnosticHealth = diagnosticHealth;
     }
 
     public async Task<AnomaliaResponse> Detectar(
@@ -265,7 +269,8 @@ var decisionOrchestration =
                 resultadoDetector,
                 runtimeDecision,
                 diagnosticTimer.Elapsed,
-                diagnosticReceivedAtUtc!.Value);
+                diagnosticReceivedAtUtc!.Value,
+                _diagnosticHealth);
         }
 
         return response;

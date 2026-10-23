@@ -36,6 +36,10 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
         Assert.Equal(1, on.DetectorInvocations);
         Assert.Equal(0, off.DiagnosticCount);
         Assert.Equal(1, on.DiagnosticCount);
+        Assert.Equal(0, off.CaptureAttempts);
+        Assert.Equal(1, on.CaptureAttempts);
+        Assert.Equal(1, on.StoredTotal);
+        Assert.Equal(0, on.CaptureFailures);
         Assert.Equal(DiagnosticCompletenessStatus.Partial, on.Completeness);
         Assert.NotNull(on.DiagnosticOriginalScore);
         Assert.Equal((double)on.Score, on.DiagnosticOriginalScore.Value, precision: 5);
@@ -52,6 +56,9 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
         AssertEquivalent(off, failing);
         Assert.Equal(1, failing.DetectorInvocations);
         Assert.Equal(0, failing.DiagnosticCount);
+        Assert.Equal(1, failing.CaptureAttempts);
+        Assert.Equal(0, failing.StoredTotal);
+        Assert.Equal(1, failing.CaptureFailures);
     }
 
     private static void AssertEquivalent(RunSnapshot expected, RunSnapshot actual)
@@ -153,7 +160,8 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
             new PredictionDetectionPreparationService(history),
             multivariateShadowRuntimeCoordinator: null,
             diagnosticCollector: collector,
-            diagnosticVersion: version);
+            diagnosticVersion: version,
+            diagnosticHealth: mode == Mode.Off ? null : buffer.Health);
 
         var response = await service.Detectar(new AnomaliaRequest
         {
@@ -163,6 +171,7 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
         var historical = await db.AnomaliasDetectadas.AsNoTracking().ToListAsync();
         var saved = Assert.Single(historical);
         var diagnostics = buffer.Snapshot();
+        var health = buffer.Health.Snapshot(buffer);
         var captured = mode == Mode.On ? Assert.Single(diagnostics) : null;
 
         return new RunSnapshot(
@@ -176,7 +185,8 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
             detector.Invocations, diagnostics.Count,
             captured?.Completeness.Status,
             captured?.Ensemble?.OriginalScore,
-            captured?.RuntimeDecision?.FinalAnomaly);
+            captured?.RuntimeDecision?.FinalAnomaly,
+            health.CaptureAttempts, health.StoredTotal, health.CaptureFailures);
     }
 
     private enum Mode { Off, On, Throwing }
@@ -196,7 +206,10 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
         int DiagnosticCount,
         DiagnosticCompletenessStatus? Completeness,
         double? DiagnosticOriginalScore,
-        bool? DiagnosticFinalAnomaly);
+        bool? DiagnosticFinalAnomaly,
+        long CaptureAttempts,
+        long StoredTotal,
+        long CaptureFailures);
 
     private sealed class NormalDetector : IAnomalyDetector
     {

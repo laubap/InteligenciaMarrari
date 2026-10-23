@@ -102,6 +102,7 @@ public sealed class InMemoryDiagnosticSession : IIntelligenceLabDiagnosticSessio
                 if (_stages.Count == MaxStageObservations)
                 {
                     _discardedStages++;
+                    _buffer.Health.RecordDiscardedStage();
                     return;
                 }
 
@@ -131,6 +132,7 @@ public sealed class InMemoryDiagnosticSession : IIntelligenceLabDiagnosticSessio
                 !Equals(diagnostic.Version, _version))
             {
                 _rejectedDiagnostics++;
+                _buffer.Health.RecordRejected();
                 return diagnostic;
             }
 
@@ -145,6 +147,7 @@ public sealed class InMemoryDiagnosticSession : IIntelligenceLabDiagnosticSessio
             {
                 // Falha de armazenamento nao modifica a decisao nem o retorno.
                 _failedWrites++;
+                _buffer.Health.RecordWriteFailure();
             }
 
             return diagnostic;

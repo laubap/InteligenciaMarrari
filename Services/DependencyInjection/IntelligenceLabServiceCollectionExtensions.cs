@@ -46,7 +46,9 @@ public static class IntelligenceLabServiceCollectionExtensions
         var metadata = new DiagnosticVersionMetadata(
             apiVersion, buildIdentifier, commitIdentifier, algorithmVersion);
 
-        services.AddSingleton(new BoundedDiagnosticBuffer(capacity, enabled: true));
+        var buffer = new BoundedDiagnosticBuffer(capacity, enabled: true);
+        services.AddSingleton(buffer);
+        services.AddSingleton(buffer.Health);
         services.AddSingleton<IIntelligenceLabDiagnosticCollector, InMemoryDiagnosticCollector>();
         services.AddSingleton(metadata);
 
