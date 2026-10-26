@@ -274,6 +274,64 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
     }
 
+    [Theory]
+    [InlineData("disabled", true, "LegacyFeatureDisabled")]
+    [InlineData("excluded", true, "LegacyCanaryExcluded")]
+    [InlineData("allowed", false, null)]
+    public async Task RuntimeDecisionCanary_RealPredictionRespectsRolloutAndPreservesAudit(
+        string mode,
+        bool expectedLegacyFallback,
+        string? expectedFallbackSource)
+    {
+        // Testa a rota real Ensemble -> contexto funcional -> resolver ->
+        // finalizacao -> diagnostico. Um historico estavel evita afirmar
+        // artificialmente que a decisao funcional precise divergir do Legacy.
+        var history = CreateStableHistory(center: 100);
+        await using var fixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(fixture.Context);
+
+        var rollout = new RuntimeAnomalyDecisionOptions
+        {
+            Enabled = mode != "disabled",
+            CanaryOnly = mode != "disabled",
+            AllowedClientIds = mode == "allowed" ? [ClienteId] : ["OTHER-CLIENT"]
+        };
+
+        var run = await ExecutePredictionAsync(
+            fixture.Context,
+            history,
+            runtimeDecisionOptions: rollout);
+
+        var runtime = Assert.IsType<RuntimeDecisionDiagnostic>(run.Diagnostic.RuntimeDecision);
+        Assert.Equal(expectedLegacyFallback, runtime.UsedLegacyFallback);
+        Assert.Equal(run.Response.EhAnomalia, runtime.FinalAnomaly);
+        Assert.False(string.IsNullOrWhiteSpace(runtime.Source));
+
+        if (expectedFallbackSource is not null)
+        {
+            Assert.Equal(expectedFallbackSource, runtime.Source);
+            Assert.Equal(runtime.LegacyAnomaly, runtime.FinalAnomaly);
+        }
+        else
+        {
+            // A decisao funcional foi aceita, mas NAO e obrigatorio mudar
+            // o voto em um historico normal; isso nao e uma falha do runtime.
+            Assert.NotEqual("LegacyFeatureDisabled", runtime.Source);
+            Assert.NotEqual("LegacyCanaryExcluded", runtime.Source);
+        }
+
+        // Lacuna conhecida: o contrato permite Reasons, mas a captura atual
+        // pode omiti-las. Nao inventar motivos e nem alterar producao aqui.
+        if (runtime.Reasons.Count == 0)
+        {
+            Assert.Contains("RuntimeDecisionReasons", run.Diagnostic.Completeness.MissingSections);
+        }
+
+        AssertRealStatisticalDetectorsExecuted(run);
+        AssertValidPersistedPrediction(run,
+            await fixture.Context.AnomaliasDetectadas.AsNoTracking().ToListAsync());
+    }
+
     [Fact]
     public Task KnownAbnormalBehavior_RecognizedButNotApplied_FallsBackToGlobalBaseline()
     {
@@ -616,7 +674,8 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         InMemoryHistorySource? historySource = null,
         BehaviorRuntimeBaselineProvider? behaviorProvider = null,
         PredictionDetectionPreparationService? preparation = null,
-        IAnomalyDetector? additionalDetector = null)
+        IAnomalyDetector? additionalDetector = null,
+        RuntimeAnomalyDecisionOptions? runtimeDecisionOptions = null)
     {
         historySource ??= new InMemoryHistorySource(history);
         behaviorProvider ??= CreateBehaviorProvider(context);
@@ -646,7 +705,7 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         var runtimeDecision = new PredictionRuntimeDecisionService(
             new RuntimeFunctionalDecisionCandidateFactory(),
             new RuntimeAnomalyDecisionResolver(),
-            new RuntimeAnomalyDecisionOptions { Enabled = false },
+            runtimeDecisionOptions ?? new RuntimeAnomalyDecisionOptions { Enabled = false },
             new RuntimeDecisionMetrics());
 
         var decision = new PredictionDecisionOrchestrationService(
