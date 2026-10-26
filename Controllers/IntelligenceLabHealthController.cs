@@ -1,6 +1,3 @@
-using System.Net;
-using System.Security.Cryptography;
-using System.Text;
 using IAApi.Infrastructure.Observability;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -17,10 +14,6 @@ namespace IAApi.Controllers;
 [Route("api/intelligence-lab")]
 public sealed class IntelligenceLabHealthController : ControllerBase
 {
-    private const string KeyHeader = "X-Intelligence-Lab-Key";
-    private const int MinimumKeyLength = 32;
-    private const int MaximumProvidedKeyLength = 256;
-
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _environment;
     private readonly BoundedDiagnosticBuffer? _buffer;
@@ -45,41 +38,16 @@ public sealed class IntelligenceLabHealthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult<IntelligenceLabHealthSnapshot> GetHealth(
-        [FromHeader(Name = KeyHeader)] string? accessKey)
+        [FromHeader(Name = IntelligenceLabLocalReadAccess.KeyHeader)] string? accessKey)
     {
-        Response.Headers["Cache-Control"] = "no-store";
-
-        if (!_environment.IsDevelopment() ||
-            !_configuration.GetValue<bool>("IntelligenceLab:Enabled") ||
-            _buffer is not { Enabled: true } ||
-            HttpContext.Connection.RemoteIpAddress is not { } remoteAddress ||
-            !IPAddress.IsLoopback(remoteAddress))
+        var denial = IntelligenceLabLocalReadAccess.DenyIfUnauthorized(
+            this, _configuration, _environment, _buffer, accessKey);
+        if (denial is not null)
         {
-            return NotFound();
+            return denial;
         }
 
-        var expectedKey = _configuration["IntelligenceLab:ReadAccessKey"];
-        if (string.IsNullOrWhiteSpace(expectedKey) ||
-            expectedKey.Length < MinimumKeyLength)
-        {
-            // Sem chave explicitamente configurada, endpoint indisponivel.
-            return NotFound();
-        }
-
-        if (string.IsNullOrEmpty(accessKey) ||
-            accessKey.Length > MaximumProvidedKeyLength ||
-            !FixedTimeKeyEquals(expectedKey, accessKey))
-        {
-            return Unauthorized();
-        }
-
-        return Ok(_buffer.Health.Snapshot(_buffer));
+        return Ok(_buffer!.Health.Snapshot(_buffer));
     }
 
-    private static bool FixedTimeKeyEquals(string expected, string provided)
-    {
-        var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
-        var providedHash = SHA256.HashData(Encoding.UTF8.GetBytes(provided));
-        return CryptographicOperations.FixedTimeEquals(expectedHash, providedHash);
-    }
 }
