@@ -19,7 +19,7 @@ using Microsoft.Extensions.Options;
 namespace IAApi.Tests.IntelligenceLab;
 
 /// <summary>
-/// Intelligence Lab 2.2G.2, primeira etapa: exercita o ciclo completo de
+/// Intelligence Lab 2.2G.2 a 2.2G.4: exercita o ciclo completo de
 /// previsão com SQLite isolado, detectores estatísticos reais e somente a
 /// fronteira de aquisição de histórico simulada.
 ///
@@ -31,6 +31,7 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
 {
     private const string ClienteId = "IL-BASELINE";
     private const string TagName = "BOMBA.PRESSAO";
+    private const string RegimeTagName = "BOMBA.REGIME";
 
     private static readonly DateTime ReadingTime =
         new(2026, 10, 26, 14, 0, 0, DateTimeKind.Utc);
@@ -193,6 +194,226 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         return AssertKnownNonNormalBehaviorFallsBackToGlobalBaselineAsync(
             TagComportamentoIa.ClassificacaoUndefined,
             "BEH-UNDEFINED");
+    }
+
+    [Fact]
+    public async Task OperationalRegimeBaseline_TakesPriorityOverKnownNormalBehavior()
+    {
+        const int regimeZeroSamples = 8;
+        const int regimeOneSamples = 32;
+        var targetHistory = CreateTwoRegimeTargetHistory();
+        var expectedRegimeOneHistory = targetHistory
+            .Skip(regimeZeroSamples)
+            .ToArray();
+        var regimeHistory = CreateRegimeHistory(
+            targetHistory,
+            regimeZeroSamples);
+
+        await using var fixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(fixture.Context);
+        var behaviorSnapshot = await SeedKnownBehaviorAsync(
+            fixture.Context,
+            targetHistory,
+            TagComportamentoIa.ClassificacaoNormal,
+            "BEH-REGIME-PRIORITY");
+        await SeedOperationalRegimeConfigurationAsync(fixture.Context, active: true);
+
+        var memoryBefore = await CaptureBehaviorMemoryAsync(fixture.Context);
+        var regimeBefore = await CaptureOperationalRegimeAsync(fixture.Context);
+        var historySource = new InMemoryHistorySource(
+            new HistorySourceEntry(ClienteId, TagName, targetHistory),
+            new HistorySourceEntry(ClienteId, RegimeTagName, regimeHistory));
+        var behaviorProvider = CreateBehaviorProvider(fixture.Context);
+        var regimeProvider = CreateOperationalRegimeProvider(fixture.Context, historySource);
+        var preparation = CreatePreparationService(
+            fixture.Context,
+            historySource,
+            behaviorProvider,
+            regimeProvider);
+        var globalProfile = await fixture.Context.PerfisIa.SingleAsync();
+        var statisticsCalculator = new TagProfileStatisticsCalculator(
+            new HistoricoLimpezaService());
+        var fullHistoryStatistics = statisticsCalculator.Calculate(targetHistory);
+        var expectedRegimeStatistics = statisticsCalculator.Calculate(expectedRegimeOneHistory);
+
+        Assert.Equal(40, targetHistory.Length);
+        Assert.Equal(regimeOneSamples, expectedRegimeOneHistory.Length);
+        Assert.All(targetHistory, reading =>
+            Assert.True(reading.DataHora <= ReadingTime));
+        Assert.All(regimeHistory, reading =>
+            Assert.True(reading.DataHora <= ReadingTime));
+
+        var behaviorResolution = await behaviorProvider.ResolveAsync(
+            ClienteId,
+            TagName,
+            targetHistory,
+            ReadingTime);
+
+        Assert.True(behaviorResolution.Recognized, behaviorResolution.Reason);
+        Assert.True(behaviorResolution.CanApplyBaseline, behaviorResolution.Reason);
+        Assert.Equal("BEH-REGIME-PRIORITY", behaviorResolution.BehaviorCode);
+        Assert.Equal(behaviorSnapshot.Versao, behaviorResolution.SnapshotVersion);
+        Assert.NotNull(behaviorResolution.Media);
+        Assert.Equal(behaviorSnapshot.Media, behaviorResolution.Media.Value, precision: 6);
+
+        var regimeResolution = regimeProvider.Resolve(
+            ClienteId,
+            TagName,
+            targetHistory,
+            ReadingTime);
+
+        Assert.True(regimeResolution.Applied, regimeResolution.Reason);
+        Assert.NotNull(regimeResolution.Statistics);
+        Assert.NotNull(regimeResolution.CurrentRegimeValue);
+        Assert.Equal(40, regimeResolution.OriginalTargetSamples);
+        Assert.Equal(regimeOneSamples, regimeResolution.SelectedSamples);
+        Assert.Equal(regimeOneSamples, regimeResolution.History.Count);
+        Assert.Equal(1, regimeResolution.CurrentRegimeValue.Value, precision: 6);
+        Assert.Equal(
+            expectedRegimeOneHistory.Select(reading => reading.DataHora),
+            regimeResolution.History.Select(reading => reading.DataHora));
+        Assert.Equal(
+            expectedRegimeOneHistory.Select(reading => Convert.ToDouble(reading.Valor)),
+            regimeResolution.History.Select(reading => reading.Valor));
+        Assert.DoesNotContain(
+            regimeResolution.History,
+            reading => reading.DataHora < expectedRegimeOneHistory[0].DataHora);
+        Assert.All(regimeResolution.History, reading =>
+            Assert.True(reading.DataHora <= ReadingTime));
+        Assert.Equal(expectedRegimeStatistics.Media, regimeResolution.Statistics.Media, precision: 6);
+        Assert.NotEqual(fullHistoryStatistics.Media, regimeResolution.Statistics.Media);
+
+        var prepared = await preparation.PrepararAsync(
+            CreateRequest(targetHistory),
+            globalProfile,
+            "continuous",
+            ReadingTime);
+
+        Assert.False(prepared.BaselineComportamentalAplicado);
+        Assert.NotNull(prepared.BaselineEfetivo);
+        Assert.Equal(BaselineDiagnosticKind.OperationalRegime, prepared.BaselineEfetivo!.Kind);
+        Assert.Equal(expectedRegimeStatistics.Media, prepared.EntradaDetector.MediaHistorica, precision: 6);
+        Assert.Equal(regimeResolution.Statistics.DesvioPadrao, prepared.EntradaDetector.DesvioPadraoHistorico, precision: 6);
+        Assert.Equal(regimeResolution.Statistics.DeadbandRecomendado, prepared.EntradaDetector.VariacaoMinimaRelevante, precision: 6);
+        Assert.Equal(regimeResolution.Statistics.ConfiancaDeadband, prepared.EntradaDetector.ConfiancaVariacaoMinima, precision: 6);
+        Assert.Equal(regimeOneSamples, prepared.EntradaDetector.Historico.Count);
+        Assert.Equal(
+            expectedRegimeOneHistory.Select(reading => reading.DataHora),
+            prepared.EntradaDetector.Historico.Select(reading => reading.DataHora));
+        Assert.Equal(
+            expectedRegimeOneHistory.Select(reading => Convert.ToDouble(reading.Valor)),
+            prepared.EntradaDetector.Historico.Select(reading => reading.Valor));
+        Assert.DoesNotContain(
+            prepared.EntradaDetector.Historico,
+            reading => reading.DataHora < expectedRegimeOneHistory[0].DataHora);
+        Assert.All(prepared.EntradaDetector.Historico, reading =>
+            Assert.True(reading.DataHora <= ReadingTime));
+        Assert.NotEqual(fullHistoryStatistics.Media, prepared.EntradaDetector.MediaHistorica);
+        Assert.NotEqual(globalProfile.Media, prepared.EntradaDetector.MediaHistorica);
+
+        var run = await ExecutePredictionAsync(
+            fixture.Context,
+            targetHistory,
+            historySource,
+            behaviorProvider,
+            preparation);
+
+        AssertValidPersistedPrediction(run, await fixture.Context.AnomaliasDetectadas.AsNoTracking().ToListAsync());
+        AssertRealStatisticalDetectorsExecuted(run);
+        Assert.NotNull(run.Diagnostic.Baseline);
+        Assert.Equal(BaselineDiagnosticKind.OperationalRegime, run.Diagnostic.Baseline!.Kind);
+        Assert.NotNull(run.Diagnostic.Baseline.RegimeValue);
+        Assert.Equal(
+            regimeResolution.CurrentRegimeValue.Value,
+            run.Diagnostic.Baseline.RegimeValue.Value,
+            precision: 6);
+        Assert.Equal(regimeResolution.Statistics.Media, run.Diagnostic.Baseline.Mean, precision: 6);
+        Assert.Equal(regimeOneSamples, run.Diagnostic.Baseline.SampleCount);
+        Assert.Null(run.Diagnostic.Baseline.BehaviorCode);
+        Assert.Null(run.Diagnostic.Baseline.BehaviorSnapshotVersion);
+        Assert.Equal(regimeResolution.Statistics.Media, run.Response.Perfil.MediaHistorica, precision: 6);
+
+        Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
+        Assert.Equal(regimeBefore, await CaptureOperationalRegimeAsync(fixture.Context));
+    }
+
+    [Fact]
+    public async Task DisabledOperationalRegime_FallsBackToKnownNormalBehaviorBaseline()
+    {
+        var behaviorHistory = CreateStableHistory(center: 40);
+
+        await using var fixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(fixture.Context);
+        var snapshot = await SeedKnownBehaviorAsync(
+            fixture.Context,
+            behaviorHistory,
+            TagComportamentoIa.ClassificacaoNormal,
+            "BEH-REGIME-FALLBACK");
+        await SeedOperationalRegimeConfigurationAsync(fixture.Context, active: false);
+
+        var memoryBefore = await CaptureBehaviorMemoryAsync(fixture.Context);
+        var regimeBefore = await CaptureOperationalRegimeAsync(fixture.Context);
+        var historySource = new InMemoryHistorySource(behaviorHistory);
+        var behaviorProvider = CreateBehaviorProvider(fixture.Context);
+        var regimeProvider = CreateOperationalRegimeProvider(fixture.Context, historySource);
+        var preparation = CreatePreparationService(
+            fixture.Context,
+            historySource,
+            behaviorProvider,
+            regimeProvider);
+        var globalProfile = await fixture.Context.PerfisIa.SingleAsync();
+
+        var regimeResolution = regimeProvider.Resolve(
+            ClienteId,
+            TagName,
+            behaviorHistory,
+            ReadingTime);
+        Assert.False(regimeResolution.Applied);
+        Assert.Contains("desativada", regimeResolution.Reason, StringComparison.OrdinalIgnoreCase);
+
+        var behaviorResolution = await behaviorProvider.ResolveAsync(
+            ClienteId,
+            TagName,
+            behaviorHistory,
+            ReadingTime);
+        Assert.True(behaviorResolution.Recognized);
+        Assert.True(behaviorResolution.CanApplyBaseline);
+        Assert.Equal("BEH-REGIME-FALLBACK", behaviorResolution.BehaviorCode);
+
+        var prepared = await preparation.PrepararAsync(
+            CreateRequest(behaviorHistory),
+            globalProfile,
+            "continuous",
+            ReadingTime);
+
+        Assert.True(prepared.ComportamentoReconhecido);
+        Assert.True(prepared.BaselineComportamentalAplicado);
+        Assert.Equal("BEH-REGIME-FALLBACK", prepared.CodigoComportamentoReconhecido);
+        Assert.NotNull(prepared.BaselineEfetivo);
+        Assert.Equal(BaselineDiagnosticKind.BehaviorMemory, prepared.BaselineEfetivo!.Kind);
+        Assert.Equal(snapshot.Media, prepared.EntradaDetector.MediaHistorica, precision: 6);
+        Assert.Equal(snapshot.DesvioPadrao, prepared.EntradaDetector.DesvioPadraoHistorico, precision: 6);
+        Assert.Equal(snapshot.DeadbandRecomendado, prepared.EntradaDetector.VariacaoMinimaRelevante, precision: 6);
+        Assert.Equal(snapshot.ConfiancaDeadband, prepared.EntradaDetector.ConfiancaVariacaoMinima, precision: 6);
+
+        var run = await ExecutePredictionAsync(
+            fixture.Context,
+            behaviorHistory,
+            historySource,
+            behaviorProvider,
+            preparation);
+
+        AssertValidPersistedPrediction(run, await fixture.Context.AnomaliasDetectadas.AsNoTracking().ToListAsync());
+        AssertRealStatisticalDetectorsExecuted(run);
+        Assert.NotNull(run.Diagnostic.Baseline);
+        Assert.Equal(BaselineDiagnosticKind.BehaviorMemory, run.Diagnostic.Baseline!.Kind);
+        Assert.Equal("BEH-REGIME-FALLBACK", run.Diagnostic.Baseline.BehaviorCode);
+        Assert.Equal(snapshot.Versao, run.Diagnostic.Baseline.BehaviorSnapshotVersion);
+        Assert.Equal(snapshot.Media, run.Diagnostic.Baseline.Mean, precision: 6);
+        Assert.Equal(snapshot.Media, run.Response.Perfil.MediaHistorica, precision: 6);
+
+        Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
+        Assert.Equal(regimeBefore, await CaptureOperationalRegimeAsync(fixture.Context));
     }
 
     private static async Task AssertKnownNonNormalBehaviorFallsBackToGlobalBaselineAsync(
@@ -381,20 +602,30 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
     private static PredictionDetectionPreparationService CreatePreparationService(
         AppDbContext context,
         IHistoricoService historySource,
-        BehaviorRuntimeBaselineProvider behaviorProvider)
+        BehaviorRuntimeBaselineProvider behaviorProvider,
+        OperationalRegimeBaselineProvider? regimeProvider = null)
     {
-        var regimeProvider = new OperationalRegimeBaselineProvider(
+        regimeProvider ??= CreateOperationalRegimeProvider(
+            context,
+            historySource);
+
+        return new PredictionDetectionPreparationService(
+            historySource,
+            regimeProvider,
+            behaviorProvider);
+    }
+
+    private static OperationalRegimeBaselineProvider CreateOperationalRegimeProvider(
+        AppDbContext context,
+        IHistoricoService historySource)
+    {
+        return new OperationalRegimeBaselineProvider(
             context,
             historySource,
             new OperationalRegimeBaselineService(
                 new OperationalRegimeHistoryResolver(),
                 new TagProfileStatisticsCalculator(
                     new HistoricoLimpezaService())));
-
-        return new PredictionDetectionPreparationService(
-            historySource,
-            regimeProvider,
-            behaviorProvider);
     }
 
     private static BehaviorRuntimeBaselineProvider CreateBehaviorProvider(AppDbContext context)
@@ -466,6 +697,26 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             ClienteId = ClienteId,
             TagName = TagName,
             TipoRepresentacao = "continuous"
+        });
+
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedOperationalRegimeConfigurationAsync(
+        AppDbContext context,
+        bool active)
+    {
+        context.TagsRegimesOperacionaisIa.Add(new TagRegimeOperacionalIa
+        {
+            ClienteId = ClienteId,
+            TagName = TagName,
+            TagRegime = RegimeTagName,
+            Ativo = active,
+            LagMinutos = 1,
+            ToleranciaAlinhamentoMinutos = 0,
+            ToleranciaEstado = 0,
+            MinimoAmostrasPorRegime = 30,
+            DataCriacao = ReadingTime.AddDays(-1)
         });
 
         await context.SaveChangesAsync();
@@ -577,6 +828,44 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             snapshot.DataCriacao);
     }
 
+    private static async Task<OperationalRegimeState> CaptureOperationalRegimeAsync(
+        AppDbContext context)
+    {
+        var regime = await context.TagsRegimesOperacionaisIa
+            .AsNoTracking()
+            .SingleAsync();
+
+        return new OperationalRegimeState(
+            regime.Id,
+            regime.ClienteId,
+            regime.TagName,
+            regime.TagRegime,
+            regime.Ativo,
+            regime.LagMinutos,
+            regime.ToleranciaAlinhamentoMinutos,
+            regime.ToleranciaEstado,
+            regime.MinimoAmostrasPorRegime,
+            regime.DataCriacao,
+            regime.DataAtualizacao);
+    }
+
+    private static void AssertValidPersistedPrediction(
+        PredictionRun run,
+        IReadOnlyList<AnomaliaDetectada> persisted)
+    {
+        Assert.NotNull(run.Response);
+        Assert.Equal(ClienteId, run.Response.ClienteId);
+        Assert.Equal(TagName, run.Response.TagName);
+        Assert.True(double.IsFinite(run.Response.Score));
+        Assert.NotNull(run.Response.Interpretacao);
+
+        var operationalResult = Assert.Single(persisted);
+        Assert.Equal(ClienteId, operationalResult.ClienteId);
+        Assert.Equal(TagName, operationalResult.TagName);
+        Assert.Equal(run.Response.EhAnomalia, operationalResult.EhAnomalia);
+        Assert.Equal((double)run.Response.Score, operationalResult.Score, precision: 5);
+    }
+
     private static AnomaliaRequest CreateRequest(IReadOnlyList<LeituraBruta> history) => new()
     {
         ClienteId = ClienteId,
@@ -594,6 +883,40 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             {
                 DataHora = ReadingTime.AddMinutes(index - 40),
                 Valor = Convert.ToSingle(center + offsets[index % offsets.Length])
+            })
+            .ToArray();
+    }
+
+    private static LeituraBruta[] CreateTwoRegimeTargetHistory()
+    {
+        float[] regimeZeroValues = [62, 63, 64, 65, 66, 67, 68, 69];
+        float[] regimeOneOffsets = [-4, -3, -2, -1, 1, 2, 3, 4];
+
+        return Enumerable.Range(0, 40)
+            .Select(index => new LeituraBruta
+            {
+                DataHora = ReadingTime.AddMinutes(index - 40),
+                Valor = index < regimeZeroValues.Length
+                    ? regimeZeroValues[index]
+                    : 70 + regimeOneOffsets[(index - regimeZeroValues.Length) % regimeOneOffsets.Length]
+            })
+            .ToArray();
+    }
+
+    private static LeituraBruta[] CreateRegimeHistory(
+        IReadOnlyList<LeituraBruta> targetHistory,
+        int regimeZeroSamples)
+    {
+        var start = targetHistory[0].DataHora.AddMinutes(-1);
+        var end = ReadingTime.AddMinutes(-1);
+
+        return Enumerable.Range(
+                0,
+                (int)(end - start).TotalMinutes + 1)
+            .Select(index => new LeituraBruta
+            {
+                DataHora = start.AddMinutes(index),
+                Valor = index < regimeZeroSamples ? 0 : 1
             })
             .ToArray();
     }
@@ -644,19 +967,63 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         DateTime SnapshotPeriodoFim,
         DateTime SnapshotDataCriacao);
 
-    private sealed class InMemoryHistorySource(IReadOnlyList<LeituraBruta> readings) : IHistoricoService
+    private sealed record OperationalRegimeState(
+        int Id,
+        string ClienteId,
+        string TagName,
+        string TagRegime,
+        bool Ativo,
+        int LagMinutos,
+        int ToleranciaAlinhamentoMinutos,
+        double ToleranciaEstado,
+        int MinimoAmostrasPorRegime,
+        DateTime DataCriacao,
+        DateTime? DataAtualizacao);
+
+    private sealed record HistorySourceEntry(
+        string ClienteId,
+        string TagName,
+        IReadOnlyList<LeituraBruta> Readings);
+
+    private sealed class InMemoryHistorySource : IHistoricoService
     {
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<LeituraBruta>> _histories;
+
+        public InMemoryHistorySource(IReadOnlyList<LeituraBruta> readings)
+            : this(new HistorySourceEntry(ClienteId, TagName, readings))
+        {
+        }
+
+        public InMemoryHistorySource(params HistorySourceEntry[] histories)
+        {
+            _histories = histories.ToDictionary(
+                entry => BuildKey(entry.ClienteId, entry.TagName),
+                entry => entry.Readings,
+                StringComparer.Ordinal);
+        }
+
         public List<LeituraBruta> BuscarHistorico(string clienteId, string tagName, string tipoTag) =>
-            readings.Select(Clone).ToList();
+            FindHistory(clienteId, tagName).Select(Clone).ToList();
 
         public List<LeituraBruta> BuscarHistoricoPorPeriodo(
             string clienteId,
             string tagName,
             DateTime inicio,
             DateTime fim) =>
-            readings.Where(item => item.DataHora >= inicio && item.DataHora <= fim)
+            FindHistory(clienteId, tagName)
+                .Where(item => item.DataHora >= inicio && item.DataHora <= fim)
                 .Select(Clone)
                 .ToList();
+
+        private IReadOnlyList<LeituraBruta> FindHistory(
+            string clienteId,
+            string tagName) =>
+            _histories.TryGetValue(BuildKey(clienteId, tagName), out var readings)
+                ? readings
+                : Array.Empty<LeituraBruta>();
+
+        private static string BuildKey(string clienteId, string tagName) =>
+            $"{clienteId}\u001f{tagName}";
 
         private static LeituraBruta Clone(LeituraBruta reading) => new()
         {
