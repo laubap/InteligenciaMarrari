@@ -12,7 +12,9 @@ using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Orchestration;
 using IAApi.Services.AnomalyDetection.Presentation;
 using IAApi.Services.AnomalyDetection.Runtime;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -20,12 +22,13 @@ namespace IAApi.Tests.IntelligenceLab;
 
 /// <summary>
 /// Intelligence Lab 2.2G.2 a 2.2G.4: exercita o ciclo completo de
-/// previsão com SQLite isolado, detectores estatísticos reais e somente a
+/// previsão com SQLite isolado, detectores reais e somente a
 /// fronteira de aquisição de histórico simulada.
 ///
-/// Não representa a configuração de produção completa: a decisão funcional
-/// avançada permanece desabilitada, Isolation Forest e multivariada não são
-/// registrados, e as opções hospedadas não são carregadas por esta fixture.
+/// Os seis cenários originais executam detectores estatísticos; o cenário
+/// adicional integra Isolation Forest com um modelo temporário de teste.
+/// A decisão funcional avançada e a multivariada não são habilitadas,
+/// e as opções hospedadas não são carregadas por esta fixture.
 /// </summary>
 public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
 {
@@ -177,6 +180,97 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         // uma vez (preparação explícita e previsão completa). A comparação
         // cobre a identidade, o lifecycle e todas as estatísticas persistidas
         // no snapshot, não apenas a quantidade de registros.
+        Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
+    }
+
+    [Fact]
+    public async Task KnownNormalBehavior_SevenRealDetectors_ReachOnePredictionAndDiagnostic()
+    {
+        // O Isolation Forest requer pelo menos 50 pontos. Nao modificar os
+        // seis cenarios anteriores (que usam apenas 40 pontos).
+        var behaviorHistory = CreateStableHistory(center: 40, count: 96);
+
+        await using var fixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(fixture.Context);
+        var snapshot = await SeedKnownBehaviorAsync(
+            fixture.Context,
+            behaviorHistory,
+            TagComportamentoIa.ClassificacaoNormal,
+            "BEH-IF-E2E");
+        var memoryBefore = await CaptureBehaviorMemoryAsync(fixture.Context);
+
+        var historySource = new InMemoryHistorySource(behaviorHistory);
+        var behaviorProvider = CreateBehaviorProvider(fixture.Context);
+        var preparation = CreatePreparationService(
+            fixture.Context, historySource, behaviorProvider);
+        var prepared = await preparation.PrepararAsync(
+            CreateRequest(behaviorHistory),
+            await fixture.Context.PerfisIa.SingleAsync(),
+            "continuous",
+            ReadingTime);
+
+        Assert.True(prepared.ComportamentoReconhecido);
+        Assert.True(prepared.BaselineComportamentalAplicado);
+        Assert.Equal(BaselineDiagnosticKind.BehaviorMemory, prepared.BaselineEfetivo!.Kind);
+        Assert.Equal("BEH-IF-E2E", prepared.CodigoComportamentoReconhecido);
+        Assert.Equal(snapshot.Media, prepared.EntradaDetector.MediaHistorica, precision: 6);
+        Assert.True(prepared.EntradaDetector.Historico.Count >= 50,
+            "O baseline B3.25 reduziu o historico abaixo do minimo do Isolation Forest.");
+        Assert.All(prepared.EntradaDetector.Historico,
+            point => Assert.True(point.DataHora <= ReadingTime));
+
+        // Usa exclusivamente um modelo efemero, sem tocar nos modelos reais.
+        // O treino serve para exercitar o caminho E2E, NAO para medir acuracia.
+        using var modelFixture = new E2EIsolationForestModelFixture();
+        var forestDetector = await modelFixture.TrainAndCreateDetectorAsync(
+            prepared.EntradaDetector);
+        var run = await ExecutePredictionAsync(
+            fixture.Context,
+            behaviorHistory,
+            historySource,
+            behaviorProvider,
+            preparation,
+            forestDetector);
+
+        Assert.NotNull(run.Diagnostic.Baseline);
+        Assert.Equal(BaselineDiagnosticKind.BehaviorMemory, run.Diagnostic.Baseline!.Kind);
+        Assert.Equal("BEH-IF-E2E", run.Diagnostic.Baseline.BehaviorCode);
+        Assert.Equal(snapshot.Versao, run.Diagnostic.Baseline.BehaviorSnapshotVersion);
+        Assert.Equal(snapshot.Media, run.Response.Perfil.MediaHistorica, precision: 6);
+
+        Assert.Equal(7, run.Response.Detectores.Count);
+        Assert.Equal(7, run.Diagnostic.Detectors.Count);
+        Assert.NotNull(run.Diagnostic.Ensemble);
+        Assert.Equal(7, run.Diagnostic.Ensemble!.RegisteredDetectorCount);
+        Assert.Equal(7, run.Diagnostic.Ensemble.ApplicableDetectorCount);
+        foreach (var name in StatisticalDetectorNames)
+        {
+            Assert.Contains(run.Response.Detectores,
+                detector => detector.Nome == name && detector.Aplicavel);
+            Assert.Contains(run.Diagnostic.Detectors,
+                detector => detector.Name == name &&
+                            detector.Status == DetectorDiagnosticStatus.Executed);
+        }
+
+        var isolationResponse = Assert.Single(run.Response.Detectores,
+            detector => detector.Nome == "Isolation Forest");
+        Assert.True(isolationResponse.Aplicavel);
+        var isolationDiagnostic = Assert.Single(run.Diagnostic.Detectors,
+            detector => detector.Name == "Isolation Forest");
+        Assert.Equal(DetectorDiagnosticStatus.Executed, isolationDiagnostic.Status);
+        Assert.NotNull(isolationDiagnostic.OriginalScore);
+        Assert.NotNull(isolationDiagnostic.NormalizedScore);
+        Assert.True(double.IsFinite(isolationDiagnostic.OriginalScore!.Value));
+        Assert.InRange(isolationDiagnostic.NormalizedScore!.Value, 0, 100);
+        Assert.Equal(modelFixture.Options.Weight, isolationDiagnostic.Weight, precision: 6);
+        Assert.Equal(modelFixture.Options.AnomalyThreshold,
+            isolationDiagnostic.Metrics["threshold"], precision: 6);
+        Assert.Equal(modelFixture.Options.TreeCount,
+            isolationDiagnostic.Metrics["quantidadeArvores"]);
+        Assert.Equal(1, isolationDiagnostic.Metrics["versaoModelo"]);
+
+        AssertValidPersistedPrediction(run,
+            await fixture.Context.AnomaliasDetectadas.AsNoTracking().ToListAsync());
         Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
     }
 
@@ -521,15 +615,22 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         IReadOnlyList<LeituraBruta> history,
         InMemoryHistorySource? historySource = null,
         BehaviorRuntimeBaselineProvider? behaviorProvider = null,
-        PredictionDetectionPreparationService? preparation = null)
+        PredictionDetectionPreparationService? preparation = null,
+        IAnomalyDetector? additionalDetector = null)
     {
         historySource ??= new InMemoryHistorySource(history);
         behaviorProvider ??= CreateBehaviorProvider(context);
         preparation ??= CreatePreparationService(context, historySource, behaviorProvider);
 
         var options = new AnomalyDetectionOptions();
+        var detectors = CreateRealStatisticalDetectors(options);
+        if (additionalDetector is not null)
+        {
+            detectors = [.. detectors, additionalDetector];
+        }
+
         var ensemble = new EnsembleDetectionService(
-            CreateRealStatisticalDetectors(options),
+            detectors,
             Options.Create(options),
             new TagBehaviorProfileResolver(),
             new DetectorApplicabilityPolicy());
@@ -874,14 +975,14 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         DataHora = ReadingTime
     };
 
-    private static LeituraBruta[] CreateStableHistory(double center)
+    private static LeituraBruta[] CreateStableHistory(double center, int count = 40)
     {
         double[] offsets = [0.00, 0.12, -0.08, 0.18, -0.14, 0.05, 0.16, -0.11, 0.09, -0.04];
 
-        return Enumerable.Range(0, 40)
+        return Enumerable.Range(0, count)
             .Select(index => new LeituraBruta
             {
-                DataHora = ReadingTime.AddMinutes(index - 40),
+                DataHora = ReadingTime.AddMinutes(index - count),
                 Valor = Convert.ToSingle(center + offsets[index % offsets.Length])
             })
             .ToArray();
@@ -1030,6 +1131,78 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             DataHora = reading.DataHora,
             Valor = reading.Valor
         };
+    }
+
+    private sealed class E2EIsolationForestModelFixture : IDisposable
+    {
+        private readonly string _root = Path.Combine(
+            Path.GetTempPath(), "IAApi-IntelligenceLab-IF-E2E",
+            Guid.NewGuid().ToString("N"));
+
+        public IsolationForestOptions Options { get; } = new()
+        {
+            Weight = 0.25,
+            TreeCount = 16,
+            SampleSize = 32,
+            MinimumHistoryPoints = 50,
+            FeatureWindowSize = 10,
+            AnomalyThreshold = 0.62,
+            RandomSeed = 42
+        };
+
+        public async Task<IsolationForestDetector> TrainAndCreateDetectorAsync(
+            DetectorInput input)
+        {
+            var extractor = new IsolationForestFeatureExtractor();
+            var vectors = extractor.ExtrairTreinamento(input, Options.FeatureWindowSize)
+                .Select(feature => (IReadOnlyList<double>)feature.ParaVetor().ToArray())
+                .ToList();
+            Assert.True(vectors.Count >= 2);
+
+            var model = new IsolationForestModel(
+                quantidadeArvores: Options.TreeCount,
+                tamanhoAmostra: Options.SampleSize,
+                sementeAleatoria: Options.RandomSeed);
+            model.Treinar(vectors);
+
+            var snapshot = model.ExportarSnapshot(
+                input.ClienteId,
+                input.TagName,
+                Options.FeatureWindowSize,
+                Options.AnomalyThreshold,
+                ReadingTime.AddDays(-1));
+            snapshot.VersaoModelo = 1;
+            snapshot.QuantidadePontosTreinamento = input.Historico.Count;
+
+            var persistence = new IsolationForestPersistenceService(
+                new E2EIsolationForestEnvironment(_root));
+            await persistence.SalvarAsync(snapshot);
+            IsolationForestDetector.RemoverDoCache(input.ClienteId, input.TagName);
+
+            return new IsolationForestDetector(
+                Microsoft.Extensions.Options.Options.Create(Options),
+                extractor,
+                persistence);
+        }
+
+        public void Dispose()
+        {
+            IsolationForestDetector.RemoverDoCache(ClienteId, TagName);
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+        }
+    }
+
+    private sealed class E2EIsolationForestEnvironment(string root) : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "IAApi.Tests";
+        public string EnvironmentName { get; set; } = "Development";
+        public string ContentRootPath { get; set; } = root;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = root;
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed class ScenarioFixture : IAsyncDisposable
