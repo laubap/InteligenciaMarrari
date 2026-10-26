@@ -12,6 +12,53 @@ namespace IAApi.Services.AnomalyDetection.Observability;
 /// </summary>
 public static class PredictionDiagnosticCapture
 {
+    // Motivos emitidos como codigos fixos no runtime.
+    // Nunca publicar strings arbitrarias (ex.: identificadores de grupos multivariados).
+    private static readonly HashSet<string> SafeRuntimeReasonCodes = new(StringComparer.Ordinal)
+    {
+        "RuntimeDecisionDisabled",
+        "ClientNotEnabledForRuntimeDecision",
+        "FunctionalDecisionUnavailable",
+        "LegacyPreserved",
+        "RuntimeFunctionalDecisionAccepted",
+        "FrozenSensorDetected",
+        "IndependentDataQualityEvidence",
+        "LegacyFalseNegativeRecovered",
+        "LegacyScoreNearEnsembleThreshold",
+        "StrongZActiveEvidence",
+        "StrongMadActiveEvidence",
+        "StrongRateOfChangeEvidence",
+        "IncreasingNoiseDetected",
+        "IndependentVarianceExpansionEvidence",
+        "IncreasingNoiseStillActive",
+        "LegacyFinalAnomalyFalse",
+        "RuntimeFunctionalContextUnavailable",
+        "CriticalDataQualityGap",
+        "LegacyDecisionPreservedConservatively",
+        "CandidateBaselineMismatch",
+        "MadAgainstCandidateAbnormal",
+        "ZAgainstCandidateAbnormal",
+        "IncidentAlreadyOpen",
+        "CandidateBaselineReady",
+        "StableUnresolvedDeviation",
+        "ActiveBaselineStillAbnormal",
+        "MadFitsCandidate",
+        "ZFitsCandidate",
+        "OperationalBaselineUnchanged",
+        "CandidateNotPromoted",
+        "EwmaOnlyTemporalMismatch",
+        "LegacyFinalAnomalyPreserved",
+        "NoOpenIncident",
+        "CandidateNotReady",
+        "RegimeNotStableUnresolved",
+        "ActiveBaselineNotAbnormal",
+        "OperationalBaselineChanged",
+        "CandidatePromoted",
+        // Resultados da promocao multivariada sem identificadores dinamicos.
+        "FreshMultivariateAnomalyAccepted",
+        "MultivariateOperationalPromotionAccepted"
+    };
+
     public static void TryCapture(
         IIntelligenceLabDiagnosticCollector? collector,
         DiagnosticVersionMetadata? version,
@@ -65,15 +112,15 @@ public static class PredictionDiagnosticCapture
 
             var detectors = CaptureDetectors(ensembleResult, missingSections);
             var ensemble = CaptureEnsemble(ensembleResult, missingSections);
+            var safeReasons = CaptureRuntimeReasons(runtimeDecision.Reasons, missingSections);
             var runtime = new RuntimeDecisionDiagnostic(
                 runtimeDecision.LegacyFinalAnomaly,
                 runtimeDecision.EmitAnomaly,
                 runtimeDecision.EmitNewEvidence,
                 runtimeDecision.UsedLegacyFallback,
                 runtimeDecision.Source,
-                reasons: [], // Motivos textuais ainda nao foram classificados para telemetria segura.
+                reasons: safeReasons,
                 temporalConfirmation: null);
-            missingSections.Add("RuntimeDecisionReasons");
 
             var diagnostic = new IntelligenceLabReadingDiagnostic(
                 context,
@@ -107,6 +154,42 @@ public static class PredictionDiagnosticCapture
                 // Ate uma falha na instrumentacao de saude permanece fail-open.
             }
         }
+    }
+
+    private static IReadOnlyList<string> CaptureRuntimeReasons(
+        IReadOnlyList<string>? reasons,
+        List<string> missingSections)
+    {
+        if (reasons is null || reasons.Count == 0)
+        {
+            missingSections.Add("RuntimeDecisionReasons");
+            return [];
+        }
+
+        var safeReasons = new List<string>();
+        var incomplete = false;
+        foreach (var reason in reasons)
+        {
+            if (reason is not null && SafeRuntimeReasonCodes.Contains(reason))
+            {
+                if (!safeReasons.Contains(reason, StringComparer.Ordinal))
+                {
+                    safeReasons.Add(reason);
+                }
+            }
+            else
+            {
+                // Nao copiar conteudo nao classificado; apenas sinalizar a lacuna.
+                incomplete = true;
+            }
+        }
+
+        if (incomplete || safeReasons.Count == 0)
+        {
+            missingSections.Add("RuntimeDecisionReasons");
+        }
+
+        return safeReasons;
     }
 
     private static IReadOnlyList<DetectorDiagnostic> CaptureDetectors(

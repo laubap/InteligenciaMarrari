@@ -41,6 +41,60 @@ public sealed class PredictionDiagnosticCaptureTests
     }
 
     [Fact]
+    public void KnownRuntimeReasons_ArePublishedAsSafeCodesWithoutChangingDecision()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var original = decision with
+        {
+            Reasons = ["RuntimeDecisionDisabled", "LegacyPreserved"]
+        };
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(),
+            request, ReadingTime, null, detector, original,
+            TimeSpan.Zero, DateTimeOffset.UtcNow);
+
+        var diagnostic = Assert.Single(buffer.Snapshot());
+        Assert.NotNull(diagnostic.RuntimeDecision);
+        Assert.Equal(original.EmitAnomaly, diagnostic.RuntimeDecision!.FinalAnomaly);
+        Assert.Collection(diagnostic.RuntimeDecision.Reasons,
+            reason => Assert.Equal("RuntimeDecisionDisabled", reason),
+            reason => Assert.Equal("LegacyPreserved", reason));
+        Assert.DoesNotContain("RuntimeDecisionReasons", diagnostic.Completeness.MissingSections);
+        Assert.Equal(2, original.Reasons.Count);
+    }
+
+    [Fact]
+    public void DynamicOrUnrecognizedReason_IsNotPublishedAndIsMarkedIncomplete()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var original = decision with
+        {
+            Reasons = [
+                "FreshMultivariateAnomalyAccepted",
+                "MultivariateGroup:private-customer-group",
+                "unknown secret data"
+            ]
+        };
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(),
+            request, ReadingTime, null, detector, original,
+            TimeSpan.Zero, DateTimeOffset.UtcNow);
+
+        var diagnostic = Assert.Single(buffer.Snapshot());
+        Assert.Equal(
+            "FreshMultivariateAnomalyAccepted",
+            Assert.Single(diagnostic.RuntimeDecision!.Reasons));
+        Assert.Contains("RuntimeDecisionReasons", diagnostic.Completeness.MissingSections);
+        Assert.DoesNotContain("private-customer-group", string.Join(" ", diagnostic.RuntimeDecision.Reasons));
+        Assert.DoesNotContain("unknown secret data", string.Join(" ", diagnostic.RuntimeDecision.Reasons));
+        Assert.Equal(3, original.Reasons.Count);
+    }
+
+    [Fact]
     public void DisabledBuffer_DoesNotRetainDiagnostics()
     {
         var buffer = new BoundedDiagnosticBuffer(5); // desabilitado por padrao
