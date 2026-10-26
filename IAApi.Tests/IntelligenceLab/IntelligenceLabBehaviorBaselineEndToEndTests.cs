@@ -94,7 +94,11 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
 
         await using var fixture = await ScenarioFixture.CreateAsync();
         await SeedPredictionRequirementsAsync(fixture.Context);
-        var snapshot = await SeedKnownNormalBehaviorAsync(fixture.Context, behaviorHistory);
+        var snapshot = await SeedKnownBehaviorAsync(
+            fixture.Context,
+            behaviorHistory,
+            TagComportamentoIa.ClassificacaoNormal,
+            "BEH-001");
 
         var memoryBefore = await CaptureBehaviorMemoryAsync(fixture.Context);
 
@@ -172,6 +176,122 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         // uma vez (preparação explícita e previsão completa). A comparação
         // cobre a identidade, o lifecycle e todas as estatísticas persistidas
         // no snapshot, não apenas a quantidade de registros.
+        Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
+    }
+
+    [Fact]
+    public Task KnownAbnormalBehavior_RecognizedButNotApplied_FallsBackToGlobalBaseline()
+    {
+        return AssertKnownNonNormalBehaviorFallsBackToGlobalBaselineAsync(
+            TagComportamentoIa.ClassificacaoKnownAbnormal,
+            "BEH-ABNORMAL");
+    }
+
+    [Fact]
+    public Task KnownUndefinedBehavior_RecognizedButNotApplied_FallsBackToGlobalBaseline()
+    {
+        return AssertKnownNonNormalBehaviorFallsBackToGlobalBaselineAsync(
+            TagComportamentoIa.ClassificacaoUndefined,
+            "BEH-UNDEFINED");
+    }
+
+    private static async Task AssertKnownNonNormalBehaviorFallsBackToGlobalBaselineAsync(
+        string classification,
+        string behaviorCode)
+    {
+        var behaviorHistory = CreateStableHistory(center: 40);
+
+        await using var fixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(fixture.Context);
+        var snapshot = await SeedKnownBehaviorAsync(
+            fixture.Context,
+            behaviorHistory,
+            classification,
+            behaviorCode);
+        var memoryBefore = await CaptureBehaviorMemoryAsync(fixture.Context);
+        var globalProfile = await fixture.Context.PerfisIa.SingleAsync();
+
+        var historySource = new InMemoryHistorySource(behaviorHistory);
+        var behaviorProvider = CreateBehaviorProvider(fixture.Context);
+        var preparation = CreatePreparationService(
+            fixture.Context,
+            historySource,
+            behaviorProvider);
+
+        var resolution = await behaviorProvider.ResolveAsync(
+            ClienteId,
+            TagName,
+            behaviorHistory,
+            ReadingTime);
+
+        Assert.True(resolution.Recognized);
+        Assert.False(resolution.CanApplyBaseline);
+        Assert.Equal(behaviorCode, resolution.BehaviorCode);
+        Assert.Equal(classification, resolution.BehaviorClassification);
+
+        var prepared = await preparation.PrepararAsync(
+            CreateRequest(behaviorHistory),
+            globalProfile,
+            "continuous",
+            ReadingTime);
+
+        // Reconhecimento e autorização são contratos distintos: Known não
+        // autoriza baseline quando a classificação não é Normal.
+        Assert.True(prepared.ComportamentoReconhecido);
+        Assert.False(prepared.BaselineComportamentalAplicado);
+        Assert.Equal(behaviorCode, prepared.CodigoComportamentoReconhecido);
+        Assert.Equal(classification, prepared.ClassificacaoComportamentoReconhecido);
+        Assert.NotNull(prepared.BaselineEfetivo);
+        Assert.Equal(BaselineDiagnosticKind.Global, prepared.BaselineEfetivo!.Kind);
+        Assert.True(prepared.BaselineEfetivo.Applied);
+        Assert.Null(prepared.BaselineEfetivo.BehaviorCode);
+        Assert.Null(prepared.BaselineEfetivo.BehaviorSnapshotVersion);
+
+        // O DetectorInput recebe o fallback global efetivamente selecionado,
+        // e não as estatísticas do snapshot reconhecido, porém não autorizado.
+        Assert.Equal(globalProfile.Media, prepared.EntradaDetector.MediaHistorica, precision: 6);
+        Assert.Equal(globalProfile.DesvioPadrao, prepared.EntradaDetector.DesvioPadraoHistorico, precision: 6);
+        Assert.Equal(globalProfile.VariacaoMinimaRelevante, prepared.EntradaDetector.VariacaoMinimaRelevante, precision: 6);
+        Assert.Equal(globalProfile.ConfiancaDeadband, prepared.EntradaDetector.ConfiancaVariacaoMinima, precision: 6);
+        Assert.NotEqual(snapshot.Media, prepared.EntradaDetector.MediaHistorica);
+
+        var run = await ExecutePredictionAsync(
+            fixture.Context,
+            behaviorHistory,
+            historySource,
+            behaviorProvider,
+            preparation);
+
+        Assert.NotNull(run.Response);
+        Assert.Equal(ClienteId, run.Response.ClienteId);
+        Assert.Equal(TagName, run.Response.TagName);
+        Assert.True(double.IsFinite(run.Response.Score));
+        Assert.NotNull(run.Response.Interpretacao);
+        Assert.Equal(globalProfile.Media, run.Response.Perfil.MediaHistorica, precision: 6);
+
+        Assert.NotNull(run.Diagnostic.Baseline);
+        Assert.Equal(BaselineDiagnosticKind.Global, run.Diagnostic.Baseline!.Kind);
+        Assert.True(run.Diagnostic.Baseline.Applied);
+        Assert.Equal(globalProfile.Media, run.Diagnostic.Baseline.Mean, precision: 6);
+        Assert.Equal(globalProfile.DesvioPadrao, run.Diagnostic.Baseline.StandardDeviation, precision: 6);
+        Assert.Equal(globalProfile.VariacaoMinimaRelevante, run.Diagnostic.Baseline.Deadband, precision: 6);
+        Assert.Equal(globalProfile.ConfiancaDeadband, run.Diagnostic.Baseline.DeadbandConfidence, precision: 6);
+        Assert.Null(run.Diagnostic.Baseline.BehaviorCode);
+        Assert.Null(run.Diagnostic.Baseline.BehaviorSnapshotVersion);
+        Assert.NotEqual(snapshot.Media, run.Diagnostic.Baseline.Mean);
+
+        AssertRealStatisticalDetectorsExecuted(run);
+
+        var persisted = await fixture.Context.AnomaliasDetectadas
+            .AsNoTracking()
+            .ToListAsync();
+
+        var operationalResult = Assert.Single(persisted);
+        Assert.Equal(ClienteId, operationalResult.ClienteId);
+        Assert.Equal(TagName, operationalResult.TagName);
+        Assert.Equal(run.Response.EhAnomalia, operationalResult.EhAnomalia);
+        Assert.Equal((double)run.Response.Score, operationalResult.Score, precision: 5);
+
         Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
     }
 
@@ -351,18 +471,20 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         await context.SaveChangesAsync();
     }
 
-    private static async Task<TagComportamentoSnapshotIa> SeedKnownNormalBehaviorAsync(
+    private static async Task<TagComportamentoSnapshotIa> SeedKnownBehaviorAsync(
         AppDbContext context,
-        IReadOnlyList<LeituraBruta> history)
+        IReadOnlyList<LeituraBruta> history,
+        string classification,
+        string behaviorCode)
     {
         var behavior = new TagComportamentoIa
         {
             ClienteId = ClienteId,
             TagName = TagName,
-            Codigo = "BEH-001",
+            Codigo = behaviorCode,
             Status = TagComportamentoIa.StatusKnown,
             Origem = TagComportamentoIa.OrigemAutomatic,
-            Classificacao = TagComportamentoIa.ClassificacaoNormal,
+            Classificacao = classification,
             PrimeiraObservacao = history[0].DataHora,
             UltimaObservacao = history[^1].DataHora,
             QuantidadeOcorrencias = 1,
