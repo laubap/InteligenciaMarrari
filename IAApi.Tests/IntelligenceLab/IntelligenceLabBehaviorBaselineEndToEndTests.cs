@@ -311,6 +311,12 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         {
             Assert.Equal(expectedFallbackSource, runtime.Source);
             Assert.Equal(runtime.LegacyAnomaly, runtime.FinalAnomaly);
+            Assert.Contains("LegacyPreserved", runtime.Reasons);
+            Assert.Contains(
+                mode == "disabled"
+                    ? "RuntimeDecisionDisabled"
+                    : "ClientNotEnabledForRuntimeDecision",
+                runtime.Reasons);
         }
         else
         {
@@ -318,14 +324,14 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             // o voto em um historico normal; isso nao e uma falha do runtime.
             Assert.NotEqual("LegacyFeatureDisabled", runtime.Source);
             Assert.NotEqual("LegacyCanaryExcluded", runtime.Source);
+            Assert.Contains("RuntimeFunctionalDecisionAccepted", runtime.Reasons);
         }
 
-        // Lacuna conhecida: o contrato permite Reasons, mas a captura atual
-        // pode omiti-las. Nao inventar motivos e nem alterar producao aqui.
-        if (runtime.Reasons.Count == 0)
-        {
-            Assert.Contains("RuntimeDecisionReasons", run.Diagnostic.Completeness.MissingSections);
-        }
+        // Prova integrada do fluxo resolver -> PredictionService -> captura.
+        // Os codigos acima sao fixos e classificados para telemetria segura.
+        Assert.DoesNotContain(
+            "RuntimeDecisionReasons",
+            run.Diagnostic.Completeness.MissingSections);
 
         AssertRealStatisticalDetectorsExecuted(run);
         AssertValidPersistedPrediction(run,
