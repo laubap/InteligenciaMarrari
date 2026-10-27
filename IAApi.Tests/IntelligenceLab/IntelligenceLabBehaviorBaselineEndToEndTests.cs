@@ -9,6 +9,7 @@ using IAApi.Services.AnomalyDetection.BehaviorProfiles.History;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Persistence;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
 using IAApi.Services.AnomalyDetection.Interpretation;
+using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Services.AnomalyDetection.Orchestration;
 using IAApi.Services.AnomalyDetection.Presentation;
 using IAApi.Services.AnomalyDetection.Runtime;
@@ -17,6 +18,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace IAApi.Tests.IntelligenceLab;
 
@@ -27,14 +30,17 @@ namespace IAApi.Tests.IntelligenceLab;
 ///
 /// Os seis cenários originais executam detectores estatísticos; o cenário
 /// adicional integra Isolation Forest com um modelo temporário de teste.
-/// A decisão funcional avançada e a multivariada não são habilitadas,
-/// e as opções hospedadas não são carregadas por esta fixture.
+/// O runtime funcional é testado em cenários dedicados. A multivariada
+/// é exercitada somente em shadow, sem promoção operacional; opções
+/// hospedadas não são carregadas por esta fixture.
 /// </summary>
 public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
 {
     private const string ClienteId = "IL-BASELINE";
     private const string TagName = "BOMBA.PRESSAO";
     private const string RegimeTagName = "BOMBA.REGIME";
+    private const string CompanionTagName = "BOMBA.VAZAO";
+    private const string MultivariateGroupName = "IL-BOMBA-PRESSAO-VAZAO";
 
     private static readonly DateTime ReadingTime =
         new(2026, 10, 26, 14, 0, 0, DateTimeKind.Utc);
@@ -738,6 +744,114 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         Assert.Equal(memoryBefore, await CaptureBehaviorMemoryAsync(fixture.Context));
     }
 
+    [Fact]
+    public async Task MultivariateShadow_RealPredictionsCloseVectorWithoutChangingLegacyDecision()
+    {
+        // O coordenador só finaliza o vetor do minuto T quando a primeira
+        // tag reaparece em T+1. Executar três previsões reais, sem invocar
+        // ProcessarLeituraAsync diretamente, comprova essa ligação.
+        var pressureHistory = CreateStableHistory(center: 100, count: 60);
+        var flowHistory = CreateStableHistory(center: 20, count: 60);
+
+        await using var fixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(fixture.Context);
+        await SeedMultivariateCompanionTagAsync(fixture.Context);
+
+        var historySource = new InMemoryHistorySource(
+            new HistorySourceEntry(ClienteId, TagName, pressureHistory),
+            new HistorySourceEntry(ClienteId, CompanionTagName, flowHistory));
+        var behaviorProvider = CreateBehaviorProvider(fixture.Context);
+        var preparation = CreatePreparationService(
+            fixture.Context, historySource, behaviorProvider);
+
+        using var modelFixture = new E2EMultivariateModelFixture();
+        var persistence = await modelFixture.CreatePersistenceWithModelAsync();
+        var recorder = new StructuredMultivariateLogger();
+        var state = new MultivariateRuntimeStateStore();
+        var coordinator = new MultivariateShadowRuntimeCoordinator(
+            new MultivariateGroupBufferService(
+                new GrupoAnaliseService(new StaticMultivariateGroupProvider()), state),
+            new MultivariateDetector(persistence),
+            recorder);
+
+        var atT = ReadingTime;
+        var atTPlusOne = ReadingTime.AddMinutes(1);
+        var pressureAtT = new AnomaliaRequest
+        {
+            ClienteId = ClienteId, TagName = TagName,
+            DataHora = atT, Valor = 100
+        };
+        var flowAtT = new AnomaliaRequest
+        {
+            ClienteId = ClienteId, TagName = CompanionTagName,
+            DataHora = atT, Valor = 20
+        };
+        var pressureAtTPlusOne = new AnomaliaRequest
+        {
+            ClienteId = ClienteId, TagName = TagName,
+            DataHora = atTPlusOne, Valor = 100
+        };
+
+        var first = await ExecutePredictionAsync(
+            fixture.Context, pressureHistory, historySource,
+            behaviorProvider, preparation,
+            multivariateCoordinator: coordinator,
+            requestOverride: pressureAtT);
+        var second = await ExecutePredictionAsync(
+            fixture.Context, flowHistory, historySource,
+            behaviorProvider, preparation,
+            multivariateCoordinator: coordinator,
+            requestOverride: flowAtT);
+
+        Assert.Empty(recorder.Results);
+        Assert.Equal(1, state.ObterQuantidadeBuffers());
+
+        var completed = await ExecutePredictionAsync(
+            fixture.Context, pressureHistory, historySource,
+            behaviorProvider, preparation,
+            multivariateCoordinator: coordinator,
+            requestOverride: pressureAtTPlusOne);
+
+        // Captura somente do logger estruturado do coordenador REAL.
+        // A seção Multivariate do Intelligence Lab ainda não é preenchida:
+        // os dados abaixo demonstram execução, não diagnóstico integrado.
+        var multivariate = Assert.Single(recorder.Results);
+        Assert.Equal(ClienteId, multivariate["ClienteId"]);
+        Assert.Equal(MultivariateGroupName, multivariate["GroupName"]);
+        Assert.Equal(
+            MultivariateShadowRuntimeCoordinator.CriarMinuteIndex(atT),
+            Convert.ToInt64(multivariate["MinuteIndex"]));
+        Assert.Equal(true, multivariate["Applicable"]);
+        Assert.Equal(2, Convert.ToInt32(multivariate["TagCount"]));
+        Assert.True(double.IsFinite(Convert.ToDouble(multivariate["Score"])));
+        Assert.True(double.IsFinite(Convert.ToDouble(multivariate["Threshold"])));
+        Assert.True(double.IsFinite(Convert.ToDouble(multivariate["MahalanobisSquared"])));
+        Assert.Contains("Multivariate", completed.Diagnostic.Completeness.MissingSections);
+        Assert.Empty(completed.Diagnostic.Multivariate);
+
+        // A observação shadow não pode modificar alerta nem score univariado.
+        // Roda o mesmo request, na mesma fixture, com o coordenador desligado.
+        var control = await ExecutePredictionAsync(
+            fixture.Context, pressureHistory, historySource,
+            behaviorProvider, preparation,
+            requestOverride: pressureAtTPlusOne);
+        Assert.Equal(control.Response.EhAnomalia, completed.Response.EhAnomalia);
+        Assert.Equal(control.Response.Score, completed.Response.Score, precision: 6);
+        Assert.Equal(control.Diagnostic.RuntimeDecision.Source,
+            completed.Diagnostic.RuntimeDecision.Source);
+        Assert.Equal(control.Diagnostic.Ensemble!.RegisteredDetectorCount,
+            completed.Diagnostic.Ensemble!.RegisteredDetectorCount);
+        AssertRealStatisticalDetectorsExecuted(first);
+        AssertRealStatisticalDetectorsExecuted(second);
+        AssertRealStatisticalDetectorsExecuted(completed);
+
+        var persisted = await fixture.Context.AnomaliasDetectadas
+            .AsNoTracking().ToListAsync();
+        Assert.Equal(4, persisted.Count);
+        Assert.Equal(3, persisted.Count(x => x.TagName == TagName));
+        Assert.Single(persisted, x => x.TagName == CompanionTagName);
+    }
+
     private static async Task<PredictionRun> ExecutePredictionAsync(
         AppDbContext context,
         IReadOnlyList<LeituraBruta> history,
@@ -745,7 +859,9 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         BehaviorRuntimeBaselineProvider? behaviorProvider = null,
         PredictionDetectionPreparationService? preparation = null,
         IAnomalyDetector? additionalDetector = null,
-        RuntimeAnomalyDecisionOptions? runtimeDecisionOptions = null)
+        RuntimeAnomalyDecisionOptions? runtimeDecisionOptions = null,
+        MultivariateShadowRuntimeCoordinator? multivariateCoordinator = null,
+        AnomaliaRequest? requestOverride = null)
     {
         historySource ??= new InMemoryHistorySource(history);
         behaviorProvider ??= CreateBehaviorProvider(context);
@@ -814,7 +930,7 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             finalization,
             decision,
             preparation,
-            multivariateShadowRuntimeCoordinator: null,
+            multivariateShadowRuntimeCoordinator: multivariateCoordinator,
             diagnosticCollector: new InMemoryDiagnosticCollector(buffer),
             diagnosticVersion: new DiagnosticVersionMetadata(
                 "intelligence-lab-2.2G.2",
@@ -823,7 +939,7 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
                 "production-defaults"),
             diagnosticHealth: buffer.Health);
 
-        var response = await service.Detectar(CreateRequest(history));
+        var response = await service.Detectar(requestOverride ?? CreateRequest(history));
         var diagnostic = Assert.Single(buffer.Snapshot());
 
         return new PredictionRun(response, diagnostic);
@@ -929,6 +1045,29 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             TipoRepresentacao = "continuous"
         });
 
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedMultivariateCompanionTagAsync(AppDbContext context)
+    {
+        context.TagsIaConfig.Add(new TagIaConfig
+        {
+            ClienteId = ClienteId, TagName = CompanionTagName, IaAtiva = true
+        });
+        context.PerfisIa.Add(new TagPerfilIa
+        {
+            ClienteId = ClienteId, TagName = CompanionTagName,
+            Media = 20, DesvioPadrao = 2,
+            VariacaoMinimaRelevante = 5, DeadbandSugerido = 5,
+            ConfiancaDeadband = 94,
+            VariacaoMinimaCalculadaAutomaticamente = true,
+            DataTreinamento = ReadingTime.AddDays(-1)
+        });
+        context.TagsContextoIa.Add(new TagContextoIa
+        {
+            ClienteId = ClienteId, TagName = CompanionTagName,
+            TipoRepresentacao = "continuous"
+        });
         await context.SaveChangesAsync();
     }
 
@@ -1332,6 +1471,95 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
         public string WebRootPath { get; set; } = root;
         public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    private sealed class StaticMultivariateGroupProvider : IGrupoAnaliseProvider
+    {
+        public Task<List<GrupoAnaliseDto>> CarregarGruposAsync(string clienteId) =>
+            Task.FromResult(new List<GrupoAnaliseDto>
+            {
+                new()
+                {
+                    Id = 1,
+                    Nome = MultivariateGroupName,
+                    MinimumAvailableTags = 2,
+                    MaxLagMinutes = 2,
+                    Tags = [TagName, CompanionTagName]
+                }
+            });
+    }
+
+    private sealed class E2EMultivariateModelFixture : IDisposable
+    {
+        private readonly string _root = Path.Combine(
+            Path.GetTempPath(), "IAApi-IntelligenceLab-MV-E2E",
+            Guid.NewGuid().ToString("N"));
+
+        public async Task<MultivariateModelPersistenceService>
+            CreatePersistenceWithModelAsync()
+        {
+            var persistence = new MultivariateModelPersistenceService(
+                new E2EIsolationForestEnvironment(_root));
+            var path = persistence.ObterCaminhoModelo(
+                ClienteId, MultivariateGroupName);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            var model = new MultivariateGroupModel
+            {
+                Version = 1,
+                ClienteId = ClienteId,
+                GroupName = MultivariateGroupName,
+                TrainedAtUtc = ReadingTime.AddDays(-1),
+                Algorithm = "Mahalanobis",
+                SampleCount = 100,
+                MinimumAvailableTags = 2,
+                MaxLagMinutes = 2,
+                Tags = [TagName, CompanionTagName],
+                Means = [100, 20],
+                StandardDeviations = [1, 1],
+                CovarianceMatrix = [[1, 0], [0, 1]],
+                CorrelationMatrix = [[1, 0], [0, 1]]
+            };
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(model));
+            persistence.InvalidarCache(ClienteId, MultivariateGroupName);
+            return persistence;
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_root))
+                Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private sealed class StructuredMultivariateLogger
+        : ILogger<MultivariateShadowRuntimeCoordinator>
+    {
+        public List<IReadOnlyDictionary<string, object?>> Results { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull =>
+            EmptyScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => logLevel == LogLevel.Information;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (!IsEnabled(logLevel) ||
+                state is not IEnumerable<KeyValuePair<string, object?>> properties)
+                return;
+
+            var data = properties
+                .Where(pair => pair.Key != "{OriginalFormat}")
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
+            Results.Add(data);
+        }
+
+        private sealed class EmptyScope : IDisposable
+        {
+            public static readonly EmptyScope Instance = new();
+            public void Dispose() { }
+        }
     }
 
     private sealed class ScenarioFixture : IAsyncDisposable
