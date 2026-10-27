@@ -339,6 +339,70 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
     }
 
     [Fact]
+    public async Task FrozenSensor_FunctionalDecisionPromotesRealLegacyNormalAndAuditsReasons()
+    {
+        // O sinal varia normalmente e passa a ficar exatamente congelado
+        // durante os minutos finais. Os valores continuam dentro do baseline:
+        // o evento de qualidade nao deve ser fabricado por um detector fake.
+        var history = CreateStableHistory(center: 100, count: 60);
+        for (var index = history.Length - 12; index < history.Length; index++)
+        {
+            history[index].Valor = 100f;
+        }
+
+        // Contrafactual: mesmos dados e detectores reais, runtime desligado.
+        await using var legacyFixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(legacyFixture.Context);
+        var legacyRun = await ExecutePredictionAsync(
+            legacyFixture.Context,
+            history,
+            runtimeDecisionOptions: new RuntimeAnomalyDecisionOptions { Enabled = false });
+
+        var legacy = Assert.IsType<RuntimeDecisionDiagnostic>(
+            legacyRun.Diagnostic.RuntimeDecision);
+        Assert.True(legacy.UsedLegacyFallback);
+        Assert.Equal(legacy.LegacyAnomaly, legacy.FinalAnomaly);
+        Assert.False(legacy.LegacyAnomaly);
+        Assert.False(legacyRun.Response.EhAnomalia);
+        AssertRealStatisticalDetectorsExecuted(legacyRun);
+        AssertValidPersistedPrediction(legacyRun,
+            await legacyFixture.Context.AnomaliasDetectadas.AsNoTracking().ToListAsync());
+
+        // Mesmo historico, nova fixture SQLite isolada e runtime autorizado.
+        await using var enabledFixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(enabledFixture.Context);
+        var enabledRun = await ExecutePredictionAsync(
+            enabledFixture.Context,
+            history,
+            runtimeDecisionOptions: new RuntimeAnomalyDecisionOptions
+            {
+                Enabled = true,
+                CanaryOnly = true,
+                AllowedClientIds = [ClienteId]
+            });
+
+        var runtime = Assert.IsType<RuntimeDecisionDiagnostic>(
+            enabledRun.Diagnostic.RuntimeDecision);
+        Assert.False(runtime.LegacyAnomaly);
+        Assert.True(runtime.FinalAnomaly);
+        Assert.False(runtime.UsedLegacyFallback);
+        Assert.Equal(RuntimeFunctionalDecisionSources.DataQualityUncertain, runtime.Source);
+        Assert.Contains("FrozenSensorDetected", runtime.Reasons);
+        Assert.Contains("IndependentDataQualityEvidence", runtime.Reasons);
+        Assert.Contains("RuntimeFunctionalDecisionAccepted", runtime.Reasons);
+        Assert.DoesNotContain("RuntimeDecisionReasons",
+            enabledRun.Diagnostic.Completeness.MissingSections);
+        Assert.True(enabledRun.Response.EhAnomalia);
+        AssertRealStatisticalDetectorsExecuted(enabledRun);
+        AssertValidPersistedPrediction(enabledRun,
+            await enabledFixture.Context.AnomaliasDetectadas.AsNoTracking().ToListAsync());
+
+        // O modelo de runtime nao pode transformar evidencia de congelamento
+        // em alteracao dos algoritmos Legacy: compara somente a sua decisao.
+        Assert.Equal(legacy.LegacyAnomaly, runtime.LegacyAnomaly);
+    }
+
+    [Fact]
     public Task KnownAbnormalBehavior_RecognizedButNotApplied_FallsBackToGlobalBaseline()
     {
         return AssertKnownNonNormalBehaviorFallsBackToGlobalBaselineAsync(
