@@ -31,8 +31,8 @@ namespace IAApi.Tests.IntelligenceLab;
 /// Os seis cenários originais executam detectores estatísticos; o cenário
 /// adicional integra Isolation Forest com um modelo temporário de teste.
 /// O runtime funcional é testado em cenários dedicados. A multivariada
-/// é exercitada somente em shadow, sem promoção operacional; opções
-/// hospedadas não são carregadas por esta fixture.
+/// é exercitada em shadow e em promoção estritamente isolada por fixture,
+/// sem carregar opções hospedadas nem habilitar clientes reais.
 /// </summary>
 public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
 {
@@ -869,6 +869,180 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         Assert.Single(persisted, x => x.TagName == CompanionTagName);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MultivariateOperationalPromotion_RealPredictionRespectsReadiness(
+        bool explicitlyApproved)
+    {
+        // A anomalia é calculada pelo Mahalanobis real: pressão permanece
+        // normal (100) e vazão desvia do modelo de 20 para 26. Não injetamos
+        // resultados multivariados nem forçamos a decisão do Ensemble.
+        var pressureHistory = CreateStableHistory(center: 100, count: 60);
+        var flowHistory = CreateStableHistory(center: 20, count: 60);
+
+        await using var fixture = await ScenarioFixture.CreateAsync();
+        await SeedPredictionRequirementsAsync(fixture.Context);
+        await SeedMultivariateCompanionTagAsync(fixture.Context);
+
+        var historySource = new InMemoryHistorySource(
+            new HistorySourceEntry(ClienteId, TagName, pressureHistory),
+            new HistorySourceEntry(ClienteId, CompanionTagName, flowHistory));
+        var behaviorProvider = CreateBehaviorProvider(fixture.Context);
+        var preparation = CreatePreparationService(
+            fixture.Context, historySource, behaviorProvider);
+
+        using var modelFixture = new E2EMultivariateModelFixture();
+        var persistence = await modelFixture.CreatePersistenceWithModelAsync();
+        var recorder = new StructuredMultivariateLogger();
+        var coordinator = new MultivariateShadowRuntimeCoordinator(
+            new MultivariateGroupBufferService(
+                new GrupoAnaliseService(new StaticMultivariateGroupProvider()),
+                new MultivariateRuntimeStateStore()),
+            new MultivariateDetector(persistence),
+            recorder);
+
+        var readinessOptions = new MultivariateOperationalReadinessOptions
+        {
+            RequireExplicitApproval = true,
+            MinimumTrainingSamples = 100,
+            // A fixture trabalha com uma data histórica fixa e o serviço
+            // operacional usa DateTime.UtcNow; janela larga só neste teste.
+            // Isto NÃO altera configurações ou critérios de produção.
+            MaxModelAgeDays = 3650,
+            ApprovedGroups = explicitlyApproved
+                ? [$"{ClienteId}::{MultivariateGroupName}"]
+                : []
+        };
+        var readinessService = new MultivariateOperationalReadinessService(
+            new StaticMultivariateGroupProvider(),
+            persistence,
+            new MultivariateOperationalReadinessEvaluator());
+
+        // Confirma que o bloqueio ou a autorização provém da regra real
+        // de readiness, antes de exercitar a previsão completa.
+        var readiness = await readinessService.AvaliarAsync(
+            ClienteId, MultivariateGroupName, readinessOptions,
+            nowUtc: ReadingTime);
+        Assert.Equal(explicitlyApproved, readiness.ReadyForOperationalAuthority);
+        if (explicitlyApproved)
+        {
+            Assert.Empty(readiness.Blockers);
+        }
+        else
+        {
+            Assert.Contains(
+                "GrupoNaoAprovadoParaAutoridadeOperacional",
+                readiness.Blockers);
+        }
+
+        var counterfactualObserver = new MultivariateDecisionCounterfactualObserver(
+            new MultivariateDecisionCounterfactualEvaluator(),
+            Options.Create(new MultivariateDecisionFusionOptions
+            {
+                Enabled = true, CanaryOnly = true,
+                AllowedClientIds = [ClienteId], MaxEvidenceAgeMinutes = 2
+            }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<
+                MultivariateDecisionCounterfactualObserver>.Instance);
+        var multivariateDecision = new PredictionMultivariateDecisionService(
+            counterfactualObserver,
+            new MultivariateOperationalFusionResolver(),
+            Options.Create(new MultivariateOperationalPromotionOptions
+            {
+                Enabled = true, CanaryOnly = true,
+                AllowedClientIds = [ClienteId], MaxEvidenceAgeMinutes = 2
+            }),
+            readinessService,
+            Options.Create(readinessOptions));
+
+        var atT = ReadingTime;
+        var pressureAtT = new AnomaliaRequest
+        {
+            ClienteId = ClienteId, TagName = TagName,
+            DataHora = atT, Valor = 100
+        };
+        var flowAtT = new AnomaliaRequest
+        {
+            ClienteId = ClienteId, TagName = CompanionTagName,
+            DataHora = atT, Valor = 26
+        };
+        var pressureAtTPlusOne = new AnomaliaRequest
+        {
+            ClienteId = ClienteId, TagName = TagName,
+            DataHora = atT.AddMinutes(1), Valor = 100
+        };
+
+        // Todos os passos usam PredictionService.Detectar, sem chamar
+        // diretamente o detector ou fabricar resultados de fusão.
+        await ExecutePredictionAsync(
+            fixture.Context, pressureHistory, historySource,
+            behaviorProvider, preparation,
+            multivariateCoordinator: coordinator,
+            multivariateDecisionService: multivariateDecision,
+            multivariateInterpretationEnabled: true,
+            requestOverride: pressureAtT);
+        await ExecutePredictionAsync(
+            fixture.Context, flowHistory, historySource,
+            behaviorProvider, preparation,
+            multivariateCoordinator: coordinator,
+            multivariateDecisionService: multivariateDecision,
+            multivariateInterpretationEnabled: true,
+            requestOverride: flowAtT);
+        var completed = await ExecutePredictionAsync(
+            fixture.Context, pressureHistory, historySource,
+            behaviorProvider, preparation,
+            multivariateCoordinator: coordinator,
+            multivariateDecisionService: multivariateDecision,
+            multivariateInterpretationEnabled: true,
+            requestOverride: pressureAtTPlusOne);
+
+        var detected = Assert.Single(recorder.Results);
+        Assert.Equal(true, detected["Applicable"]);
+        Assert.True(Convert.ToDouble(detected["Score"]) >=
+                    Convert.ToDouble(detected["Threshold"]));
+
+        var multivariateDiagnostic = Assert.Single(completed.Diagnostic.Multivariate);
+        Assert.True(multivariateDiagnostic.Applicable);
+        Assert.Equal(MultivariateGroupName, multivariateDiagnostic.GroupName);
+        Assert.NotNull(multivariateDiagnostic.NormalizedScore);
+        Assert.NotNull(multivariateDiagnostic.Threshold);
+        Assert.True(multivariateDiagnostic.NormalizedScore.Value >=
+                    multivariateDiagnostic.Threshold.Value);
+        Assert.Equal(1, multivariateDiagnostic.AgeMinutes);
+
+        // Sem multivariada, a mesma leitura não produz alerta Legacy.
+        var control = await ExecutePredictionAsync(
+            fixture.Context, pressureHistory, historySource,
+            behaviorProvider, preparation,
+            requestOverride: pressureAtTPlusOne);
+        Assert.False(control.Response.EhAnomalia);
+        Assert.Equal(control.Response.Score, completed.Response.Score, precision: 6);
+
+        // A autorização de rollout não basta: readiness é o último gate.
+        Assert.Equal(explicitlyApproved, completed.Response.EhAnomalia);
+        Assert.Equal(
+            explicitlyApproved ? "MultivariateNewAnomaly" :
+                control.Diagnostic.RuntimeDecision.Source,
+            completed.Diagnostic.RuntimeDecision.Source);
+
+        var persisted = await fixture.Context.AnomaliasDetectadas
+            .AsNoTracking().ToListAsync();
+        Assert.Equal(4, persisted.Count);
+        Assert.Equal(
+            explicitlyApproved ? 1 : 0,
+            persisted.Count(x => x.TagName == TagName && x.EhAnomalia));
+        Assert.Contains(persisted, item =>
+            item.TagName == TagName &&
+            item.EhAnomalia == completed.Response.EhAnomalia &&
+            Math.Abs(item.Score - completed.Response.Score) < 0.00001);
+        AssertRealStatisticalDetectorsExecuted(completed);
+
+        // Lacuna intencional: o bloqueio detalhado de readiness é hoje
+        // obtido do serviço/log, não de uma seção própria do diagnóstico.
+        // Não confundir shadow anômalo com alerta operacional emitido.
+    }
+
     private static async Task<PredictionRun> ExecutePredictionAsync(
         AppDbContext context,
         IReadOnlyList<LeituraBruta> history,
@@ -878,7 +1052,9 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         IAnomalyDetector? additionalDetector = null,
         RuntimeAnomalyDecisionOptions? runtimeDecisionOptions = null,
         MultivariateShadowRuntimeCoordinator? multivariateCoordinator = null,
-        AnomaliaRequest? requestOverride = null)
+        AnomaliaRequest? requestOverride = null,
+        PredictionMultivariateDecisionService? multivariateDecisionService = null,
+        bool multivariateInterpretationEnabled = false)
     {
         historySource ??= new InMemoryHistorySource(history);
         behaviorProvider ??= CreateBehaviorProvider(context);
@@ -915,7 +1091,8 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             ensemble,
             interpretation,
             runtimeContext,
-            runtimeDecision);
+            runtimeDecision,
+            multivariateDecisionService);
 
         // O contrato atual depende da classe concreta BridgeValorAtualService,
         // sem interface nem método virtual para um fake. A fronteira é segura
@@ -932,7 +1109,10 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             new PredictionTrendAnalysisService(
                 new TendenciaRiscoService(context),
                 new TendenciaValorService(historySource)),
-            new FeedbackAnomaliaAnaliseService(context));
+            new FeedbackAnomaliaAnaliseService(context),
+            multivariateInterpretationEnabled
+                ? new MultivariateOperationalInterpretationFactory()
+                : null);
 
         var finalization = new PredictionFinalizationService(
             new AnomaliaHistoricoService(context),
