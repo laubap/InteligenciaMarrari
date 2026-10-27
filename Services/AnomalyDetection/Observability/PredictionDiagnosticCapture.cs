@@ -2,6 +2,7 @@ using IAApi.Infrastructure.Observability;
 using IAApi.IntelligenceLab.Observability;
 using IAApi.IntelligenceLab.Observability.Application;
 using IAApi.Services.AnomalyDetection.Runtime;
+using IAApi.Services.AnomalyDetection.Multivariate;
 
 namespace IAApi.Services.AnomalyDetection.Observability;
 
@@ -69,7 +70,8 @@ public static class PredictionDiagnosticCapture
         RuntimeAnomalyDecision runtimeDecision,
         TimeSpan elapsed,
         DateTimeOffset receivedAtUtc,
-        IntelligenceLabHealthMetrics? health = null)
+        IntelligenceLabHealthMetrics? health = null,
+        IReadOnlyList<MultivariateDetectionResult>? multivariateShadowResults = null)
     {
         if (collector is null || version is null)
         {
@@ -100,7 +102,6 @@ public static class PredictionDiagnosticCapture
                 "HistoryQuality",
                 "DetectorThresholdsAndCalculationReferences",
                 "RuntimeFunctionalContext",
-                "Multivariate",
                 "HttpCorrelationAndRunId",
                 "StageObservations"
             };
@@ -113,6 +114,8 @@ public static class PredictionDiagnosticCapture
             var detectors = CaptureDetectors(ensembleResult, missingSections);
             var ensemble = CaptureEnsemble(ensembleResult, missingSections);
             var safeReasons = CaptureRuntimeReasons(runtimeDecision.Reasons, missingSections);
+            var multivariate = CaptureMultivariateShadow(
+                multivariateShadowResults, request.ClienteId, readingTimestamp, missingSections);
             var runtime = new RuntimeDecisionDiagnostic(
                 runtimeDecision.LegacyFinalAnomaly,
                 runtimeDecision.EmitAnomaly,
@@ -138,6 +141,7 @@ public static class PredictionDiagnosticCapture
                 detectors: detectors,
                 ensemble: ensemble,
                 runtimeDecision: runtime,
+                multivariate: multivariate,
                 completedAtUtc: DateTimeOffset.UtcNow);
 
             collector.Begin(context, version).Complete(diagnostic);
@@ -154,6 +158,67 @@ public static class PredictionDiagnosticCapture
                 // Ate uma falha na instrumentacao de saude permanece fail-open.
             }
         }
+    }
+
+    /// <summary>
+    /// Captura somente os resultados SHADOW finalizados nesta leitura. O vetor
+    /// pode pertencer a um minuto anterior (buffer multivariado).
+    /// Nao interpreta estes resultados como promocao operacional e nunca
+    /// copia explicacoes arbitrarias do modelo para a telemetria.
+    /// Null significa que o coordenador nao estava ligado; lista vazia
+    /// significa que ele participou, mas nao finalizou nenhum vetor.
+    /// </summary>
+    private static IReadOnlyList<MultivariateDiagnostic> CaptureMultivariateShadow(
+        IReadOnlyList<MultivariateDetectionResult>? results,
+        string clienteId,
+        DateTime readingTimestamp,
+        List<string> missingSections)
+    {
+        if (results is null)
+        {
+            missingSections.Add("Multivariate");
+            return [];
+        }
+
+        var captured = new List<MultivariateDiagnostic>(results.Count);
+        var currentMinute =
+            MultivariateShadowRuntimeCoordinator.CriarMinuteIndex(readingTimestamp);
+
+        foreach (var result in results)
+        {
+            try
+            {
+                var age = currentMinute - result.MinuteIndex;
+                if (result.ClienteId != clienteId ||
+                    age < 0 || age > int.MaxValue)
+                {
+                    throw new ArgumentException("Invalid shadow observation.");
+                }
+
+                captured.Add(new MultivariateDiagnostic(
+                    result.GroupName,
+                    result.Aplicavel,
+                    result.EhAnomalia,
+                    result.Aplicavel ? result.ScoreNormalizado : null,
+                    result.Aplicavel ? result.LimiteScore : null,
+                    result.Aplicavel ? result.MahalanobisSquared : null,
+                    result.MinuteIndex,
+                    (int)age,
+                    result.TagsUtilizadas,
+                    reason: null)); // Explicacao pode conter detalhes dinamicos/sensiveis.
+            }
+            catch (Exception)
+            {
+                // Uma observacao invalida nao impede a leitura operacional.
+                // Tampouco e apresentada como resultado normal ou ausente.
+                if (!missingSections.Contains("Multivariate"))
+                {
+                    missingSections.Add("Multivariate");
+                }
+            }
+        }
+
+        return captured;
     }
 
     private static IReadOnlyList<string> CaptureRuntimeReasons(

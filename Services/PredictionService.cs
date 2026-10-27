@@ -270,7 +270,10 @@ var decisionOrchestration =
                 runtimeDecision,
                 diagnosticTimer.Elapsed,
                 diagnosticReceivedAtUtc!.Value,
-                _diagnosticHealth);
+                _diagnosticHealth,
+                multivariateShadowResults: _multivariateShadowRuntimeCoordinator is null
+                    ? null
+                    : multivariateShadowResults);
         }
 
         return response;

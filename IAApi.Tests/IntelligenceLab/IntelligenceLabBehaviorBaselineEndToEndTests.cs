@@ -812,9 +812,8 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             multivariateCoordinator: coordinator,
             requestOverride: pressureAtTPlusOne);
 
-        // Captura somente do logger estruturado do coordenador REAL.
-        // A seção Multivariate do Intelligence Lab ainda não é preenchida:
-        // os dados abaixo demonstram execução, não diagnóstico integrado.
+        // O logger prova a execucao no coordenador real; o diagnostico
+        // abaixo prova a propagacao de resultados, sem alteracao operacional.
         var multivariate = Assert.Single(recorder.Results);
         Assert.Equal(ClienteId, multivariate["ClienteId"]);
         Assert.Equal(MultivariateGroupName, multivariate["GroupName"]);
@@ -826,8 +825,26 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
         Assert.True(double.IsFinite(Convert.ToDouble(multivariate["Score"])));
         Assert.True(double.IsFinite(Convert.ToDouble(multivariate["Threshold"])));
         Assert.True(double.IsFinite(Convert.ToDouble(multivariate["MahalanobisSquared"])));
-        Assert.Contains("Multivariate", completed.Diagnostic.Completeness.MissingSections);
-        Assert.Empty(completed.Diagnostic.Multivariate);
+        // O vetor finalizado aparece no diagnostico da leitura que o fechou.
+        var captured = Assert.Single(completed.Diagnostic.Multivariate);
+        Assert.DoesNotContain("Multivariate", completed.Diagnostic.Completeness.MissingSections);
+        Assert.Equal(MultivariateGroupName, captured.GroupName);
+        Assert.True(captured.Applicable);
+        Assert.Equal(MultivariateShadowRuntimeCoordinator.CriarMinuteIndex(atT), captured.MinuteIndex);
+        Assert.Equal(1, captured.AgeMinutes);
+        Assert.Equal(new[] { TagName, CompanionTagName }.OrderBy(x => x),
+            captured.Tags.OrderBy(x => x));
+        Assert.NotNull(captured.NormalizedScore);
+        Assert.NotNull(captured.Threshold);
+        Assert.NotNull(captured.MahalanobisSquared);
+        Assert.True(double.IsFinite(captured.NormalizedScore.Value));
+        Assert.True(double.IsFinite(captured.Threshold.Value));
+        Assert.True(double.IsFinite(captured.MahalanobisSquared.Value));
+        Assert.Null(captured.Reason);
+        Assert.Empty(first.Diagnostic.Multivariate);
+        Assert.Empty(second.Diagnostic.Multivariate);
+        Assert.DoesNotContain("Multivariate", first.Diagnostic.Completeness.MissingSections);
+        Assert.DoesNotContain("Multivariate", second.Diagnostic.Completeness.MissingSections);
 
         // A observação shadow não pode modificar alerta nem score univariado.
         // Roda o mesmo request, na mesma fixture, com o coordenador desligado.

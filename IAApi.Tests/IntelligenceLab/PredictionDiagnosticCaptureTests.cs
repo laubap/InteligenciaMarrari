@@ -4,6 +4,7 @@ using IAApi.IntelligenceLab.Observability.Application;
 using IAApi.Services.AnomalyDetection;
 using IAApi.Services.AnomalyDetection.Observability;
 using IAApi.Services.AnomalyDetection.Runtime;
+using IAApi.Services.AnomalyDetection.Multivariate;
 using Xunit;
 
 namespace IAApi.Tests.IntelligenceLab;
@@ -189,6 +190,104 @@ public sealed class PredictionDiagnosticCaptureTests
         var diagnostic = Assert.Single(buffer.Snapshot());
         Assert.Empty(diagnostic.Detectors);
         Assert.Contains("Detectors", diagnostic.Completeness.MissingSections);
+    }
+
+    [Fact]
+    public void ShadowResults_AreCapturedWithCausalAgeWithoutLeakingExplanation()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var minute = MultivariateShadowRuntimeCoordinator.CriarMinuteIndex(ReadingTime);
+        var shadow = new MultivariateDetectionResult
+        {
+            Aplicavel = true,
+            EhAnomalia = true,
+            ClienteId = request.ClienteId,
+            GroupName = "TEST-GROUP",
+            MinuteIndex = minute - 1,
+            ScoreNormalizado = 82,
+            LimiteScore = 70,
+            MahalanobisSquared = 9.5,
+            TagsUtilizadas = ["BOMBA_VAZAO", "BOMBA_PRESSAO"],
+            Explicacao = "Sensitive private diagnostic"
+        };
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(),
+            request, ReadingTime, null, detector, decision,
+            TimeSpan.Zero, DateTimeOffset.UtcNow,
+            multivariateShadowResults: [shadow]);
+
+        var diagnostic = Assert.Single(buffer.Snapshot());
+        var item = Assert.Single(diagnostic.Multivariate);
+        Assert.True(item.Applicable);
+        Assert.True(item.Anomaly);
+        Assert.NotNull(item.NormalizedScore);
+        Assert.NotNull(item.Threshold);
+        Assert.NotNull(item.MahalanobisSquared);
+        Assert.Equal(82d, item.NormalizedScore.Value, precision: 6);
+        Assert.Equal(70d, item.Threshold.Value, precision: 6);
+        Assert.Equal(9.5d, item.MahalanobisSquared.Value, precision: 6);
+        Assert.Equal(1, item.AgeMinutes);
+        Assert.Equal("TEST-GROUP", item.GroupName);
+        Assert.Null(item.Reason);
+        Assert.DoesNotContain("Multivariate", diagnostic.Completeness.MissingSections);
+        Assert.True(decision.EmitAnomaly); // Telemetria nao interfere na decisao.
+    }
+
+    [Fact]
+    public void MissingShadowCoordinator_IsDistinctFromNoFinalizedVector()
+    {
+        var (request, detector, decision) = Arrange();
+        var missingBuffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var emptyBuffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var version = Version();
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(missingBuffer), version,
+            request, ReadingTime, null, detector, decision,
+            TimeSpan.Zero, DateTimeOffset.UtcNow);
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(emptyBuffer), version,
+            request, ReadingTime, null, detector, decision,
+            TimeSpan.Zero, DateTimeOffset.UtcNow,
+            multivariateShadowResults: []);
+
+        var missing = Assert.Single(missingBuffer.Snapshot());
+        var empty = Assert.Single(emptyBuffer.Snapshot());
+        Assert.Contains("Multivariate", missing.Completeness.MissingSections);
+        Assert.DoesNotContain("Multivariate", empty.Completeness.MissingSections);
+        Assert.Empty(missing.Multivariate);
+        Assert.Empty(empty.Multivariate);
+    }
+
+    [Fact]
+    public void FutureOrInvalidMultivariateEvidence_IsMarkedMissingWithoutAbortingCapture()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var futureMinute = MultivariateShadowRuntimeCoordinator.CriarMinuteIndex(ReadingTime) + 1;
+        var invalid = new MultivariateDetectionResult
+        {
+            Aplicavel = true,
+            ClienteId = request.ClienteId,
+            GroupName = "TEST-GROUP",
+            MinuteIndex = futureMinute,
+            ScoreNormalizado = double.NaN,
+            LimiteScore = 70,
+            MahalanobisSquared = 1
+        };
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(),
+            request, ReadingTime, null, detector, decision,
+            TimeSpan.Zero, DateTimeOffset.UtcNow,
+            multivariateShadowResults: [invalid]);
+
+        var diagnostic = Assert.Single(buffer.Snapshot());
+        Assert.Empty(diagnostic.Multivariate);
+        Assert.Contains("Multivariate", diagnostic.Completeness.MissingSections);
+        Assert.True(diagnostic.RuntimeDecision!.FinalAnomaly);
     }
 
     private static DiagnosticVersionMetadata Version() =>
