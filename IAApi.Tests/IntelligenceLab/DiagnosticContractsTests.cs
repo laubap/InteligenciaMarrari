@@ -1,3 +1,4 @@
+using System.Text.Json;
 using IAApi.IntelligenceLab.Observability;
 
 namespace IAApi.Tests.IntelligenceLab;
@@ -89,6 +90,39 @@ public sealed class DiagnosticContractsTests
 
         Assert.Equal(3.25, ensemble.OriginalScore);
         Assert.Equal(65, ensemble.NormalizedScore);
+    }
+
+    [Fact]
+    public void DetectorAggregationDiagnostic_SerializesAndDeserializesReasonCodes()
+    {
+        var source = new DetectorAggregationDiagnostic(
+            detector: "Z-Score",
+            family: null,
+            registered: true,
+            executed: true,
+            applicable: false,
+            votedAnomaly: false,
+            normalizedScore: null,
+            configuredWeight: 0.15,
+            effectiveWeight: 0,
+            participatedInAggregation: false,
+            weightedNumeratorContribution: 0,
+            executionCompleted: true,
+            executionReasonCode: DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            nonApplicabilityReasonCode:
+                DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable,
+            aggregationExclusionReasonCode: null);
+
+        var json = JsonSerializer.Serialize(source);
+        var restored = JsonSerializer.Deserialize<DetectorAggregationDiagnostic>(json);
+
+        Assert.Contains("ExecutionReasonCode", json);
+        Assert.NotNull(restored);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            restored!.ExecutionReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable,
+            restored.NonApplicabilityReasonCode);
+        Assert.Null(restored.AggregationExclusionReasonCode);
     }
 
     [Fact]

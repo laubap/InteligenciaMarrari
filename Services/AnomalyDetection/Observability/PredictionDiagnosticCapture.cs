@@ -370,7 +370,10 @@ string? family = null;
                     effectiveWeight: detail.EffectiveWeight,
                     participatedInAggregation: detail.ParticipatedInAggregation,
                     weightedNumeratorContribution: detail.WeightedNumeratorContribution,
-                    executionCompleted: detail.ExecutionCompleted));
+                    executionCompleted: detail.ExecutionCompleted,
+                    executionReasonCode: detail.ExecutionReasonCode,
+                    nonApplicabilityReasonCode: detail.NonApplicabilityReasonCode,
+                    aggregationExclusionReasonCode: detail.AggregationExclusionReasonCode));
             }
 
             return contributions;

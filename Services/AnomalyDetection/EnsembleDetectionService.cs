@@ -96,6 +96,15 @@ public class EnsembleDetectionService
         var executionCompleted =
             new bool?[_detectores.Length];
 
+        var executionReasonCodes =
+            new string?[_detectores.Length];
+
+        var nonApplicabilityReasonCodes =
+            new string?[_detectores.Length];
+
+        var aggregationExclusionReasonCodes =
+            new string?[_detectores.Length];
+
         var configuredWeights =
             new double[_detectores.Length];
 
@@ -137,6 +146,10 @@ public class EnsembleDetectionService
 
                 invocationAttempted[index] = false;
                 executionCompleted[index] = false;
+                executionReasonCodes[index] =
+                    DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy;
+                nonApplicabilityReasonCodes[index] =
+                    DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy;
 
                 todosResultados[index] =
                     resultado;
@@ -154,11 +167,19 @@ public class EnsembleDetectionService
                     detector.Detectar(input);
 
                 executionCompleted[index] = true;
+                executionReasonCodes[index] =
+                    DetectorDiagnosticReasonCodes.InvokedAndCompleted;
 
                 statusExecucao[index] =
                     resultado.Aplicavel
                         ? DetectorDiagnosticStatus.Executed
                         : DetectorDiagnosticStatus.NotApplicable;
+
+                if (!resultado.Aplicavel)
+                {
+                    nonApplicabilityReasonCodes[index] =
+                        DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable;
+                }
             }
             catch (Exception ex)
             {
@@ -166,6 +187,8 @@ public class EnsembleDetectionService
 
                 invocationAttempted[index] = true;
                 executionCompleted[index] = false;
+                executionReasonCodes[index] =
+                    DetectorDiagnosticReasonCodes.ExecutionFailed;
 
                 statusExecucao[index] =
                     DetectorDiagnosticStatus.Failed;
@@ -266,6 +289,17 @@ public class EnsembleDetectionService
                 participatingResults = new HashSet<DetectorResult>(included);
                 aggregationPolicy = "WeightedMeanExcludeConfirmedMadTemporalConfirmation";
 
+                for (var index = 0; index < todosResultados.Length; index++)
+                {
+                    if (todosResultados[index].Aplicavel &&
+                        !participatingResults.Contains(todosResultados[index]))
+                    {
+                        aggregationExclusionReasonCodes[index] =
+                            DetectorDiagnosticReasonCodes
+                                .ExcludedByExperimentalTemporalConfirmationPolicy;
+                    }
+                }
+
                 quantidadeAplicaveis = included.Length;
                 quantidadeAlertas = included.Count(x => x.EhAnomalia);
                 somaPesos = included.Sum(x => x.Peso);
@@ -283,6 +317,9 @@ public class EnsembleDetectionService
                 statusExecucao,
                 invocationAttempted,
                 executionCompleted,
+                executionReasonCodes,
+                nonApplicabilityReasonCodes,
+                aggregationExclusionReasonCodes,
                 configuredWeights,
                 participatingResults);
 
@@ -658,6 +695,9 @@ public class EnsembleDetectionService
             IReadOnlyList<DetectorDiagnosticStatus> statusExecucao,
             IReadOnlyList<bool?> invocationAttempted,
             IReadOnlyList<bool?> executionCompleted,
+            IReadOnlyList<string?> executionReasonCodes,
+            IReadOnlyList<string?> nonApplicabilityReasonCodes,
+            IReadOnlyList<string?> aggregationExclusionReasonCodes,
             IReadOnlyList<double> configuredWeights,
             IReadOnlySet<DetectorResult> participatingResults)
     {
@@ -722,6 +762,15 @@ public class EnsembleDetectionService
 
                     ExecutionCompleted =
                         executionCompleted[index],
+
+                    ExecutionReasonCode =
+                        executionReasonCodes[index],
+
+                    NonApplicabilityReasonCode =
+                        nonApplicabilityReasonCodes[index],
+
+                    AggregationExclusionReasonCode =
+                        aggregationExclusionReasonCodes[index],
 
                     AggregationParticipationKnown = true,
 

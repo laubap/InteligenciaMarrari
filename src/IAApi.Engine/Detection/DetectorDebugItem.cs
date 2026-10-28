@@ -56,6 +56,15 @@ public class DetectorDebugItem
     [System.Text.Json.Serialization.JsonIgnore]
     public bool? ExecutionCompleted { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ExecutionReasonCode { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? NonApplicabilityReasonCode { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? AggregationExclusionReasonCode { get; set; }
+
     /// <summary>
     /// Diferencia telemetria M3.1 de detalhes legados sem contribuição conhecida.
     /// </summary>

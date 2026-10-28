@@ -57,6 +57,10 @@ public class EnsembleDetectionServiceTests
         var detail = Assert.Single(resultado.DetalhesDetectores);
         Assert.Equal(DetectorDiagnosticStatus.Executed, detail.ExecutionStatus);
         Assert.False(detail.VotouAnomalia);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            detail.ExecutionReasonCode);
+        Assert.Null(detail.NonApplicabilityReasonCode);
+        Assert.Null(detail.AggregationExclusionReasonCode);
         Assert.Equal(true, detail.ParticipatedInAggregation);
         Assert.Equal(2d, detail.EffectiveWeight!.Value);
         Assert.Equal(0d, detail.WeightedNumeratorContribution!.Value);
@@ -106,6 +110,9 @@ public class EnsembleDetectionServiceTests
             resultado.AggregationPolicy);
         var excluded = resultado.DetalhesDetectores.Single(item => item.Nome == "Persistência");
         Assert.Equal(false, excluded.ParticipatedInAggregation);
+        Assert.Equal(
+            DetectorDiagnosticReasonCodes.ExcludedByExperimentalTemporalConfirmationPolicy,
+            excluded.AggregationExclusionReasonCode);
         Assert.Equal(0d, excluded.EffectiveWeight!.Value);
         Assert.Equal(0d, excluded.WeightedNumeratorContribution!.Value);
     }
@@ -166,6 +173,10 @@ public class EnsembleDetectionServiceTests
             resultado.DetalhesDetectores[1].ExecutionStatus);
         Assert.Equal(true, resultado.DetalhesDetectores[1].InvocationAttempted);
         Assert.Equal(true, resultado.DetalhesDetectores[1].ExecutionCompleted);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            resultado.DetalhesDetectores[1].ExecutionReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable,
+            resultado.DetalhesDetectores[1].NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -191,6 +202,9 @@ public class EnsembleDetectionServiceTests
         Assert.Equal(
             DetectorDiagnosticStatus.Failed,
             resultado.DetalhesDetectores[0].ExecutionStatus);
+        Assert.Equal(DetectorDiagnosticReasonCodes.ExecutionFailed,
+            resultado.DetalhesDetectores[0].ExecutionReasonCode);
+        Assert.Null(resultado.DetalhesDetectores[0].NonApplicabilityReasonCode);
         Assert.Contains(
             "Erro simulado",
             resultado.DetalhesDetectores[0].Explicacao);
@@ -216,6 +230,21 @@ public class EnsembleDetectionServiceTests
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.ScoreNormalizado);
         Assert.Equal(0, resultado.Metricas["quantidadeDetectoresAplicaveis"]);
+        Assert.Equal(0, resultado.Metricas["quantidadeAlertas"]);
+        Assert.Equal("NoApplicableDetectors", resultado.AggregationPolicy);
+
+        var detalhe = Assert.Single(resultado.DetalhesDetectores);
+        Assert.True(detalhe.InvocationAttempted);
+        Assert.True(detalhe.ExecutionCompleted);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            detalhe.ExecutionReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable,
+            detalhe.NonApplicabilityReasonCode);
+        Assert.Null(detalhe.AggregationExclusionReasonCode);
+        Assert.True(detalhe.AggregationParticipationKnown);
+        Assert.Equal(false, detalhe.ParticipatedInAggregation);
+        Assert.Equal(0d, detalhe.EffectiveWeight!.Value);
+        Assert.Equal(0d, detalhe.WeightedNumeratorContribution!.Value);
     }
 
     [Fact]
@@ -290,6 +319,10 @@ public class EnsembleDetectionServiceTests
             detalhe.ExecutionStatus);
         Assert.Equal(false, detalhe.InvocationAttempted);
         Assert.Equal(false, detalhe.ExecutionCompleted);
+        Assert.Equal(DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy,
+            detalhe.ExecutionReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy,
+            detalhe.NonApplicabilityReasonCode);
     }
 
     [Fact]

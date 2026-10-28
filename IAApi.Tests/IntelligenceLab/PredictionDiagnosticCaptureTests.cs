@@ -73,6 +73,9 @@ public sealed class PredictionDiagnosticCaptureTests
             contribution.WeightedNumeratorContribution.Value / ensemble.ApplicableWeightSum,
             precision: 6);
         Assert.Equal("WeightedMeanAllApplicable", ensemble.AggregationPolicy);
+        Assert.Null(contribution.ExecutionReasonCode);
+        Assert.Null(contribution.NonApplicabilityReasonCode);
+        Assert.Null(contribution.AggregationExclusionReasonCode);
     }
 
     [Fact]
@@ -100,6 +103,9 @@ public sealed class PredictionDiagnosticCaptureTests
         detail.ExecutionStatus = DetectorDiagnosticStatus.NotApplicable;
         detail.InvocationAttempted = true;
         detail.ExecutionCompleted = true;
+        detail.ExecutionReasonCode = DetectorDiagnosticReasonCodes.InvokedAndCompleted;
+        detail.NonApplicabilityReasonCode =
+            DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable;
         detail.Aplicavel = false;
         detail.VotouAnomalia = false;
         detail.AggregationParticipationKnown = true;
@@ -117,6 +123,11 @@ public sealed class PredictionDiagnosticCaptureTests
         Assert.Equal(true, contribution.ExecutionCompleted);
         Assert.False(contribution.Applicable);
         Assert.Null(contribution.NormalizedScore);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            contribution.ExecutionReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable,
+            contribution.NonApplicabilityReasonCode);
+        Assert.Null(contribution.AggregationExclusionReasonCode);
     }
 
     [Fact]
@@ -128,6 +139,9 @@ public sealed class PredictionDiagnosticCaptureTests
         detail.ExecutionStatus = DetectorDiagnosticStatus.NotApplicable;
         detail.InvocationAttempted = false;
         detail.ExecutionCompleted = false;
+        detail.ExecutionReasonCode = DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy;
+        detail.NonApplicabilityReasonCode =
+            DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy;
         detail.Aplicavel = false;
         detail.VotouAnomalia = false;
         detail.AggregationParticipationKnown = true;
@@ -145,6 +159,10 @@ public sealed class PredictionDiagnosticCaptureTests
         Assert.Equal(false, contribution.ExecutionCompleted);
         Assert.False(contribution.Applicable);
         Assert.Null(contribution.NormalizedScore);
+        Assert.Equal(DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy,
+            contribution.ExecutionReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy,
+            contribution.NonApplicabilityReasonCode);
     }
 
     [Fact]

@@ -11,6 +11,20 @@ public enum DetectorDiagnosticStatus
 }
 
 /// <summary>
+/// Códigos estáveis para fatos observados pelo Ensemble. A ausência do código
+/// representa motivo desconhecido, e não uma causa inferida.
+/// </summary>
+public static class DetectorDiagnosticReasonCodes
+{
+    public const string BlockedByApplicabilityPolicy = "BlockedByApplicabilityPolicy";
+    public const string InvokedAndCompleted = "InvokedAndCompleted";
+    public const string ExecutionFailed = "ExecutionFailed";
+    public const string DetectorReturnedNotApplicable = "DetectorReturnedNotApplicable";
+    public const string ExcludedByExperimentalTemporalConfirmationPolicy =
+        "ExcludedByExperimentalTemporalConfirmationPolicy";
+}
+
+/// <summary>
 /// Escala do limite de um detector. Unknown preserva o significado de
 /// contratos legados, sem presumir que um threshold seja normalizado.
 /// </summary>
@@ -265,7 +279,10 @@ public sealed record DetectorAggregationDiagnostic
         double? effectiveWeight,
         bool? participatedInAggregation,
         double? weightedNumeratorContribution,
-        bool? executionCompleted = null)
+        bool? executionCompleted = null,
+        string? executionReasonCode = null,
+        string? nonApplicabilityReasonCode = null,
+        string? aggregationExclusionReasonCode = null)
     {
         Detector = DiagnosticContractGuard.Required(detector, nameof(detector));
         DiagnosticContractGuard.OptionalFinite(normalizedScore, nameof(normalizedScore));
@@ -315,6 +332,9 @@ public sealed record DetectorAggregationDiagnostic
         ParticipatedInAggregation = participatedInAggregation;
         WeightedNumeratorContribution = weightedNumeratorContribution;
         ExecutionCompleted = executionCompleted;
+        ExecutionReasonCode = NormalizeOptionalCode(executionReasonCode);
+        NonApplicabilityReasonCode = NormalizeOptionalCode(nonApplicabilityReasonCode);
+        AggregationExclusionReasonCode = NormalizeOptionalCode(aggregationExclusionReasonCode);
     }
 
     public string Detector { get; }
@@ -330,6 +350,12 @@ public sealed record DetectorAggregationDiagnostic
     public bool? ParticipatedInAggregation { get; }
     public double? WeightedNumeratorContribution { get; }
     public bool? ExecutionCompleted { get; }
+    public string? ExecutionReasonCode { get; }
+    public string? NonApplicabilityReasonCode { get; }
+    public string? AggregationExclusionReasonCode { get; }
+
+    private static string? NormalizeOptionalCode(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
 public sealed record EnsembleDiagnostic

@@ -142,7 +142,9 @@ public sealed class ReplayDiagnosticJsonlExporterTests
             "Z-Score", "StatisticalEvidence", registered: true, executed: true,
             applicable: true, votedAnomaly: true, normalizedScore: 80,
             configuredWeight: 0.2, effectiveWeight: 0.2,
-            participatedInAggregation: true, weightedNumeratorContribution: 16);
+            participatedInAggregation: true, weightedNumeratorContribution: 16,
+            executionCompleted: true,
+            executionReasonCode: DetectorDiagnosticReasonCodes.InvokedAndCompleted);
         var ensemble = new EnsembleDiagnostic(
             applicable: true, legacyAnomaly: true, originalScore: 4,
             normalizedScore: 80, threshold: 60, registeredDetectorCount: 1,
@@ -162,6 +164,9 @@ public sealed class ReplayDiagnosticJsonlExporterTests
                 .GetProperty("aggregationPolicy").GetString());
             Assert.Equal(16, Assert.Single(exported.GetProperty("contributions")
                 .EnumerateArray()).GetProperty("weightedNumeratorContribution").GetDouble());
+            Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+                Assert.Single(exported.GetProperty("contributions").EnumerateArray())
+                    .GetProperty("executionReasonCode").GetString());
         }
         finally
         {
