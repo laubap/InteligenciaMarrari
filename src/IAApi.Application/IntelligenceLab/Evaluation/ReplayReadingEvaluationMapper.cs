@@ -35,6 +35,7 @@ public static class ReplayReadingEvaluationMapper
 
         var result = new AiReadingEvaluationResult[predictions.Count];
         DateTimeOffset? previous = null;
+        var diagnosticIds = new HashSet<Guid>();
         for (var i = 0; i < predictions.Count; i++)
         {
             var prediction = predictions[i] ??
@@ -46,6 +47,9 @@ public static class ReplayReadingEvaluationMapper
                     nameof(predictions));
             if (prediction.DiagnosticId == Guid.Empty)
                 throw new ArgumentException("Toda leitura do replay precisa ter DiagnosticId.",
+                    nameof(predictions));
+            if (!diagnosticIds.Add(prediction.DiagnosticId))
+                throw new ArgumentException("DiagnosticId duplicado no replay.",
                     nameof(predictions));
             if (string.IsNullOrWhiteSpace(prediction.DecisionSource))
                 throw new ArgumentException("Fonte da decisao nao pode ser vazia.", nameof(predictions));

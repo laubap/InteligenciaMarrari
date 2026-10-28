@@ -58,6 +58,11 @@ public sealed class ReplayReadingEvaluationMapperTests
         Assert.Throws<ArgumentException>(() => ReplayReadingEvaluationMapper.Map(
             "run-1", "pump-stop", "SIM-IL-001", "P101.FLOW",
             [new ReplayObservedPrediction(Start, true, double.NaN, id, "Legacy")]));
+
+        Assert.Throws<ArgumentException>(() => ReplayReadingEvaluationMapper.Map(
+            "run-1", "pump-stop", "SIM-IL-001", "P101.FLOW",
+            [new ReplayObservedPrediction(Start, true, 10, id, "Legacy"),
+             new ReplayObservedPrediction(Start.AddMinutes(1), false, 10, id, "Legacy")]));
     }
 
     [Fact]
