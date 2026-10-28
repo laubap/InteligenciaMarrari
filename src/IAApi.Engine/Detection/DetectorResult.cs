@@ -28,6 +28,13 @@ public class DetectorResult
 
     public Dictionary<string, double> Metricas { get; set; } = new();
 
+    /// <summary>
+    /// Causa interna estruturada para um retorno não aplicável. Permanece
+    /// fora do contrato HTTP e é propagada apenas pelo diagnóstico offline.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? NonApplicabilityReasonCode { get; set; }
+
     [System.Text.Json.Serialization.JsonIgnore]
     public DetectorEvidenceRole EvidenceRole { get; set; } =
         DetectorEvidenceRole.StatisticalEvidence;

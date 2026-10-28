@@ -145,11 +145,19 @@ public sealed class ReplayDiagnosticJsonlExporterTests
             participatedInAggregation: true, weightedNumeratorContribution: 16,
             executionCompleted: true,
             executionReasonCode: DetectorDiagnosticReasonCodes.InvokedAndCompleted);
+        var nonApplicable = new DetectorAggregationDiagnostic(
+            "Mediana e MAD", family: null, registered: true, executed: true,
+            applicable: false, votedAnomaly: false, normalizedScore: null,
+            configuredWeight: 0.2, effectiveWeight: 0,
+            participatedInAggregation: false, weightedNumeratorContribution: 0,
+            executionCompleted: true,
+            executionReasonCode: DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            nonApplicabilityReasonCode: DetectorDiagnosticReasonCodes.InsufficientHistory);
         var ensemble = new EnsembleDiagnostic(
             applicable: true, legacyAnomaly: true, originalScore: 4,
-            normalizedScore: 80, threshold: 60, registeredDetectorCount: 1,
+            normalizedScore: 80, threshold: 60, registeredDetectorCount: 2,
             applicableDetectorCount: 1, alertCount: 1, applicableWeightSum: 0.2,
-            contributions: [aggregation], aggregationPolicy: "WeightedMeanAllApplicable");
+            contributions: [aggregation, nonApplicable], aggregationPolicy: "WeightedMeanAllApplicable");
         var diagnostic = Diagnostic(id, timestamp, ensemble: ensemble);
         var path = Path.Combine(Path.GetTempPath(), $"diagnostics-m3-{Guid.NewGuid():N}.jsonl");
 
@@ -162,11 +170,14 @@ public sealed class ReplayDiagnosticJsonlExporterTests
             var exported = json.RootElement.GetProperty("diagnostic").GetProperty("ensemble");
             Assert.Equal("WeightedMeanAllApplicable", exported
                 .GetProperty("aggregationPolicy").GetString());
-            Assert.Equal(16, Assert.Single(exported.GetProperty("contributions")
-                .EnumerateArray()).GetProperty("weightedNumeratorContribution").GetDouble());
+            Assert.Equal(16, exported.GetProperty("contributions")
+                .EnumerateArray().First().GetProperty("weightedNumeratorContribution").GetDouble());
             Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
-                Assert.Single(exported.GetProperty("contributions").EnumerateArray())
+                exported.GetProperty("contributions").EnumerateArray().First()
                     .GetProperty("executionReasonCode").GetString());
+            Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+                exported.GetProperty("contributions").EnumerateArray().Skip(1).Single()
+                    .GetProperty("nonApplicabilityReasonCode").GetString());
         }
         finally
         {

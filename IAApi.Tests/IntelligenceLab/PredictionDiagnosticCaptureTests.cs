@@ -105,7 +105,7 @@ public sealed class PredictionDiagnosticCaptureTests
         detail.ExecutionCompleted = true;
         detail.ExecutionReasonCode = DetectorDiagnosticReasonCodes.InvokedAndCompleted;
         detail.NonApplicabilityReasonCode =
-            DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable;
+            DetectorDiagnosticReasonCodes.InsufficientHistory;
         detail.Aplicavel = false;
         detail.VotouAnomalia = false;
         detail.AggregationParticipationKnown = true;
@@ -125,7 +125,7 @@ public sealed class PredictionDiagnosticCaptureTests
         Assert.Null(contribution.NormalizedScore);
         Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
             contribution.ExecutionReasonCode);
-        Assert.Equal(DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable,
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
             contribution.NonApplicabilityReasonCode);
         Assert.Null(contribution.AggregationExclusionReasonCode);
     }

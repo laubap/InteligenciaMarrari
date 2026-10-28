@@ -1,4 +1,6 @@
 
+using System.Text.Json;
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection;
 using Xunit;
 
@@ -58,6 +60,37 @@ public class StatisticalDetectorTests
         Assert.Equal(1, resultado.Metricas["dentroDeadband"]);
         Assert.True(
             resultado.Metricas["zScoreAntesDeadband"] > 0);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_EscalaEfetivaInvalida_RegistraMotivoSemAlterarResultadoNaoAplicavel()
+    {
+        var detector = new StatisticalDetector(new AnomalyDetectionOptions());
+        var input = CriarInput(valorAtual: 100);
+        input.MediaHistorica = double.NaN;
+
+        var resultado = detector.Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.False(resultado.EhAnomalia);
+        Assert.Equal(0, resultado.Score);
+        Assert.Equal(0, resultado.ScoreNormalizado);
+        Assert.Equal(DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void DetectorResult_MotivoInternoNaoEExpostoNoJsonPublico()
+    {
+        var json = JsonSerializer.Serialize(new DetectorResult
+        {
+            NonApplicabilityReasonCode =
+                DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable
+        });
+
+        Assert.DoesNotContain("NonApplicabilityReasonCode", json);
+        Assert.DoesNotContain("nonApplicabilityReasonCode", json);
     }
 
     [Fact]

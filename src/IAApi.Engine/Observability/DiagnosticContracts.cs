@@ -20,6 +20,8 @@ public static class DetectorDiagnosticReasonCodes
     public const string InvokedAndCompleted = "InvokedAndCompleted";
     public const string ExecutionFailed = "ExecutionFailed";
     public const string DetectorReturnedNotApplicable = "DetectorReturnedNotApplicable";
+    public const string InsufficientHistory = "InsufficientHistory";
+    public const string EffectiveScaleUnavailable = "EffectiveScaleUnavailable";
     public const string ExcludedByExperimentalTemporalConfirmationPolicy =
         "ExcludedByExperimentalTemporalConfirmationPolicy";
 }

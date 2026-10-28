@@ -178,6 +178,7 @@ public class EnsembleDetectionService
                 if (!resultado.Aplicavel)
                 {
                     nonApplicabilityReasonCodes[index] =
+                        resultado.NonApplicabilityReasonCode ??
                         DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable;
                 }
             }

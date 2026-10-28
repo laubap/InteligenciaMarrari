@@ -1,4 +1,5 @@
 
+using IAApi.IntelligenceLab.Observability;
 
 namespace IAApi.Services.AnomalyDetection;
 
@@ -48,7 +49,8 @@ public class StatisticalDetector : IAnomalyDetector
                 escalaEfetiva))
         {
             return NaoAplicavel(
-                "Não foi possível determinar uma escala estatística segura.");
+                "Não foi possível determinar uma escala estatística segura.",
+                DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable);
         }
 
         var deltaAbsoluto =
@@ -183,7 +185,8 @@ public class StatisticalDetector : IAnomalyDetector
     }
 
     private DetectorResult NaoAplicavel(
-        string explicacao)
+        string explicacao,
+        string? nonApplicabilityReasonCode = null)
     {
         return new DetectorResult
         {
@@ -193,7 +196,8 @@ public class StatisticalDetector : IAnomalyDetector
             ScoreNormalizado = 0,
             Detector = Nome,
             Peso = Peso,
-            Explicacao = explicacao
+            Explicacao = explicacao,
+            NonApplicabilityReasonCode = nonApplicabilityReasonCode
         };
     }
 }

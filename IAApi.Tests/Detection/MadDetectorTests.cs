@@ -1,4 +1,5 @@
 
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection;
 using Xunit;
 
@@ -20,6 +21,8 @@ public class MadDetectorTests
         Assert.False(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Score);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -34,6 +37,7 @@ public class MadDetectorTests
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Score);
         Assert.Equal("Mediana e MAD", resultado.Detector);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -113,6 +117,24 @@ public class MadDetectorTests
             precision: 10);
 
         Assert.Equal(7.0, resultado.Score, precision: 10);
+    }
+
+    [Fact]
+    public void Detectar_EscalaEfetivaInvalida_RegistraMotivoSemAlterarResultadoNaoAplicavel()
+    {
+        var detector = CriarDetector();
+        var input = CriarInput(
+            Enumerable.Repeat(double.MaxValue, 10).ToArray(),
+            valorAtual: double.MaxValue);
+
+        var resultado = detector.Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.False(resultado.EhAnomalia);
+        Assert.Equal(0, resultado.Score);
+        Assert.Equal(0, resultado.ScoreNormalizado);
+        Assert.Equal(DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable,
+            resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]

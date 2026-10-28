@@ -1,3 +1,5 @@
+using IAApi.IntelligenceLab.Observability;
+
 namespace IAApi.Services.AnomalyDetection;
 
 public class MadDetector : IAnomalyDetector
@@ -29,7 +31,8 @@ public class MadDetector : IAnomalyDetector
         if (contexto.Valores.Length < 10)
         {
             return NaoAplicavel(
-                "Histórico insuficiente para calcular MAD.");
+                "Histórico insuficiente para calcular MAD.",
+                DetectorDiagnosticReasonCodes.InsufficientHistory);
         }
 
         var mediana =
@@ -65,7 +68,8 @@ public class MadDetector : IAnomalyDetector
                 escalaEfetiva))
         {
             return NaoAplicavel(
-                "Não foi possível determinar uma escala robusta segura.");
+                "Não foi possível determinar uma escala robusta segura.",
+                DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable);
         }
 
         var deltaAbsoluto =
@@ -197,7 +201,8 @@ public class MadDetector : IAnomalyDetector
     }
 
     private DetectorResult NaoAplicavel(
-        string explicacao)
+        string explicacao,
+        string? nonApplicabilityReasonCode = null)
     {
         return new DetectorResult
         {
@@ -207,7 +212,8 @@ public class MadDetector : IAnomalyDetector
             ScoreNormalizado = 0,
             Detector = Nome,
             Peso = Peso,
-            Explicacao = explicacao
+            Explicacao = explicacao,
+            NonApplicabilityReasonCode = nonApplicabilityReasonCode
         };
     }
 }

@@ -180,6 +180,37 @@ public class EnsembleDetectionServiceTests
     }
 
     [Fact]
+    public void Detectar_PreservaMotivoInternoEUsaFallbackParaDetectorLegado()
+    {
+        var instrumentado = new MadDetector(new AnomalyDetectionOptions());
+        var legado = new FakeDetector("Legado", 1, _ => new DetectorResult
+        {
+            Detector = "Legado", Aplicavel = false, Peso = 1
+        });
+        var input = CriarInput(tipoTag: "analogica");
+        input.Historico = Enumerable.Range(0, 9)
+            .Select(index => new HistoricoDetectorPoint
+            {
+                DataHora = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc)
+                    .AddMinutes(index),
+                Valor = 100 + index * 0.1
+            })
+            .ToArray();
+        input.DataHoraAtual = input.Historico[^1].DataHora.AddMinutes(1);
+
+        var resultado = CriarEnsemble(instrumentado, legado).Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            resultado.DetalhesDetectores[0].NonApplicabilityReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.DetectorReturnedNotApplicable,
+            resultado.DetalhesDetectores[1].NonApplicabilityReasonCode);
+        Assert.All(resultado.DetalhesDetectores, detail =>
+            Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+                detail.ExecutionReasonCode));
+    }
+
+    [Fact]
     public void Detectar_DetectorComExcecao_DeveContinuarAgregacao()
     {
         var detectorComErro = new FakeDetector(
@@ -322,6 +353,10 @@ public class EnsembleDetectionServiceTests
         Assert.Equal(DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy,
             detalhe.ExecutionReasonCode);
         Assert.Equal(DetectorDiagnosticReasonCodes.BlockedByApplicabilityPolicy,
+            detalhe.NonApplicabilityReasonCode);
+        Assert.NotEqual(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            detalhe.NonApplicabilityReasonCode);
+        Assert.NotEqual(DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable,
             detalhe.NonApplicabilityReasonCode);
     }
 
