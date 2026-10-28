@@ -82,7 +82,10 @@ public sealed class ReplayLabeledEvaluationRunnerTests
             runId = RunId, scenarioId = Scenario, testClientId = Client,
             datasetLabeled = false, effectivenessEvaluated = false,
             decisionEquivalenceVerified = true, replayContentSha256 = Sha,
-            executionIdentityComplete = false, readings
+            executionIdentityComplete = false,
+            runManifestSchemaVersion = ReplayRunManifest.SchemaVersion,
+            runManifestFileName = "intelligence-lab-run-manifest.json",
+            readings
         }, JsonOptions);
     }
 

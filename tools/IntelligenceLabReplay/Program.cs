@@ -38,9 +38,15 @@ internal static class IntelligenceLabReplay
 
         try
         {
-            var training = LoadReadings(args[0]);
-            var evaluation = LoadReadings(args[1]);
-            var count = args.Length == 4 ? int.Parse(args[3], CultureInfo.InvariantCulture) : evaluation.Count;
+            var executionStartedAtUtc = DateTimeOffset.UtcNow;
+            var trainingInput = await LoadReadingsAsync(args[0]);
+            var evaluationInput = await LoadReadingsAsync(args[1]);
+            var training = trainingInput.Readings;
+            var evaluation = evaluationInput.Readings;
+            int? requestedEvaluationLimit = args.Length == 4
+                ? int.Parse(args[3], CultureInfo.InvariantCulture)
+                : null;
+            var count = requestedEvaluationLimit ?? evaluation.Count;
             count = Math.Min(count, evaluation.Count);
             evaluation = evaluation.Take(count).ToList();
 
@@ -113,6 +119,7 @@ internal static class IntelligenceLabReplay
 
             var folder = Path.GetFullPath(args[2]);
             Directory.CreateDirectory(folder);
+            var manifestFile = ReplayRunManifest.PrepareOutputManifestPath(folder);
             var file = Path.Combine(folder, "intelligence-lab-replay-report.json");
             var report = new
             {
@@ -140,12 +147,14 @@ internal static class IntelligenceLabReplay
                     r.DetectoresJson
                 })
             };
+            var artifacts = new List<ReplayManifestArtifact>();
             // Exportacao de evidencias e leituras observadas, sem gabarito industrial.
             if (diagnosticEntries is not null && evaluationReadings is not null &&
                 contentHash is not null && replayRunId is not null)
             {
                 var diagnosticsFile = Path.Combine(folder, "intelligence-lab-replay-diagnostics.jsonl");
                 await ReplayDiagnosticJsonlExporter.WriteAsync(diagnosticsFile, diagnosticEntries);
+                artifacts.Add(await DescribeArtifactAsync(diagnosticsFile));
                 var exportFile = Path.Combine(folder, "intelligence-lab-replay-evaluation-readings.json");
                 var exported = new
                 {
@@ -159,6 +168,8 @@ internal static class IntelligenceLabReplay
                     DecisionEquivalenceVerified = true,
                     ReplayContentSha256 = contentHash,
                     ExecutionIdentityComplete = false,
+                    RunManifestSchemaVersion = ReplayRunManifest.SchemaVersion,
+                    RunManifestFileName = "intelligence-lab-run-manifest.json",
                     DetectorSet = "Statistical,MAD,EWMA,RateOfChange,Persistence,LevelShift",
                     Limitations = "Sem rotulos independentes, commit/configuracao/modelos completos, IF ou multivariada. " +
                                   "Nao calcular TP/FP/FN a partir deste arquivo isoladamente.",
@@ -170,6 +181,7 @@ internal static class IntelligenceLabReplay
                         WriteIndented = true,
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                     }), Encoding.UTF8);
+                artifacts.Add(await DescribeArtifactAsync(exportFile));
                 Console.WriteLine($"Diagnosticos completos: {diagnosticsFile}");
                 Console.WriteLine($"Leituras para avaliacao (sem gabarito): {exportFile}");
             }
@@ -179,6 +191,28 @@ internal static class IntelligenceLabReplay
             // deixa um relatorio novo alegando integridade validada.
             await File.WriteAllTextAsync(file, JsonSerializer.Serialize(report,
                 new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8);
+            artifacts.Add(await DescribeArtifactAsync(file));
+
+            // O manifesto e publicado por ultimo: ele so pode declarar os hashes
+            // de artefatos que ja foram gravados com sucesso, e nunca inclui hash proprio.
+            if (diagnosticEntries is not null && evaluationReadings is not null &&
+                replayRunId is not null)
+            {
+                var manifest = ReplayRunManifest.Create(new ReplayRunManifestRequest(
+                    replayRunId,
+                    executionStartedAtUtc,
+                    DateTimeOffset.UtcNow,
+                    trainingInput.ManifestInput,
+                    evaluationInput.ManifestInput,
+                    ReadGitMetadata(),
+                    CreateManifestConfiguration(training.Count, evaluation.Count, requestedEvaluationLimit),
+                    CreateManifestContracts(),
+                    CreateManifestResources(),
+                    artifacts,
+                    ExportsCompleted: true));
+                await WriteManifestAtomicallyAsync(manifestFile, ReplayRunManifest.Serialize(manifest));
+                Console.WriteLine($"Manifesto reproduzivel: {manifestFile}");
+            }
 
             Console.WriteLine($"Comparacao: {differences.Count} divergencias em {evaluation.Count} leituras.");
             Console.WriteLine($"Anomalias: {on.AnomalyCount}; capturas: {on.StoredTotal}; perdas: {on.EvictedTotal}; falhas: {on.CaptureFailures}.");
@@ -192,9 +226,17 @@ internal static class IntelligenceLabReplay
         }
     }
 
-    private static List<LeituraBruta> LoadReadings(string path)
+    private static async Task<ReplayInput> LoadReadingsAsync(string path)
     {
-        using var json = JsonDocument.Parse(File.ReadAllText(path, Encoding.UTF8));
+        var readStartedAtUtc = DateTimeOffset.UtcNow;
+        var bytes = await File.ReadAllBytesAsync(path);
+        var readCompletedAtUtc = DateTimeOffset.UtcNow;
+        // File.ReadAllText removia BOM UTF-8; manter essa compatibilidade sem
+        // alterar o hash, que sempre representa todos os bytes lidos do arquivo.
+        var jsonOffset = bytes.AsSpan().StartsWith(Encoding.UTF8.Preamble)
+            ? Encoding.UTF8.Preamble.Length
+            : 0;
+        using var json = JsonDocument.Parse(bytes.AsMemory(jsonOffset));
         if (json.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException($"Arquivo nao contem array JSON: {path}");
 
@@ -224,8 +266,127 @@ internal static class IntelligenceLabReplay
         for (var i = 1; i < readings.Count; i++)
             if (readings[i].DataHora <= readings[i - 1].DataHora)
                 throw new InvalidDataException($"Horarios repetidos no arquivo: {path}");
-        return readings;
+        return new ReplayInput(readings, new ReplayManifestInput(
+            Path.GetFileName(path),
+            ReplayRunManifest.Sha256Hex(bytes),
+            bytes.LongLength,
+            readStartedAtUtc,
+            readCompletedAtUtc,
+            ManifestVerificationStatus.Verified));
     }
+
+    private static async Task<ReplayManifestArtifact> DescribeArtifactAsync(string path)
+    {
+        var bytes = await File.ReadAllBytesAsync(path);
+        return new ReplayManifestArtifact(Path.GetFileName(path),
+            ReplayRunManifest.Sha256Hex(bytes), bytes.LongLength,
+            ManifestVerificationStatus.Verified);
+    }
+
+    private static async Task WriteManifestAtomicallyAsync(string path, string contents)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath) ??
+            throw new InvalidOperationException("Manifesto sem diretorio valido.");
+        var temporaryPath = Path.Combine(directory,
+            $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await File.WriteAllTextAsync(temporaryPath, contents, Encoding.UTF8);
+            File.Move(temporaryPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
+    }
+
+    private static ReplayManifestConfiguration CreateManifestConfiguration(
+        int trainingReadingCount, int evaluationReadingCount, int? requestedEvaluationLimit)
+    {
+        var options = new AnomalyDetectionOptions();
+        var settings = new SortedDictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["ensembleThreshold"] = options.EnsembleThreshold,
+            ["minHistoryPoints"] = options.MinHistoryPoints,
+            ["zScoreWeight"] = options.ZScoreWeight,
+            ["madWeight"] = options.MadWeight,
+            ["ewmaWeight"] = options.EwmaWeight,
+            ["rateOfChangeWeight"] = options.RateOfChangeWeight,
+            ["persistenceWeight"] = options.PersistenceWeight,
+            ["levelShiftWeight"] = options.LevelShiftWeight,
+            ["zScoreThreshold"] = options.ZScoreThreshold,
+            ["madThreshold"] = options.MadThreshold,
+            ["ewmaLambda"] = options.EwmaLambda,
+            ["ewmaSigmaLimit"] = options.EwmaSigmaLimit,
+            ["rateOfChangeThreshold"] = options.RateOfChangeThreshold,
+            ["persistenceMinimumPoints"] = options.PersistenceMinimumPoints,
+            ["persistenceMinimumMinutes"] = options.PersistenceMinimumMinutes,
+            ["experimentalPersistenceTemporalConfirmationEnabled"] = options.ExperimentalPersistenceTemporalConfirmationEnabled,
+            ["levelShiftPreviousWindow"] = options.LevelShiftPreviousWindow,
+            ["levelShiftRecentWindow"] = options.LevelShiftRecentWindow,
+            ["levelShiftThreshold"] = options.LevelShiftThreshold,
+            ["levelShiftMinimumConsistency"] = options.LevelShiftMinimumConsistency,
+            ["runtimeFunctionalDecisionEnabled"] = false,
+            ["runtimeFunctionalDecisionCanaryOnly"] = false,
+            ["runtimeFunctionalDecisionAllowedClientCount"] = 0,
+            ["diagnosticCaptureComparedOffAndOn"] = true,
+            ["diagnosticVersionConfiguration"] = "unlabeled-historical-replay",
+            ["tagRepresentation"] = "continuous",
+            ["storage"] = "SQLiteInMemory",
+            ["sourceTimestampAssumption"] = "UTC-03:00",
+            ["replayHistoryMaximumReadings"] = 1440,
+            ["maxInputReadings"] = MaxReadings,
+            ["trainingReadingsProcessed"] = trainingReadingCount,
+            ["evaluationReadingsProcessed"] = evaluationReadingCount,
+            ["evaluationLimitArgument"] = requestedEvaluationLimit?.ToString(CultureInfo.InvariantCulture) ?? "NotSpecified"
+        };
+        const string mode = "OfflineIsolatedHistoricalReplay";
+        string[] enabledDetectors = ["Statistical", "MAD", "EWMA", "RateOfChange", "Persistence", "LevelShift"];
+        string[] disabledResources = ["IsolationForest", "Multivariate", "BehaviorMemory", "LLM", "RuntimeFunctionalDecision"];
+        return new ReplayManifestConfiguration(
+            mode,
+            enabledDetectors,
+            disabledResources,
+            settings,
+            ReplayRunManifest.CreateConfigurationFingerprint(mode, enabledDetectors,
+                disabledResources, settings),
+            ManifestVerificationStatus.Verified);
+    }
+
+    private static IReadOnlyList<ReplayManifestContract> CreateManifestContracts() =>
+    [
+        new("ReplayReadingsExport", "industrial-replay-readings-export/v1", ManifestVerificationStatus.Verified, "Produced"),
+        new("ReplayDiagnosticsExport", ReplayDiagnosticJsonlExporter.SchemaVersion, ManifestVerificationStatus.Verified, "Produced"),
+        new("RunManifest", ReplayRunManifest.SchemaVersion, ManifestVerificationStatus.Verified, "Produced"),
+        new("OfflineEvaluationPolicy", "industrial-alert-matching/v1", ManifestVerificationStatus.Unknown, "NotExecutedWithoutIndependentLabels")
+    ];
+
+    private static IReadOnlyList<ReplayManifestResource> CreateManifestResources() =>
+    [
+        new("StatisticalDetectors", ManifestResourceExecutionStatus.Executed, ManifestVerificationStatus.Verified,
+            "Six in-process detectors instantiated from effective settings; no external model artifact loaded."),
+        new("TagProfile", ManifestResourceExecutionStatus.Executed, ManifestVerificationStatus.Verified,
+            "Trained in memory from the training input during this execution; no persisted model artifact loaded."),
+        new("IsolationForest", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
+            "Explicitly not instantiated by this replay."),
+        new("Multivariate", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
+            "Explicitly not instantiated by this replay."),
+        new("BehaviorMemory", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
+            "No behavior-memory provider is configured."),
+        new("LLM", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
+            "Replay interpretation is local and does not invoke an LLM."),
+        new("RuntimeFunctionalDecision", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
+            "Runtime feature flag is false; legacy decision path is preserved.")
+    ];
+
+    private static ReplayManifestGit ReadGitMetadata()
+        => ReplayGitMetadataResolver.Read([
+            Directory.GetCurrentDirectory(),
+            AppContext.BaseDirectory,
+            typeof(IntelligenceLabReplay).Assembly.Location
+        ]);
 
     private static async Task<ReplayRun> ExecuteAsync(
         List<LeituraBruta> training, List<LeituraBruta> evaluation, bool capture)
@@ -342,6 +503,9 @@ internal static class IntelligenceLabReplay
         int DiagnosticCount, long CaptureAttempts, long StoredTotal,
         long CaptureFailures, long EvictedTotal,
         IReadOnlyList<IntelligenceLabReadingDiagnostic> Diagnostics);
+
+    private sealed record ReplayInput(List<LeituraBruta> Readings,
+        ReplayManifestInput ManifestInput);
 
     private sealed record ReplayRecord(
         DateTime DataHora, float Valor, double Score, bool EhAnomalia,
