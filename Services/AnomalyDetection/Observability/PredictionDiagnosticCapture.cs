@@ -317,6 +317,7 @@ public static class PredictionDiagnosticCapture
                 return null;
             }
 
+            var contributions = CaptureAggregationContributions(result, missingSections);
             return new EnsembleDiagnostic(
                 result.Aplicavel,
                 result.EhAnomalia,
@@ -326,11 +327,57 @@ public static class PredictionDiagnosticCapture
                 registered,
                 applicable,
                 alerts,
-                weightSum);
+                weightSum,
+                contributions,
+                result.AggregationPolicy);
         }
         catch (Exception)
         {
             missingSections.Add("Ensemble");
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<DetectorAggregationDiagnostic>? CaptureAggregationContributions(
+        DetectorResult result,
+        List<string> missingSections)
+    {
+        if (result.DetalhesDetectores is null ||
+            result.DetalhesDetectores.Any(detail => !detail.AggregationParticipationKnown))
+        {
+            missingSections.Add("EnsembleAggregation");
+            return null;
+        }
+
+        try
+        {
+            var contributions = new List<DetectorAggregationDiagnostic>(
+                result.DetalhesDetectores.Count);
+            foreach (var detail in result.DetalhesDetectores)
+            {
+                var executed = detail.InvocationAttempted;
+string? family = null;
+                contributions.Add(new DetectorAggregationDiagnostic(
+                    detector: detail.Nome,
+                    family: family,
+                    registered: true,
+                    executed: executed,
+                    applicable: detail.Aplicavel,
+                    votedAnomaly: executed == true && detail.VotouAnomalia,
+                    normalizedScore: detail.ExecutionCompleted == true && detail.Aplicavel
+                        ? detail.ScoreNormalizado : null,
+                    configuredWeight: detail.ConfiguredWeight,
+                    effectiveWeight: detail.EffectiveWeight,
+                    participatedInAggregation: detail.ParticipatedInAggregation,
+                    weightedNumeratorContribution: detail.WeightedNumeratorContribution,
+                    executionCompleted: detail.ExecutionCompleted));
+            }
+
+            return contributions;
+        }
+        catch (Exception)
+        {
+            missingSections.Add("EnsembleAggregation");
             return null;
         }
     }

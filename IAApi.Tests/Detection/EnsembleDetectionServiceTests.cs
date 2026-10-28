@@ -26,6 +26,91 @@ public class EnsembleDetectionServiceTests
     }
 
     [Fact]
+    public void Detectar_RegistraContribuicoesReaisQueReconstroemScoreDoEnsemble()
+    {
+        var resultado = CriarEnsemble(
+            CriarDetector("A", 100, 3),
+            CriarDetector("B", 0, 1)).Detectar(CriarInput());
+
+        Assert.All(resultado.DetalhesDetectores, item =>
+        {
+            Assert.True(item.AggregationParticipationKnown);
+            Assert.Equal(true, item.ParticipatedInAggregation);
+        });
+        Assert.Equal(300d, resultado.DetalhesDetectores[0].WeightedNumeratorContribution!.Value);
+        Assert.Equal(0d, resultado.DetalhesDetectores[1].WeightedNumeratorContribution!.Value);
+        Assert.Equal(3d, resultado.DetalhesDetectores[0].ConfiguredWeight!.Value);
+        Assert.Equal(3d, resultado.DetalhesDetectores[0].EffectiveWeight!.Value);
+        var numerator = resultado.DetalhesDetectores.Sum(item =>
+            item.WeightedNumeratorContribution!.Value);
+        var weights = resultado.DetalhesDetectores.Sum(item => item.EffectiveWeight!.Value);
+        Assert.Equal(resultado.ScoreNormalizado, numerator / weights, precision: 10);
+        Assert.Equal("WeightedMeanAllApplicable", resultado.AggregationPolicy);
+    }
+
+    [Fact]
+    public void Detectar_DetectorExecutadoComVotoNormal_ParticipaComContribuicaoZero()
+    {
+        var resultado = CriarEnsemble(CriarDetector("Normal", 0, 2))
+            .Detectar(CriarInput());
+
+        var detail = Assert.Single(resultado.DetalhesDetectores);
+        Assert.Equal(DetectorDiagnosticStatus.Executed, detail.ExecutionStatus);
+        Assert.False(detail.VotouAnomalia);
+        Assert.Equal(true, detail.ParticipatedInAggregation);
+        Assert.Equal(2d, detail.EffectiveWeight!.Value);
+        Assert.Equal(0d, detail.WeightedNumeratorContribution!.Value);
+    }
+
+    [Fact]
+    public void Detectar_DetectorSemParticipacaoEfetiva_RegistraPesoEContribuicaoZero()
+    {
+        var resultado = CriarEnsemble(
+            CriarDetector("Ativo", 80, 2),
+            new FakeDetector("NaoAplicavel", 5, _ => new DetectorResult
+            {
+                Detector = "NaoAplicavel", Aplicavel = false, Peso = 5
+            })).Detectar(CriarInput());
+
+        var detail = resultado.DetalhesDetectores.Single(item => item.Nome == "NaoAplicavel");
+        Assert.Equal(false, detail.ParticipatedInAggregation);
+        Assert.Equal(0d, detail.EffectiveWeight!.Value);
+        Assert.Equal(0d, detail.WeightedNumeratorContribution!.Value);
+    }
+
+    [Fact]
+    public void Detectar_PoliticaTemporalExperimental_RegistraConjuntoEfetivamenteAgregado()
+    {
+        var mad = CriarDetector("Mediana e MAD", 80, 1);
+        var temporal = new FakeDetector("Persistência", 1, _ => new DetectorResult
+        {
+            Detector = "Persistência", Aplicavel = true, EhAnomalia = true,
+            Score = 5, ScoreNormalizado = 100, Peso = 1,
+            EvidenceRole = DetectorEvidenceRole.TemporalConfirmation,
+            UnderlyingEvidenceKind = UnderlyingEvidenceKind.Mad,
+            TemporalConfirmation = new TemporalConfirmationSnapshot
+            {
+                Status = TemporalConfirmationStatus.Confirmed,
+                UnderlyingEvidenceKind = UnderlyingEvidenceKind.Mad
+            }
+        });
+        var options = new AnomalyDetectionOptions
+        {
+            ExperimentalPersistenceTemporalConfirmationEnabled = true
+        };
+
+        var resultado = CriarEnsemble(options, mad, temporal).Detectar(CriarInput());
+
+        Assert.Equal(80, resultado.ScoreNormalizado, precision: 10);
+        Assert.Equal("WeightedMeanExcludeConfirmedMadTemporalConfirmation",
+            resultado.AggregationPolicy);
+        var excluded = resultado.DetalhesDetectores.Single(item => item.Nome == "Persistência");
+        Assert.Equal(false, excluded.ParticipatedInAggregation);
+        Assert.Equal(0d, excluded.EffectiveWeight!.Value);
+        Assert.Equal(0d, excluded.WeightedNumeratorContribution!.Value);
+    }
+
+    [Fact]
     public void Detectar_ScoreExatamenteNoLimite_DeveDetectarAnomalia()
     {
         var detector = CriarDetector("A", 60, 1);
@@ -79,6 +164,8 @@ public class EnsembleDetectionServiceTests
         Assert.Equal(
             DetectorDiagnosticStatus.NotApplicable,
             resultado.DetalhesDetectores[1].ExecutionStatus);
+        Assert.Equal(true, resultado.DetalhesDetectores[1].InvocationAttempted);
+        Assert.Equal(true, resultado.DetalhesDetectores[1].ExecutionCompleted);
     }
 
     [Fact]
@@ -201,6 +288,8 @@ public class EnsembleDetectionServiceTests
         Assert.Equal(
             DetectorDiagnosticStatus.NotApplicable,
             detalhe.ExecutionStatus);
+        Assert.Equal(false, detalhe.InvocationAttempted);
+        Assert.Equal(false, detalhe.ExecutionCompleted);
     }
 
     [Fact]
@@ -318,10 +407,15 @@ public class EnsembleDetectionServiceTests
 
     private static EnsembleDetectionService CriarEnsemble(
         params IAnomalyDetector[] detectores)
+        => CriarEnsemble(new AnomalyDetectionOptions(), detectores);
+
+    private static EnsembleDetectionService CriarEnsemble(
+        AnomalyDetectionOptions options,
+        params IAnomalyDetector[] detectores)
     {
         return new EnsembleDetectionService(
             detectores,
-            Options.Create(new AnomalyDetectionOptions()),
+            Options.Create(options),
             new TagBehaviorProfileResolver(),
             new DetectorApplicabilityPolicy());
     }

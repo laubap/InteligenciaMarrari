@@ -246,6 +246,92 @@ public sealed record DetectorDiagnostic
     public IReadOnlyList<DiagnosticCalculationReference> CalculationReferences { get; }
 }
 
+/// <summary>
+/// Linha de rastreabilidade da média ponderada. Os valores refletem a mesma
+/// agregação já executada pelo Ensemble e não estabelecem causalidade.
+/// Null representa informação indisponível, não zero inferido.
+/// </summary>
+public sealed record DetectorAggregationDiagnostic
+{
+    public DetectorAggregationDiagnostic(
+        string detector,
+        string? family,
+        bool registered,
+        bool? executed,
+        bool applicable,
+        bool votedAnomaly,
+        double? normalizedScore,
+        double? configuredWeight,
+        double? effectiveWeight,
+        bool? participatedInAggregation,
+        double? weightedNumeratorContribution,
+        bool? executionCompleted = null)
+    {
+        Detector = DiagnosticContractGuard.Required(detector, nameof(detector));
+        DiagnosticContractGuard.OptionalFinite(normalizedScore, nameof(normalizedScore));
+        DiagnosticContractGuard.OptionalFinite(configuredWeight, nameof(configuredWeight));
+        DiagnosticContractGuard.OptionalFinite(effectiveWeight, nameof(effectiveWeight));
+        DiagnosticContractGuard.OptionalFinite(weightedNumeratorContribution,
+            nameof(weightedNumeratorContribution));
+        if (normalizedScore is < 0 or > 100 || configuredWeight < 0 ||
+            effectiveWeight < 0 || weightedNumeratorContribution < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(normalizedScore));
+        }
+
+        if (executed != true && votedAnomaly)
+        {
+            throw new ArgumentException("Somente detector executado pode votar anomalia.",
+                nameof(votedAnomaly));
+        }
+
+        if (participatedInAggregation == true &&
+            (executed != true || !applicable || !normalizedScore.HasValue ||
+             !effectiveWeight.HasValue || !weightedNumeratorContribution.HasValue))
+        {
+            throw new ArgumentException(
+                "Participação efetiva exige execução, aplicabilidade e contribuição observada.",
+                nameof(participatedInAggregation));
+        }
+
+        if (normalizedScore.HasValue && effectiveWeight.HasValue &&
+            weightedNumeratorContribution.HasValue &&
+            Math.Abs(weightedNumeratorContribution.Value -
+                     normalizedScore.Value * effectiveWeight.Value) > 0.0000001)
+        {
+            throw new ArgumentException(
+                "A contribuição não corresponde ao score normalizado e peso efetivo observados.",
+                nameof(weightedNumeratorContribution));
+        }
+
+        Family = string.IsNullOrWhiteSpace(family) ? null : family.Trim();
+        Registered = registered;
+        Executed = executed;
+        Applicable = applicable;
+        VotedAnomaly = votedAnomaly;
+        NormalizedScore = normalizedScore;
+        ConfiguredWeight = configuredWeight;
+        EffectiveWeight = effectiveWeight;
+        ParticipatedInAggregation = participatedInAggregation;
+        WeightedNumeratorContribution = weightedNumeratorContribution;
+        ExecutionCompleted = executionCompleted;
+    }
+
+    public string Detector { get; }
+    public string? Family { get; }
+    public bool Registered { get; }
+    /// <summary>True significa que a chamada ao detector foi realmente tentada.</summary>
+    public bool? Executed { get; }
+    public bool Applicable { get; }
+    public bool VotedAnomaly { get; }
+    public double? NormalizedScore { get; }
+    public double? ConfiguredWeight { get; }
+    public double? EffectiveWeight { get; }
+    public bool? ParticipatedInAggregation { get; }
+    public double? WeightedNumeratorContribution { get; }
+    public bool? ExecutionCompleted { get; }
+}
+
 public sealed record EnsembleDiagnostic
 {
     public EnsembleDiagnostic(
@@ -257,7 +343,9 @@ public sealed record EnsembleDiagnostic
         int registeredDetectorCount,
         int applicableDetectorCount,
         int alertCount,
-        double applicableWeightSum)
+        double applicableWeightSum,
+        IEnumerable<DetectorAggregationDiagnostic>? contributions = null,
+        string? aggregationPolicy = null)
     {
         DiagnosticContractGuard.Range(originalScore, 0, 5, nameof(originalScore));
         DiagnosticContractGuard.Range(normalizedScore, 0, 100, nameof(normalizedScore));
@@ -290,6 +378,12 @@ public sealed record EnsembleDiagnostic
         ApplicableDetectorCount = applicableDetectorCount;
         AlertCount = alertCount;
         ApplicableWeightSum = applicableWeightSum;
+        Contributions = contributions is null
+            ? null
+            : Array.AsReadOnly(contributions.ToArray());
+        AggregationPolicy = string.IsNullOrWhiteSpace(aggregationPolicy)
+            ? null
+            : aggregationPolicy.Trim();
     }
 
     public bool Applicable { get; }
@@ -301,6 +395,14 @@ public sealed record EnsembleDiagnostic
     public int ApplicableDetectorCount { get; }
     public int AlertCount { get; }
     public double ApplicableWeightSum { get; }
+
+    /// <summary>
+    /// Nome explícito M3.1 para a soma usada no denominador da agregação.
+    /// Mantém ApplicableWeightSum para leitores M1 existentes.
+    /// </summary>
+    public double EffectiveWeightSum => ApplicableWeightSum;
+    public IReadOnlyList<DetectorAggregationDiagnostic>? Contributions { get; }
+    public string? AggregationPolicy { get; }
 }
 
 public sealed record BaselineDiagnostic

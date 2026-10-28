@@ -131,6 +131,46 @@ public sealed class ReplayDiagnosticJsonlExporterTests
     }
 
     [Fact]
+    public async Task JsonlPreservaContribuicoesM3SemAlterarEnvelopeM1()
+    {
+        var id = Guid.NewGuid();
+        var timestamp = Start;
+        var reading = new AiReadingEvaluationResult(
+            IndustrialEvaluationSchemas.ReadingV1, "run", "scenario", Client,
+            "reading-00", Tag, timestamp, 80, true, id, "Legacy");
+        var aggregation = new DetectorAggregationDiagnostic(
+            "Z-Score", "StatisticalEvidence", registered: true, executed: true,
+            applicable: true, votedAnomaly: true, normalizedScore: 80,
+            configuredWeight: 0.2, effectiveWeight: 0.2,
+            participatedInAggregation: true, weightedNumeratorContribution: 16);
+        var ensemble = new EnsembleDiagnostic(
+            applicable: true, legacyAnomaly: true, originalScore: 4,
+            normalizedScore: 80, threshold: 60, registeredDetectorCount: 1,
+            applicableDetectorCount: 1, alertCount: 1, applicableWeightSum: 0.2,
+            contributions: [aggregation], aggregationPolicy: "WeightedMeanAllApplicable");
+        var diagnostic = Diagnostic(id, timestamp, ensemble: ensemble);
+        var path = Path.Combine(Path.GetTempPath(), $"diagnostics-m3-{Guid.NewGuid():N}.jsonl");
+
+        try
+        {
+            await ReplayDiagnosticJsonlExporter.WriteAsync(path,
+                ReplayDiagnosticJsonlExporter.CreateEntries("run", "scenario", [reading], [diagnostic]));
+
+            using var json = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+            var exported = json.RootElement.GetProperty("diagnostic").GetProperty("ensemble");
+            Assert.Equal("WeightedMeanAllApplicable", exported
+                .GetProperty("aggregationPolicy").GetString());
+            Assert.Equal(16, Assert.Single(exported.GetProperty("contributions")
+                .EnumerateArray()).GetProperty("weightedNumeratorContribution").GetDouble());
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task FalhaDeFinalizacao_NaoSubstituiArquivoExistenteNemMutaDecisao()
     {
         var (readings, diagnostics) = CreateCorrelated(1);
@@ -183,7 +223,8 @@ Assert.True(
         Guid id,
         DateTimeOffset timestamp,
         string? client = null,
-        string? tag = null)
+        string? tag = null,
+        EnsembleDiagnostic? ensemble = null)
         => new(
             DiagnosticContext.Create("test-correlation", "run", timestamp, id),
             new DiagnosticVersionMetadata("test-api", "test-build", "test-commit", "test-config"),
@@ -194,6 +235,7 @@ Assert.True(
             new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial,
                 ["Baseline", "Ensemble"], "Fixture parcial."),
             new DiagnosticTiming(TimeSpan.Zero),
+            ensemble: ensemble,
             runtimeDecision: new RuntimeDecisionDiagnostic(
                 legacyAnomaly: true, finalAnomaly: true, emitNewEvidence: false,
                 usedLegacyFallback: true, source: "Legacy", reasons: [], temporalConfirmation: null));

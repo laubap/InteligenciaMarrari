@@ -90,6 +90,15 @@ public class EnsembleDetectionService
         var statusExecucao =
             new DetectorDiagnosticStatus[_detectores.Length];
 
+        var invocationAttempted =
+            new bool?[_detectores.Length];
+
+        var executionCompleted =
+            new bool?[_detectores.Length];
+
+        var configuredWeights =
+            new double[_detectores.Length];
+
         var quantidadeAplicaveis = 0;
         var quantidadeAlertas = 0;
 
@@ -105,6 +114,8 @@ public class EnsembleDetectionService
         {
             var detector =
                 _detectores[index];
+
+            configuredWeights[index] = detector.Peso;
 
             DetectorResult resultado;
 
@@ -124,6 +135,9 @@ public class EnsembleDetectionService
                 statusExecucao[index] =
                     DetectorDiagnosticStatus.NotApplicable;
 
+                invocationAttempted[index] = false;
+                executionCompleted[index] = false;
+
                 todosResultados[index] =
                     resultado;
 
@@ -135,8 +149,11 @@ public class EnsembleDetectionService
 
             try
             {
+                invocationAttempted[index] = true;
                 resultado =
                     detector.Detectar(input);
+
+                executionCompleted[index] = true;
 
                 statusExecucao[index] =
                     resultado.Aplicavel
@@ -146,6 +163,9 @@ public class EnsembleDetectionService
             catch (Exception ex)
             {
                 _errosPorDetector[index]++;
+
+                invocationAttempted[index] = true;
+                executionCompleted[index] = false;
 
                 statusExecucao[index] =
                     DetectorDiagnosticStatus.Failed;
@@ -223,6 +243,10 @@ public class EnsembleDetectionService
                         x.EvidenceRole == DetectorEvidenceRole.TemporalConfirmation)
             .ToArray();
 
+        var aggregationPolicy = "WeightedMeanAllApplicable";
+        var participatingResults = new HashSet<DetectorResult>(
+            todosResultados.Where(result => result.Aplicavel));
+
         if (_options.ExperimentalPersistenceTemporalConfirmationEnabled)
         {
             var madIsPositive = todosResultados.Any(x =>
@@ -239,17 +263,28 @@ public class EnsembleDetectionService
                             experimentalTemporalConfirmationEnabled: true,
                             underlyingMadIsPositive: madIsPositive)).ToArray();
 
+                participatingResults = new HashSet<DetectorResult>(included);
+                aggregationPolicy = "WeightedMeanExcludeConfirmedMadTemporalConfirmation";
+
                 quantidadeAplicaveis = included.Length;
                 quantidadeAlertas = included.Count(x => x.EhAnomalia);
                 somaPesos = included.Sum(x => x.Peso);
                 somaScoresPonderados = included.Sum(x => x.ScoreNormalizado * x.Peso);
+            }
+            else
+            {
+                aggregationPolicy = "WeightedMeanAllApplicableExperimentalTemporalPolicyInactive";
             }
         }
 
         var detalhes =
             CriarDetalhes(
                 todosResultados,
-                statusExecucao);
+                statusExecucao,
+                invocationAttempted,
+                executionCompleted,
+                configuredWeights,
+                participatingResults);
 
         if (quantidadeAplicaveis == 0)
         {
@@ -267,6 +302,7 @@ public class EnsembleDetectionService
                     input.DesvioPadraoHistorico,
                 Detector =
                     "Ensemble ponderado",
+                AggregationPolicy = "NoApplicableDetectors",
                 Explicacao =
                     "Nenhum detector foi aplicável para esta leitura.",
                 Metricas =
@@ -351,6 +387,8 @@ public class EnsembleDetectionService
 
             Detector =
                 "Ensemble ponderado",
+
+            AggregationPolicy = aggregationPolicy,
 
             Explicacao =
                 CriarExplicacao(
@@ -617,7 +655,11 @@ public class EnsembleDetectionService
     private static List<DetectorDebugItem>
         CriarDetalhes(
             IReadOnlyList<DetectorResult> resultados,
-            IReadOnlyList<DetectorDiagnosticStatus> statusExecucao)
+            IReadOnlyList<DetectorDiagnosticStatus> statusExecucao,
+            IReadOnlyList<bool?> invocationAttempted,
+            IReadOnlyList<bool?> executionCompleted,
+            IReadOnlyList<double> configuredWeights,
+            IReadOnlySet<DetectorResult> participatingResults)
     {
         var detalhes =
             new List<DetectorDebugItem>(
@@ -630,6 +672,8 @@ public class EnsembleDetectionService
             var resultado =
                 resultados[index];
 
+            var participates = participatingResults.Contains(resultado);
+            var effectiveWeight = participates ? resultado.Peso : 0d;
             detalhes.Add(
                 new DetectorDebugItem
                 {
@@ -652,6 +696,9 @@ public class EnsembleDetectionService
                     Peso =
                         resultado.Peso,
 
+                    ConfiguredWeight =
+                        configuredWeights[index],
+
                     Explicacao =
                         resultado.Explicacao,
 
@@ -668,7 +715,23 @@ public class EnsembleDetectionService
                         resultado.TemporalConfirmation,
 
                     ExecutionStatus =
-                        statusExecucao[index]
+                        statusExecucao[index],
+
+                    InvocationAttempted =
+                        invocationAttempted[index],
+
+                    ExecutionCompleted =
+                        executionCompleted[index],
+
+                    AggregationParticipationKnown = true,
+
+                    ParticipatedInAggregation = participates,
+
+                    EffectiveWeight = effectiveWeight,
+
+                    WeightedNumeratorContribution = participates
+                        ? resultado.ScoreNormalizado * effectiveWeight
+                        : 0d
                 });
         }
 

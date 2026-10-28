@@ -39,6 +39,13 @@ public class DetectorResult
     [System.Text.Json.Serialization.JsonIgnore]
     public TemporalConfirmationSnapshot? TemporalConfirmation { get; set; }
 
+    /// <summary>
+    /// Política efetivamente aplicada na agregação desta leitura. É evidência
+    /// passiva do caminho executado; não participa da decisão nem do JSON HTTP.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? AggregationPolicy { get; set; }
+
     // Resultado individual de cada detector executado.
     public List<DetectorDebugItem> DetalhesDetectores { get; set; } = new();
 }

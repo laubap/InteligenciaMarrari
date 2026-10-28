@@ -42,6 +42,112 @@ public sealed class PredictionDiagnosticCaptureTests
     }
 
     [Fact]
+    public void AggregationTrace_ExportaContribuicaoSemRecalcularDecisao()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var detail = Assert.Single(detector.DetalhesDetectores);
+        detail.ScoreOriginal = detector.Score;
+        detail.ScoreNormalizado = detector.ScoreNormalizado;
+        detail.AggregationParticipationKnown = true;
+        detail.ParticipatedInAggregation = true;
+        detail.EffectiveWeight = detail.Peso;
+        detail.WeightedNumeratorContribution = detail.ScoreNormalizado * detail.Peso;
+        detector.AggregationPolicy = "WeightedMeanAllApplicable";
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(), request, ReadingTime,
+            null, detector, decision, TimeSpan.Zero, DateTimeOffset.UtcNow);
+
+        var ensemble = Assert.Single(buffer.Snapshot()).Ensemble!;
+        var contribution = Assert.Single(ensemble.Contributions!);
+        Assert.Equal("Z-Score", contribution.Detector);
+        Assert.Null(contribution.Family);
+        Assert.True(contribution.Registered);
+        Assert.True(contribution.Executed);
+        Assert.True(contribution.Applicable);
+        Assert.Equal(true, contribution.ParticipatedInAggregation);
+        Assert.Equal(11.475d, contribution.WeightedNumeratorContribution!.Value, precision: 6);
+        Assert.Equal(ensemble.ApplicableWeightSum, ensemble.EffectiveWeightSum, precision: 6);
+        Assert.Equal(ensemble.NormalizedScore,
+            contribution.WeightedNumeratorContribution.Value / ensemble.ApplicableWeightSum,
+            precision: 6);
+        Assert.Equal("WeightedMeanAllApplicable", ensemble.AggregationPolicy);
+    }
+
+    [Fact]
+    public void MissingAggregationTrace_IsExplicitlyUnknown()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(), request, ReadingTime,
+            null, detector, decision, TimeSpan.Zero, DateTimeOffset.UtcNow);
+
+        var diagnostic = Assert.Single(buffer.Snapshot());
+        Assert.Null(diagnostic.Ensemble!.Contributions);
+        Assert.Null(diagnostic.Ensemble.AggregationPolicy);
+        Assert.Contains("EnsembleAggregation", diagnostic.Completeness.MissingSections);
+    }
+
+    [Fact]
+    public void InvokedButNotApplicable_RemainsExecutedInAggregationTrace()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var detail = Assert.Single(detector.DetalhesDetectores);
+        detail.ExecutionStatus = DetectorDiagnosticStatus.NotApplicable;
+        detail.InvocationAttempted = true;
+        detail.ExecutionCompleted = true;
+        detail.Aplicavel = false;
+        detail.VotouAnomalia = false;
+        detail.AggregationParticipationKnown = true;
+        detail.ParticipatedInAggregation = false;
+        detail.EffectiveWeight = 0;
+        detail.WeightedNumeratorContribution = 0;
+        detector.AggregationPolicy = "WeightedMeanAllApplicable";
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(), request, ReadingTime,
+            null, detector, decision, TimeSpan.Zero, DateTimeOffset.UtcNow);
+
+        var contribution = Assert.Single(Assert.Single(buffer.Snapshot()).Ensemble!.Contributions!);
+        Assert.Equal(true, contribution.Executed);
+        Assert.Equal(true, contribution.ExecutionCompleted);
+        Assert.False(contribution.Applicable);
+        Assert.Null(contribution.NormalizedScore);
+    }
+
+    [Fact]
+    public void NotInvokedDetector_RemainsNotExecutedInAggregationTrace()
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var detail = Assert.Single(detector.DetalhesDetectores);
+        detail.ExecutionStatus = DetectorDiagnosticStatus.NotApplicable;
+        detail.InvocationAttempted = false;
+        detail.ExecutionCompleted = false;
+        detail.Aplicavel = false;
+        detail.VotouAnomalia = false;
+        detail.AggregationParticipationKnown = true;
+        detail.ParticipatedInAggregation = false;
+        detail.EffectiveWeight = 0;
+        detail.WeightedNumeratorContribution = 0;
+        detector.AggregationPolicy = "WeightedMeanAllApplicable";
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(), request, ReadingTime,
+            null, detector, decision, TimeSpan.Zero, DateTimeOffset.UtcNow);
+
+        var contribution = Assert.Single(Assert.Single(buffer.Snapshot()).Ensemble!.Contributions!);
+        Assert.Equal(false, contribution.Executed);
+        Assert.Equal(false, contribution.ExecutionCompleted);
+        Assert.False(contribution.Applicable);
+        Assert.Null(contribution.NormalizedScore);
+    }
+
+    [Fact]
     public void KnownRuntimeReasons_ArePublishedAsSafeCodesWithoutChangingDecision()
     {
         var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
@@ -319,7 +425,9 @@ public sealed class PredictionDiagnosticCaptureTests
                     Nome = "Z-Score", Aplicavel = true,
                     VotouAnomalia = true, ScoreOriginal = 5,
                     ScoreNormalizado = 100, Peso = 0.15,
-                    ExecutionStatus = DetectorDiagnosticStatus.Executed
+                    ExecutionStatus = DetectorDiagnosticStatus.Executed,
+                    InvocationAttempted = true,
+                    ExecutionCompleted = true
                 }
             ]
         };
