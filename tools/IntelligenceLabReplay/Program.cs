@@ -12,6 +12,8 @@ using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Orchestration;
 using IAApi.Services.AnomalyDetection.Presentation;
 using IAApi.Services.AnomalyDetection.Runtime;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -29,22 +31,28 @@ internal static class IntelligenceLabReplay
 
     public static async Task<int> RunAsync(string[] args)
     {
-        if (args.Length < 3 || args.Length > 4 ||
-            (args.Length == 4 && (!int.TryParse(args[3], out var limit) || limit < 1)))
+        // O modo original continua sendo o padrao; a opcao nova e explicita.
+        var fullEnsemble = args.Length > 0 && args[^1] == "--full-ensemble";
+        var positional = fullEnsemble ? args[..^1] : args;
+        if (positional.Length < 3 || positional.Length > 4 ||
+            (positional.Length == 4 && (!int.TryParse(positional[3],
+                NumberStyles.None, CultureInfo.InvariantCulture, out var limit) || limit < 1)) ||
+            positional.Any(value => value.StartsWith("--", StringComparison.Ordinal)))
         {
-            Console.Error.WriteLine("Uso: dotnet run --project Tools/IntelligenceLabReplay -- <treino.json> <avaliacao.json> <pasta_saida> [limite]");
+            Console.Error.WriteLine("Uso: dotnet run --project Tools/IntelligenceLabReplay -- " +
+                "<treino.json> <avaliacao.json> <pasta_saida> [limite] [--full-ensemble]");
             return 2;
         }
 
         try
         {
             var executionStartedAtUtc = DateTimeOffset.UtcNow;
-            var trainingInput = await LoadReadingsAsync(args[0]);
-            var evaluationInput = await LoadReadingsAsync(args[1]);
+            var trainingInput = await LoadReadingsAsync(positional[0]);
+            var evaluationInput = await LoadReadingsAsync(positional[1]);
             var training = trainingInput.Readings;
             var evaluation = evaluationInput.Readings;
-            int? requestedEvaluationLimit = args.Length == 4
-                ? int.Parse(args[3], CultureInfo.InvariantCulture)
+            int? requestedEvaluationLimit = positional.Length == 4
+                ? int.Parse(positional[3], CultureInfo.InvariantCulture)
                 : null;
             var count = requestedEvaluationLimit ?? evaluation.Count;
             count = Math.Min(count, evaluation.Count);
@@ -57,10 +65,28 @@ internal static class IntelligenceLabReplay
 
             Console.WriteLine($"Treinamento: {training.Count} leituras ({training[0].DataHora:O} a {training[^1].DataHora:O})");
             Console.WriteLine($"Avaliacao: {evaluation.Count} leituras ({evaluation[0].DataHora:O} a {evaluation[^1].DataHora:O})");
-            Console.WriteLine("Reexecutando com os seis detectores estatisticos, sem Isolation Forest nem multivariada.");
+            Console.WriteLine(fullEnsemble
+                ? "Reexecutando os seis detectores estatisticos + Isolation Forest local, sem multivariada."
+                : "Reexecutando com os seis detectores estatisticos, sem Isolation Forest nem multivariada.");
 
-            var off = await ExecuteAsync(training, evaluation, capture: false);
-            var on = await ExecuteAsync(training, evaluation, capture: true);
+            // Treinamento realizado UMA vez, usando somente o conjunto de treino;
+            // a mesma evidencia de modelo atende aos dois percursos off/on.
+            using var isolationForest = fullEnsemble
+                ? await LocalIsolationForestModel.CreateAsync(training)
+                : null;
+            var detectorSet = fullEnsemble
+                ? "Statistical,MAD,EWMA,RateOfChange,Persistence,LevelShift,IsolationForest"
+                : "Statistical,MAD,EWMA,RateOfChange,Persistence,LevelShift";
+
+            isolationForest?.ResetCache();
+            var off = await ExecuteAsync(training, evaluation, capture: false, isolationForest);
+            // Sem limpar o cache, off e on teriam diferencas nas metricas
+            // modeloVeioDoCache/modeloVeioDoDisco (ruido, nao decisao).
+            isolationForest?.ResetCache();
+            var on = await ExecuteAsync(training, evaluation, capture: true, isolationForest);
+
+            if (fullEnsemble)
+                VerifyFullEnsemble(on);
 
             if (off.Records.Count != on.Records.Count)
                 throw new InvalidOperationException("Quantidade de decisoes diferente entre os modos.");
@@ -117,21 +143,21 @@ internal static class IntelligenceLabReplay
                     replayRunId, ReplayScenarioId, evaluationReadings, on.Diagnostics);
             }
 
-            var folder = Path.GetFullPath(args[2]);
+            var folder = Path.GetFullPath(positional[2]);
             Directory.CreateDirectory(folder);
             var manifestFile = ReplayRunManifest.PrepareOutputManifestPath(folder);
             var file = Path.Combine(folder, "intelligence-lab-replay-report.json");
             var report = new
             {
                 Environment = "IsolatedSQLiteInMemory",
-                TrainingSource = Path.GetFileName(args[0]),
-                EvaluationSource = Path.GetFileName(args[1]),
+                TrainingSource = Path.GetFileName(positional[0]),
+                EvaluationSource = Path.GetFileName(positional[1]),
                 ClientId,
                 TagName,
                 DatasetLabeled = false,
                 SourceTimestampAssumption = "UTC-03:00 (horarios do Bridge sem offset)",
-                DetectorSet = "Statistical,MAD,EWMA,RateOfChange,Persistence,LevelShift",
-                IsolationForestEnabled = false,
+                DetectorSet = detectorSet,
+                IsolationForestEnabled = fullEnsemble,
                 MultivariateEnabled = false,
                 TrainingCount = training.Count,
                 EvaluationCount = evaluation.Count,
@@ -148,6 +174,16 @@ internal static class IntelligenceLabReplay
                 })
             };
             var artifacts = new List<ReplayManifestArtifact>();
+            if (isolationForest is not null)
+            {
+                var modelOutput = Path.Combine(folder, "intelligence-lab-isolation-forest-model.json");
+                File.Copy(isolationForest.ModelPath, modelOutput, overwrite: true);
+                var modelArtifact = await DescribeArtifactAsync(modelOutput);
+                if (modelArtifact.Sha256 != isolationForest.ModelSha256)
+                    throw new InvalidOperationException("O modelo exportado difere do snapshot executado.");
+                artifacts.Add(modelArtifact);
+                Console.WriteLine($"Modelo IF isolado: {modelOutput} (SHA256: {modelArtifact.Sha256})");
+            }
             // Exportacao de evidencias e leituras observadas, sem gabarito industrial.
             if (diagnosticEntries is not null && evaluationReadings is not null &&
                 contentHash is not null && replayRunId is not null)
@@ -170,9 +206,12 @@ internal static class IntelligenceLabReplay
                     ExecutionIdentityComplete = false,
                     RunManifestSchemaVersion = ReplayRunManifest.SchemaVersion,
                     RunManifestFileName = "intelligence-lab-run-manifest.json",
-                    DetectorSet = "Statistical,MAD,EWMA,RateOfChange,Persistence,LevelShift",
-                    Limitations = "Sem rotulos independentes, commit/configuracao/modelos completos, IF ou multivariada. " +
-                                  "Nao calcular TP/FP/FN a partir deste arquivo isoladamente.",
+                    DetectorSet = detectorSet,
+                    Limitations = fullEnsemble
+                        ? "Sem rotulos independentes nem composicao operacional completa (memoria, regime, multivariada). " +
+                          "Treinamento IF local somente com dados fornecidos; nao calcular TP/FP/FN sem gabarito."
+                        : "Sem rotulos independentes, commit/configuracao/modelos completos, IF ou multivariada. " +
+                          "Nao calcular TP/FP/FN a partir deste arquivo isoladamente.",
                     Readings = evaluationReadings
                 };
                 await File.WriteAllTextAsync(exportFile, JsonSerializer.Serialize(exported,
@@ -205,9 +244,10 @@ internal static class IntelligenceLabReplay
                     trainingInput.ManifestInput,
                     evaluationInput.ManifestInput,
                     ReadGitMetadata(),
-                    CreateManifestConfiguration(training.Count, evaluation.Count, requestedEvaluationLimit),
+                    CreateManifestConfiguration(training.Count, evaluation.Count, requestedEvaluationLimit,
+                        isolationForest),
                     CreateManifestContracts(),
-                    CreateManifestResources(),
+                    CreateManifestResources(isolationForest),
                     artifacts,
                     ExportsCompleted: true));
                 await WriteManifestAtomicallyAsync(manifestFile, ReplayRunManifest.Serialize(manifest));
@@ -303,7 +343,8 @@ internal static class IntelligenceLabReplay
     }
 
     private static ReplayManifestConfiguration CreateManifestConfiguration(
-        int trainingReadingCount, int evaluationReadingCount, int? requestedEvaluationLimit)
+        int trainingReadingCount, int evaluationReadingCount, int? requestedEvaluationLimit,
+        LocalIsolationForestModel? isolationForest)
     {
         var options = new AnomalyDetectionOptions();
         var settings = new SortedDictionary<string, object>(StringComparer.Ordinal)
@@ -342,9 +383,28 @@ internal static class IntelligenceLabReplay
             ["evaluationReadingsProcessed"] = evaluationReadingCount,
             ["evaluationLimitArgument"] = requestedEvaluationLimit?.ToString(CultureInfo.InvariantCulture) ?? "NotSpecified"
         };
-        const string mode = "OfflineIsolatedHistoricalReplay";
-        string[] enabledDetectors = ["Statistical", "MAD", "EWMA", "RateOfChange", "Persistence", "LevelShift"];
-        string[] disabledResources = ["IsolationForest", "Multivariate", "BehaviorMemory", "LLM", "RuntimeFunctionalDecision"];
+        var mode = isolationForest is null
+            ? "OfflineIsolatedHistoricalReplay"
+            : "OfflineIsolatedHistoricalReplayFullEnsemble";
+        string[] enabledDetectors = isolationForest is null
+            ? ["Statistical", "MAD", "EWMA", "RateOfChange", "Persistence", "LevelShift"]
+            : ["Statistical", "MAD", "EWMA", "RateOfChange", "Persistence", "LevelShift", "IsolationForest"];
+        string[] disabledResources = isolationForest is null
+            ? ["IsolationForest", "Multivariate", "BehaviorMemory", "LLM", "RuntimeFunctionalDecision"]
+            : ["Multivariate", "BehaviorMemory", "LLM", "RuntimeFunctionalDecision"];
+        if (isolationForest is not null)
+        {
+            var ifOptions = isolationForest.Options;
+            settings["isolationForestTreeCount"] = ifOptions.TreeCount;
+            settings["isolationForestSampleSize"] = ifOptions.SampleSize;
+            settings["isolationForestMinimumHistoryPoints"] = ifOptions.MinimumHistoryPoints;
+            settings["isolationForestFeatureWindowSize"] = ifOptions.FeatureWindowSize;
+            settings["isolationForestAnomalyThreshold"] = ifOptions.AnomalyThreshold;
+            settings["isolationForestWeight"] = ifOptions.Weight;
+            settings["isolationForestRandomSeed"] = ifOptions.RandomSeed;
+            settings["isolationForestNormalizationSlope"] = ifOptions.NormalizationSlope;
+            settings["isolationForestModelSha256"] = isolationForest.ModelSha256;
+        }
         return new ReplayManifestConfiguration(
             mode,
             enabledDetectors,
@@ -363,14 +423,20 @@ internal static class IntelligenceLabReplay
         new("OfflineEvaluationPolicy", "industrial-alert-matching/v1", ManifestVerificationStatus.Unknown, "NotExecutedWithoutIndependentLabels")
     ];
 
-    private static IReadOnlyList<ReplayManifestResource> CreateManifestResources() =>
+    private static IReadOnlyList<ReplayManifestResource> CreateManifestResources(
+        LocalIsolationForestModel? isolationForest) =>
     [
         new("StatisticalDetectors", ManifestResourceExecutionStatus.Executed, ManifestVerificationStatus.Verified,
             "Six in-process detectors instantiated from effective settings; no external model artifact loaded."),
         new("TagProfile", ManifestResourceExecutionStatus.Executed, ManifestVerificationStatus.Verified,
             "Trained in memory from the training input during this execution; no persisted model artifact loaded."),
-        new("IsolationForest", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
-            "Explicitly not instantiated by this replay."),
+        isolationForest is null
+            ? new ReplayManifestResource("IsolationForest", ManifestResourceExecutionStatus.NotExecuted,
+                ManifestVerificationStatus.Verified, "Explicitly not instantiated by this replay.")
+            : new ReplayManifestResource("IsolationForest", ManifestResourceExecutionStatus.Executed,
+                ManifestVerificationStatus.Verified,
+                "Model trained locally once from the training input with fixed seed; same snapshot used off/on.",
+                isolationForest.ModelSha256),
         new("Multivariate", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
             "Explicitly not instantiated by this replay."),
         new("BehaviorMemory", ManifestResourceExecutionStatus.NotExecuted, ManifestVerificationStatus.Verified,
@@ -389,7 +455,8 @@ internal static class IntelligenceLabReplay
         ]);
 
     private static async Task<ReplayRun> ExecuteAsync(
-        List<LeituraBruta> training, List<LeituraBruta> evaluation, bool capture)
+        List<LeituraBruta> training, List<LeituraBruta> evaluation, bool capture,
+        LocalIsolationForestModel? isolationForest)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -409,14 +476,17 @@ internal static class IntelligenceLabReplay
         await db.SaveChangesAsync();
 
         var detectionOptions = new AnomalyDetectionOptions();
-        IAnomalyDetector[] detectors = [
+        var detectors = new List<IAnomalyDetector>
+        {
             new StatisticalDetector(detectionOptions),
             new MadDetector(detectionOptions),
             new EwmaDetector(detectionOptions),
             new RateOfChangeDetector(detectionOptions),
             new PersistenceDetector(detectionOptions),
             new LevelShiftDetector(detectionOptions)
-        ];
+        };
+        if (isolationForest is not null)
+            detectors.Add(isolationForest.CreateDetector());
         var ensemble = new EnsembleDetectionService(detectors,
             Options.Create(detectionOptions),
             new TagBehaviorProfileResolver(), new DetectorApplicabilityPolicy());
@@ -496,6 +566,142 @@ internal static class IntelligenceLabReplay
             await db.AnomaliasDetectadas.CountAsync(),
             diagnostics.Count, health.CaptureAttempts, health.StoredTotal,
             health.CaptureFailures, health.EvictedTotal, diagnostics.ToArray());
+    }
+
+    // O modo de sete detectores falha em vez de produzir um manifesto que
+    // alegue participacao do IF quando houve bloqueio ou modelo ausente.
+    private static void VerifyFullEnsemble(ReplayRun run)
+    {
+        foreach (var (diagnostic, index) in run.Diagnostics.Select((item, index) => (item, index)))
+        {
+            var ensemble = diagnostic.Ensemble ??
+                throw new InvalidOperationException($"Ensemble ausente na leitura {index + 1}.");
+            var contributions = ensemble.Contributions ??
+                throw new InvalidOperationException($"Contribuicoes ausentes na leitura {index + 1}.");
+            if (contributions.Count != 7)
+                throw new InvalidOperationException($"Esperadas 7 contribuicoes na leitura {index + 1}.");
+            var isolationForest = contributions.SingleOrDefault(item => item.Detector == "Isolation Forest");
+            if (isolationForest is null || isolationForest.Executed != true ||
+                isolationForest.ExecutionCompleted != true || isolationForest.Applicable != true ||
+                isolationForest.ParticipatedInAggregation != true ||
+                isolationForest.EffectiveWeight is not > 0)
+                throw new InvalidOperationException($"Isolation Forest nao participou da leitura {index + 1}.");
+            var denominator = ensemble.EffectiveWeightSum;
+            if (!double.IsFinite(denominator) || denominator <= 0)
+                throw new InvalidOperationException($"Peso efetivo invalido na leitura {index + 1}.");
+            var score = contributions.Sum(item => item.WeightedNumeratorContribution ?? 0d) /
+                denominator;
+            if (Math.Abs(score - ensemble.NormalizedScore) > 0.000001)
+                throw new InvalidOperationException($"Score nao reconstruivel na leitura {index + 1}.");
+        }
+    }
+
+    private sealed class LocalIsolationForestModel : IDisposable
+    {
+        private readonly string _root;
+        private readonly IsolationForestPersistenceService _persistence;
+        public IsolationForestOptions Options { get; }
+        public string ModelPath { get; }
+        public string ModelSha256 { get; private set; } = "";
+
+        private LocalIsolationForestModel(string root)
+        {
+            _root = root;
+            Options = new IsolationForestOptions
+            {
+                Weight = 0.25,
+                TreeCount = 16,
+                SampleSize = 32,
+                MinimumHistoryPoints = 50,
+                FeatureWindowSize = 10,
+                AnomalyThreshold = 0.62,
+                RandomSeed = 42
+            };
+            _persistence = new IsolationForestPersistenceService(new ReplayWebHostEnvironment(root));
+            ModelPath = _persistence.ObterCaminhoModelo(ClientId, TagName);
+        }
+
+        public static async Task<LocalIsolationForestModel> CreateAsync(List<LeituraBruta> training)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "IAApi-IntelligenceLab-FullEnsemble",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var session = new LocalIsolationForestModel(root);
+            try
+            {
+                await session.TrainAsync(training);
+                return session;
+            }
+            catch
+            {
+                session.Dispose();
+                throw;
+            }
+        }
+
+        private async Task TrainAsync(List<LeituraBruta> training)
+        {
+            if (training.Count < Options.MinimumHistoryPoints)
+                throw new InvalidOperationException(
+                    $"Full ensemble requer ao menos {Options.MinimumHistoryPoints} pontos de treino.");
+            var history = training.Select(item => new HistoricoDetectorPoint
+            {
+                DataHora = item.DataHora,
+                Valor = item.Valor
+            }).ToArray();
+            var values = history.Select(item => item.Valor).ToArray();
+            var mean = values.Average();
+            var std = Math.Sqrt(values.Average(value => Math.Pow(value - mean, 2)));
+            var input = new DetectorInput
+            {
+                ClienteId = ClientId,
+                TagName = TagName,
+                TipoTag = "continuous",
+                ValorAtual = values[^1],
+                DataHoraAtual = history[^1].DataHora,
+                MediaHistorica = mean,
+                DesvioPadraoHistorico = std,
+                Historico = history
+            };
+            var extractor = new IsolationForestFeatureExtractor();
+            var samples = extractor.ExtrairTreinamento(input, Options.FeatureWindowSize)
+                .Select(feature => (IReadOnlyList<double>)feature.ParaVetor().ToArray())
+                .ToList();
+            if (samples.Count < Math.Max(10, Options.MinimumHistoryPoints - Options.FeatureWindowSize))
+                throw new InvalidOperationException("Nao ha janelas suficientes para treinar o Isolation Forest.");
+            var model = new IsolationForestModel(Options.TreeCount, Options.SampleSize,
+                Options.RandomSeed);
+            model.Treinar(samples);
+            var snapshot = model.ExportarSnapshot(ClientId, TagName,
+                Options.FeatureWindowSize, Options.AnomalyThreshold, training[^1].DataHora);
+            snapshot.VersaoModelo = 1;
+            snapshot.QuantidadePontosTreinamento = training.Count;
+            await _persistence.SalvarAsync(snapshot);
+            ModelSha256 = ReplayRunManifest.Sha256Hex(await File.ReadAllBytesAsync(ModelPath));
+        }
+
+        public IsolationForestDetector CreateDetector() => new(
+            Microsoft.Extensions.Options.Options.Create(Options),
+            new IsolationForestFeatureExtractor(), _persistence);
+
+        public void ResetCache() => IsolationForestDetector.RemoverDoCache(ClientId, TagName);
+
+        public void Dispose()
+        {
+            ResetCache();
+            if (Directory.Exists(_root))
+                Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private sealed class ReplayWebHostEnvironment(string root) : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "IAApi.IntelligenceLabReplay";
+        public string EnvironmentName { get; set; } = "Development";
+        public string ContentRootPath { get; set; } = root;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = root;
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed record ReplayRun(
