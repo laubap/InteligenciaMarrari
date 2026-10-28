@@ -164,6 +164,119 @@ public sealed class IntelligenceLabIsolationForestObservabilityTests
         // etapa futura sem prender o teste ao formato parcial atual.
     }
 
+    [Fact]
+    public async Task SeteDetectoresReais_ComModeloTreinado_ReconstroemScoreNoDiagnostico()
+    {
+        using var fixture = new ModelFixture();
+        var input = CreateInput(fixture.ClienteId, fixture.TagName);
+        await SaveTrainedModelAsync(fixture, input);
+
+        // O modelo e treinado apenas no ambiente temporario do teste.
+        // Os outros seis detectores sao as implementacoes estatisticas reais.
+        var result = CreateSevenDetectorEnsemble(fixture).Detectar(input);
+
+        Assert.True(result.Aplicavel);
+        Assert.Equal("WeightedMeanAllApplicable", result.AggregationPolicy);
+        Assert.Equal(7, result.DetalhesDetectores.Count);
+        Assert.Equal(7, result.Metricas["quantidadeDetectoresAplicaveis"]);
+        Assert.All(result.DetalhesDetectores, detail =>
+        {
+            Assert.True(detail.Aplicavel, detail.Nome);
+            Assert.Equal(DetectorDiagnosticStatus.Executed, detail.ExecutionStatus);
+            Assert.Equal(true, detail.ParticipatedInAggregation);
+        });
+
+        var ifDetail = Assert.Single(result.DetalhesDetectores,
+            detail => detail.Nome == "Isolation Forest");
+        Assert.Null(ifDetail.NonApplicabilityReasonCode);
+        Assert.Equal(fixture.Options.Weight, ifDetail.EffectiveWeight!.Value, 10);
+
+        var diagnostic = Capture(result, input);
+        var ensembleDiagnostic = Assert.IsType<EnsembleDiagnostic>(diagnostic.Ensemble);
+        var contributions = Assert.IsAssignableFrom<IReadOnlyList<DetectorAggregationDiagnostic>>(
+            ensembleDiagnostic.Contributions);
+        Assert.Equal(7, contributions.Count);
+        Assert.Equal(7, diagnostic.Detectors.Count);
+
+        var ifContribution = Assert.Single(contributions,
+            contribution => contribution.Detector == "Isolation Forest");
+        Assert.Equal(true, ifContribution.Executed);
+        Assert.Equal(true, ifContribution.ExecutionCompleted);
+        Assert.Equal(true, ifContribution.Applicable);
+        Assert.Equal(true, ifContribution.ParticipatedInAggregation);
+        Assert.Null(ifContribution.NonApplicabilityReasonCode);
+        Assert.Equal(ifDetail.ScoreNormalizado, ifContribution.NormalizedScore!.Value, 10);
+        Assert.Equal(ifDetail.ScoreNormalizado * fixture.Options.Weight,
+            ifContribution.WeightedNumeratorContribution!.Value, 10);
+
+        var denominator = contributions.Sum(item => item.EffectiveWeight ?? 0d);
+        var numerator = contributions.Sum(item => item.WeightedNumeratorContribution ?? 0d);
+        Assert.True(denominator > 0);
+        Assert.Equal(result.ScoreNormalizado, numerator / denominator, 9);
+        Assert.Equal(result.ScoreNormalizado, ensembleDiagnostic.NormalizedScore, 9);
+        Assert.Equal(result.EhAnomalia, ensembleDiagnostic.LegacyAnomaly);
+    }
+
+    [Fact]
+    public void SeteDetectoresReais_SemModelo_IsolationForestNaoParticipaDaAgregacao()
+    {
+        using var fixture = new ModelFixture();
+        var input = CreateInput(fixture.ClienteId, fixture.TagName);
+
+        var result = CreateSevenDetectorEnsemble(fixture).Detectar(input);
+
+        Assert.True(result.Aplicavel);
+        Assert.Equal(7, result.DetalhesDetectores.Count);
+        var ifDetail = Assert.Single(result.DetalhesDetectores,
+            detail => detail.Nome == "Isolation Forest");
+        Assert.False(ifDetail.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.NoTrainedModel,
+            ifDetail.NonApplicabilityReasonCode);
+        Assert.Equal(false, ifDetail.ParticipatedInAggregation);
+        Assert.Equal(0d, ifDetail.EffectiveWeight!.Value);
+        Assert.Equal(0d, ifDetail.WeightedNumeratorContribution!.Value);
+
+        var diagnostic = Capture(result, input);
+        var ensembleDiagnostic = Assert.IsType<EnsembleDiagnostic>(diagnostic.Ensemble);
+        var contributions = Assert.IsAssignableFrom<IReadOnlyList<DetectorAggregationDiagnostic>>(
+            ensembleDiagnostic.Contributions);
+        Assert.Equal(7, contributions.Count);
+        var ifContribution = Assert.Single(contributions,
+            contribution => contribution.Detector == "Isolation Forest");
+        Assert.Equal(DetectorDiagnosticReasonCodes.NoTrainedModel,
+            ifContribution.NonApplicabilityReasonCode);
+        Assert.Equal(false, ifContribution.Applicable);
+        Assert.Equal(false, ifContribution.ParticipatedInAggregation);
+        Assert.Null(ifContribution.NormalizedScore);
+        Assert.Equal(0d, ifContribution.EffectiveWeight!.Value);
+        Assert.Equal(0d, ifContribution.WeightedNumeratorContribution!.Value);
+
+        var denominator = contributions.Sum(item => item.EffectiveWeight ?? 0d);
+        var numerator = contributions.Sum(item => item.WeightedNumeratorContribution ?? 0d);
+        Assert.True(denominator > 0);
+        Assert.Equal(result.ScoreNormalizado, numerator / denominator, 9);
+    }
+
+    private static EnsembleDetectionService CreateSevenDetectorEnsemble(ModelFixture fixture)
+    {
+        var options = new AnomalyDetectionOptions();
+        IAnomalyDetector[] detectors =
+        [
+            new StatisticalDetector(options),
+            new MadDetector(options),
+            new EwmaDetector(options),
+            new RateOfChangeDetector(options),
+            new PersistenceDetector(options),
+            new LevelShiftDetector(options),
+            fixture.CreateDetector()
+        ];
+        return new EnsembleDetectionService(
+            detectors,
+            Microsoft.Extensions.Options.Options.Create(options),
+            new TagBehaviorProfileResolver(),
+            new DetectorApplicabilityPolicy());
+    }
+
     private static async Task SaveTrainedModelAsync(ModelFixture fixture, DetectorInput input)
     {
         var options = fixture.Options;
