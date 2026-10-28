@@ -1,4 +1,5 @@
 
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection;
 using Xunit;
 
@@ -18,6 +19,9 @@ public class LevelShiftDetectorTests
 
         Assert.False(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
+        Assert.Equal(
+            DetectorDiagnosticReasonCodes.TemporalCadenceUnavailable,
+            resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -31,6 +35,45 @@ public class LevelShiftDetectorTests
 
         Assert.False(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
+        Assert.Equal(
+            DetectorDiagnosticReasonCodes.InsufficientTemporalWindow,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_JanelaRecenteInsuficiente_DeveRegistrarMotivo()
+    {
+        // Histórico suficiente na janela anterior, mas somente a leitura
+        // atual na janela recente (a cadência histórica continua válida).
+        var input = CriarInput(
+            Enumerable.Repeat(100.0, 30).ToArray(),
+            150,
+            dataHoraAtual: BaseTime.AddMinutes(40));
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(
+            DetectorDiagnosticReasonCodes.InsufficientTemporalWindow,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_EscalaAnteriorInvalida_DeveRegistrarMotivo()
+    {
+        // Condição numérica de borda, sem alterar nem simular a matemática.
+        // A mediana de pares double.MaxValue excede a escala finita.
+        var valores = Enumerable.Repeat(double.MaxValue, 20)
+            .Concat(Enumerable.Repeat(100.0, 10))
+            .ToArray();
+        var input = CriarInput(valores, 100);
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(
+            DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable,
+            resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -46,6 +89,7 @@ public class LevelShiftDetectorTests
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Score);
         Assert.Equal(0, resultado.ScoreNormalizado);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -116,6 +160,7 @@ public class LevelShiftDetectorTests
         Assert.True(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
         Assert.True(resultado.Metricas["consistencia"] < 0.80);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
 
@@ -160,6 +205,7 @@ public class LevelShiftDetectorTests
         Assert.Equal(
             1,
             resultado.Metricas["possuiGapCriticoNasJanelas"]);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
 
         Assert.True(resultado.Metricas["scoreMudanca"] >= 3);
     }
@@ -206,7 +252,8 @@ public class LevelShiftDetectorTests
 
     private static DetectorInput CriarInput(
         double[] valores,
-        double valorAtual)
+        double valorAtual,
+        DateTime? dataHoraAtual = null)
     {
         var ultimaData = BaseTime.AddMinutes(valores.Length - 1);
 
@@ -216,7 +263,7 @@ public class LevelShiftDetectorTests
             TagName = "TEMPERATURA_TESTE",
             TipoTag = "Analogica",
             ValorAtual = valorAtual,
-            DataHoraAtual = ultimaData.AddMinutes(1),
+            DataHoraAtual = dataHoraAtual ?? ultimaData.AddMinutes(1),
 
             VariacaoMinimaRelevante = 5,
             ConfiancaVariacaoMinima = 1,

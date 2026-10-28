@@ -1,3 +1,5 @@
+using IAApi.IntelligenceLab.Observability;
+
 namespace IAApi.Services.AnomalyDetection;
 
 public class LevelShiftDetector : IAnomalyDetector
@@ -27,7 +29,8 @@ public class LevelShiftDetector : IAnomalyDetector
         if (cadenciaMediana <= 0 || !double.IsFinite(cadenciaMediana))
         {
             return NaoAplicavel(
-                "Não foi possível determinar a cadência da tag.");
+                "Não foi possível determinar a cadência da tag.",
+                DetectorDiagnosticReasonCodes.TemporalCadenceUnavailable);
         }
 
         var previousMinutes =
@@ -64,7 +67,8 @@ public class LevelShiftDetector : IAnomalyDetector
             return NaoAplicavel(
                 $"Janelas temporais insuficientes. " +
                 $"Anterior={anteriores.Length} ponto(s), " +
-                $"recente={recentes.Count} ponto(s).");
+                $"recente={recentes.Count} ponto(s).",
+                DetectorDiagnosticReasonCodes.InsufficientTemporalWindow);
         }
 
         var medianaAnterior =
@@ -87,7 +91,8 @@ public class LevelShiftDetector : IAnomalyDetector
         if (escalaAnterior <= 0 || !double.IsFinite(escalaAnterior))
         {
             return NaoAplicavel(
-                "A janela anterior não possui escala suficiente.");
+                "A janela anterior não possui escala suficiente.",
+                DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable);
         }
 
         var diferenca = medianaRecente - medianaAnterior;
@@ -227,7 +232,9 @@ public class LevelShiftDetector : IAnomalyDetector
         return false;
     }
 
-    private DetectorResult NaoAplicavel(string explicacao) => new()
+    private DetectorResult NaoAplicavel(
+        string explicacao,
+        string nonApplicabilityReasonCode) => new()
     {
         Aplicavel = false,
         EhAnomalia = false,
@@ -235,6 +242,7 @@ public class LevelShiftDetector : IAnomalyDetector
         ScoreNormalizado = 0,
         Detector = Nome,
         Peso = Peso,
-        Explicacao = explicacao
+        Explicacao = explicacao,
+        NonApplicabilityReasonCode = nonApplicabilityReasonCode
     };
 }

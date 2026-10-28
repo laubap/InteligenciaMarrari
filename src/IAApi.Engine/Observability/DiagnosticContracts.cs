@@ -23,6 +23,7 @@ public static class DetectorDiagnosticReasonCodes
     public const string InsufficientHistory = "InsufficientHistory";
     public const string EffectiveScaleUnavailable = "EffectiveScaleUnavailable";
     public const string TemporalCadenceUnavailable = "TemporalCadenceUnavailable";
+    public const string InsufficientTemporalWindow = "InsufficientTemporalWindow";
     public const string EwmaDeviationUnavailable = "EwmaDeviationUnavailable";
     public const string InsufficientValidRateIntervals = "InsufficientValidRateIntervals";
     public const string InvalidRateInterval = "InvalidRateInterval";

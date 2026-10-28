@@ -1,3 +1,5 @@
+using IAApi.IntelligenceLab.Observability;
+
 namespace IAApi.Services.AnomalyDetection;
 
 public class PersistenceDetector : IAnomalyDetector
@@ -26,7 +28,8 @@ public class PersistenceDetector : IAnomalyDetector
 
         if (historico.Count < 10)
             return NaoAplicavel(
-                "Histórico insuficiente para avaliar persistência.");
+                "Histórico insuficiente para avaliar persistência.",
+                DetectorDiagnosticReasonCodes.InsufficientHistory);
 
         var mediana = contexto.Mediana;
         var mad = contexto.Mad;
@@ -69,7 +72,8 @@ public class PersistenceDetector : IAnomalyDetector
              !double.IsFinite(escalaFallback)))
         {
             return NaoAplicavel(
-                "Não existe escala ou deadband suficiente para avaliar persistência.");
+                "Não existe escala ou deadband suficiente para avaliar persistência.",
+                DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable);
         }
 
         bool EstaFora(double valor)
@@ -112,7 +116,8 @@ public class PersistenceDetector : IAnomalyDetector
             !double.IsFinite(intervaloMediano))
         {
             return NaoAplicavel(
-                "Não foi possível determinar a cadência para avaliar persistência.");
+                "Não foi possível determinar a cadência para avaliar persistência.",
+                DetectorDiagnosticReasonCodes.TemporalCadenceUnavailable);
         }
 
         var quality = input.QualidadeHistorico;
@@ -285,7 +290,8 @@ public class PersistenceDetector : IAnomalyDetector
     }
 
     private DetectorResult NaoAplicavel(
-        string explicacao) => new()
+        string explicacao,
+        string nonApplicabilityReasonCode) => new()
     {
         Aplicavel = false,
         EhAnomalia = false,
@@ -293,6 +299,7 @@ public class PersistenceDetector : IAnomalyDetector
         ScoreNormalizado = 0,
         Detector = Nome,
         Peso = Peso,
-        Explicacao = explicacao
+        Explicacao = explicacao,
+        NonApplicabilityReasonCode = nonApplicabilityReasonCode
     };
 }

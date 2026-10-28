@@ -1,4 +1,5 @@
 
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection;
 using Xunit;
 
@@ -20,6 +21,32 @@ public class PersistenceDetectorTests
 
         Assert.False(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
+        Assert.Equal(
+            DetectorDiagnosticReasonCodes.InsufficientHistory,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_EscalaIndisponivel_DeveSerNaoAplicavel()
+    {
+        var input = CriarInput(
+            Enumerable.Repeat(100.0, 30).ToArray(),
+            150);
+
+        // Sem MAD, sem deadband explícito/automático e com desvio-padrão zero.
+        // A ausência de escala já tornava o detector não aplicável.
+        input.VariacaoMinimaRelevante = 0;
+        input.ConfiancaVariacaoMinima = 0;
+        input.VariacaoMinimaDefinidaPeloCliente = false;
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.False(resultado.EhAnomalia);
+        Assert.Equal(0, resultado.ScoreNormalizado);
+        Assert.Equal(
+            DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable,
+            resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -37,6 +64,7 @@ public class PersistenceDetectorTests
             TemporalConfirmationStatus.NotObserved,
             resultado.TemporalConfirmation!.Status);
         Assert.Equal(0, resultado.Metricas["pontosConsecutivos"]);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -56,6 +84,7 @@ public class PersistenceDetectorTests
             resultado.TemporalConfirmation!.Status);
 
         Assert.Equal(1, resultado.Metricas["pontosConsecutivos"]);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -126,6 +155,7 @@ public class PersistenceDetectorTests
             resultado.TemporalConfirmation!.Status);
 
         Assert.Equal(1, resultado.Metricas["sequenciaQuebradaPorGap"]);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -143,6 +173,7 @@ public class PersistenceDetectorTests
         Assert.True(resultado.Aplicavel);
         Assert.True(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Metricas["madBaseline"]);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
 
         Assert.Equal(
             UnderlyingEvidenceKind.DeadbandDeviation,
