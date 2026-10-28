@@ -22,6 +22,12 @@ public static class DetectorDiagnosticReasonCodes
     public const string DetectorReturnedNotApplicable = "DetectorReturnedNotApplicable";
     public const string InsufficientHistory = "InsufficientHistory";
     public const string EffectiveScaleUnavailable = "EffectiveScaleUnavailable";
+    public const string TemporalCadenceUnavailable = "TemporalCadenceUnavailable";
+    public const string EwmaDeviationUnavailable = "EwmaDeviationUnavailable";
+    public const string InsufficientValidRateIntervals = "InsufficientValidRateIntervals";
+    public const string InvalidRateInterval = "InvalidRateInterval";
+    public const string InvalidCurrentRate = "InvalidCurrentRate";
+    public const string RateScaleUnavailable = "RateScaleUnavailable";
     public const string ExcludedByExperimentalTemporalConfirmationPolicy =
         "ExcludedByExperimentalTemporalConfirmationPolicy";
 }

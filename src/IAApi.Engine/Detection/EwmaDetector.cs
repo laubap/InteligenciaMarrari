@@ -1,3 +1,4 @@
+using IAApi.IntelligenceLab.Observability;
 
 namespace IAApi.Services.AnomalyDetection;
 
@@ -21,7 +22,9 @@ public EwmaDetector(AnomalyDetectionOptions options)
 
         if (input.Historico.Count < 10)
         {
-            return NaoAplicavel("Histórico insuficiente para calcular EWMA.");
+            return NaoAplicavel(
+                "Histórico insuficiente para calcular EWMA.",
+                DetectorDiagnosticReasonCodes.InsufficientHistory);
         }
 
         var contexto = input.Contexto;
@@ -30,7 +33,8 @@ public EwmaDetector(AnomalyDetectionOptions options)
         if (cadenciaMediana <= 0 || !double.IsFinite(cadenciaMediana))
         {
             return NaoAplicavel(
-                "Não foi possível determinar a cadência temporal da tag.");
+                "Não foi possível determinar a cadência temporal da tag.",
+                DetectorDiagnosticReasonCodes.TemporalCadenceUnavailable);
         }
 
         var alphaBase = Math.Clamp(_options.EwmaLambda, 0.01, 1.0);
@@ -49,7 +53,8 @@ public EwmaDetector(AnomalyDetectionOptions options)
         if (escalaBaseEfetiva <= 0 || !double.IsFinite(escalaBaseEfetiva))
         {
             return NaoAplicavel(
-                "Não foi possível determinar uma escala segura para o EWMA.");
+                "Não foi possível determinar uma escala segura para o EWMA.",
+                DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable);
         }
 
         var ewma = mediaAlvo;
@@ -115,7 +120,8 @@ public EwmaDetector(AnomalyDetectionOptions options)
         if (desvioEwma <= 0 || !double.IsFinite(desvioEwma))
         {
             return NaoAplicavel(
-                "Não foi possível calcular o desvio temporal do EWMA.");
+                "Não foi possível calcular o desvio temporal do EWMA.",
+                DetectorDiagnosticReasonCodes.EwmaDeviationUnavailable);
         }
 
         var deltaEwma = Math.Abs(ewmaAtual - mediaAlvo);
@@ -202,7 +208,9 @@ public EwmaDetector(AnomalyDetectionOptions options)
         return Math.Clamp(alpha, 0.0001, 1.0);
     }
 
-    private DetectorResult NaoAplicavel(string explicacao) => new()
+    private DetectorResult NaoAplicavel(
+        string explicacao,
+        string? nonApplicabilityReasonCode = null) => new()
     {
         Aplicavel = false,
         EhAnomalia = false,
@@ -210,6 +218,7 @@ public EwmaDetector(AnomalyDetectionOptions options)
         ScoreNormalizado = 0,
         Detector = Nome,
         Peso = Peso,
-        Explicacao = explicacao
+        Explicacao = explicacao,
+        NonApplicabilityReasonCode = nonApplicabilityReasonCode
     };
 }

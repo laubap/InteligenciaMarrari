@@ -1,3 +1,5 @@
+using IAApi.IntelligenceLab.Observability;
+
 namespace IAApi.Services.AnomalyDetection;
 
 public class RateOfChangeDetector : IAnomalyDetector
@@ -24,13 +26,15 @@ public class RateOfChangeDetector : IAnomalyDetector
 
         if (historico.Count < 3)
             return NaoAplicavel(
-                "Histórico insuficiente para calcular variação.");
+                "Histórico insuficiente para calcular variação.",
+                DetectorDiagnosticReasonCodes.InsufficientHistory);
 
         var taxasHistoricas = contexto.TaxasHistoricas;
 
         if (taxasHistoricas.Length < 2)
             return NaoAplicavel(
-                "Não existem intervalos temporais válidos suficientes.");
+                "Não existem intervalos temporais válidos suficientes.",
+                DetectorDiagnosticReasonCodes.InsufficientValidRateIntervals);
 
         var ultimo = contexto.UltimoPonto;
 
@@ -48,7 +52,8 @@ public class RateOfChangeDetector : IAnomalyDetector
             !double.IsFinite(intervaloAtual))
         {
             return NaoAplicavel(
-                "Não foi possível determinar o intervalo da leitura atual.");
+                "Não foi possível determinar o intervalo da leitura atual.",
+                DetectorDiagnosticReasonCodes.InvalidRateInterval);
         }
 
         var taxaAtual =
@@ -56,7 +61,8 @@ public class RateOfChangeDetector : IAnomalyDetector
 
         if (!double.IsFinite(taxaAtual))
             return NaoAplicavel(
-                "A taxa atual calculada não é válida.");
+                "A taxa atual calculada não é válida.",
+                DetectorDiagnosticReasonCodes.InvalidCurrentRate);
 
         var medianaTaxas = contexto.MedianaTaxas;
         var madTaxas = contexto.MadTaxas;
@@ -93,7 +99,8 @@ public class RateOfChangeDetector : IAnomalyDetector
         else
         {
             return NaoAplicavel(
-                "As taxas históricas não apresentam variação suficiente.");
+                "As taxas históricas não apresentam variação suficiente.",
+                DetectorDiagnosticReasonCodes.RateScaleUnavailable);
         }
 
         if (!double.IsFinite(scoreTaxa))
@@ -131,7 +138,9 @@ public class RateOfChangeDetector : IAnomalyDetector
         };
     }
 
-    private DetectorResult NaoAplicavel(string explicacao) => new()
+    private DetectorResult NaoAplicavel(
+        string explicacao,
+        string? nonApplicabilityReasonCode = null) => new()
     {
         Aplicavel = false,
         EhAnomalia = false,
@@ -139,6 +148,7 @@ public class RateOfChangeDetector : IAnomalyDetector
         ScoreNormalizado = 0,
         Detector = Nome,
         Peso = Peso,
-        Explicacao = explicacao
+        Explicacao = explicacao,
+        NonApplicabilityReasonCode = nonApplicabilityReasonCode
     };
 }

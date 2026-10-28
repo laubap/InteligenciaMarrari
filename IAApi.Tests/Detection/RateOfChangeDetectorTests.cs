@@ -1,4 +1,5 @@
 
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection;
 using Xunit;
 
@@ -18,6 +19,34 @@ public class RateOfChangeDetectorTests
         Assert.False(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Score);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_TaxasValidasInsuficientes_RegistraMotivo()
+    {
+        var input = CriarInput(
+            [double.MaxValue, -double.MaxValue, double.MaxValue],
+            100);
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientValidRateIntervals,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_TaxaAtualInvalida_RegistraMotivo()
+    {
+        var input = CriarInput(CriarHistoricoVariavel(), double.NaN);
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InvalidCurrentRate,
+            resultado.NonApplicabilityReasonCode);
     }
 
 
@@ -44,6 +73,7 @@ public class RateOfChangeDetectorTests
             precision: 10);
 
         Assert.Equal(0, resultado.Score, precision: 10);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
 
@@ -148,6 +178,8 @@ public class RateOfChangeDetectorTests
         Assert.False(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Score);
+        Assert.Equal(DetectorDiagnosticReasonCodes.RateScaleUnavailable,
+            resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -168,6 +200,7 @@ public class RateOfChangeDetectorTests
             110 - historico[^1],
             resultado.Metricas["taxaAtualPorMinuto"],
             precision: 10);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]

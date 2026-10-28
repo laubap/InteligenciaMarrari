@@ -1,4 +1,5 @@
 
+using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection;
 using Xunit;
 
@@ -18,6 +19,58 @@ public class EwmaDetectorTests
         Assert.False(resultado.Aplicavel);
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Score);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_CadenciaTemporalIndisponivel_RegistraMotivo()
+    {
+        var input = CriarInput(
+            Enumerable.Repeat(100.0, 10).ToArray(),
+            110);
+
+        foreach (var ponto in input.Historico)
+            ponto.DataHora = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.TemporalCadenceUnavailable,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_EscalaBaseInvalida_RegistraMotivo()
+    {
+        var input = CriarInput(
+            Enumerable.Repeat(100.0, 10).ToArray(),
+            110);
+        input.MediaHistorica = double.NaN;
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.EffectiveScaleUnavailable,
+            resultado.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public void Detectar_DesvioEwmaInvalido_RegistraMotivo()
+    {
+        var detector = new EwmaDetector(new AnomalyDetectionOptions
+        {
+            EwmaLambda = double.NaN
+        });
+        var input = CriarInput(
+            Enumerable.Repeat(100.0, 10).ToArray(),
+            110);
+
+        var resultado = detector.Detectar(input);
+
+        Assert.False(resultado.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.EwmaDeviationUnavailable,
+            resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -33,6 +86,7 @@ public class EwmaDetectorTests
         Assert.False(resultado.EhAnomalia);
         Assert.Equal(0, resultado.Score, precision: 10);
         Assert.Equal("EWMA", resultado.Detector);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
@@ -112,6 +166,20 @@ public class EwmaDetectorTests
         Assert.True(
             resultado.Metricas["lambdaAtualEfetivo"] <
             resultado.Metricas["lambdaBase"]);
+    }
+
+    [Fact]
+    public void Detectar_IntervaloAtualInvalido_UsaCadenciaMedianaSemMotivo()
+    {
+        var input = CriarInput(
+            Enumerable.Repeat(100.0, 30).ToArray(),
+            110,
+            intervaloAtualMinutos: 0);
+
+        var resultado = CriarDetector().Detectar(input);
+
+        Assert.True(resultado.Aplicavel);
+        Assert.Null(resultado.NonApplicabilityReasonCode);
     }
 
     [Fact]
