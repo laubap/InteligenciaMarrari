@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using IAApi.IntelligenceLab.Observability;
 using Microsoft.Extensions.Options;
 
 namespace IAApi.Services.AnomalyDetection;
@@ -97,7 +98,8 @@ public class IsolationForestDetector : IAnomalyDetector
         )
         {
             return CriarResultadoNaoAplicavel(
-                "O cliente não foi informado para o Isolation Forest."
+                "O cliente não foi informado para o Isolation Forest.",
+                DetectorDiagnosticReasonCodes.MissingClientId
             );
         }
 
@@ -108,7 +110,8 @@ public class IsolationForestDetector : IAnomalyDetector
         )
         {
             return CriarResultadoNaoAplicavel(
-                "A tag não foi informada para o Isolation Forest."
+                "A tag não foi informada para o Isolation Forest.",
+                DetectorDiagnosticReasonCodes.MissingTagName
             );
         }
 
@@ -129,13 +132,15 @@ public class IsolationForestDetector : IAnomalyDetector
         catch (InvalidOperationException ex)
         {
             return CriarResultadoNaoAplicavel(
-                $"O Isolation Forest não pôde ser executado: {ex.Message}"
+                $"O Isolation Forest não pôde ser executado: {ex.Message}",
+                DetectorDiagnosticReasonCodes.ModelResolutionFailed
             );
         }
         catch (Exception ex)
         {
             return CriarResultadoNaoAplicavel(
-                $"Falha ao executar o Isolation Forest: {ex.Message}"
+                $"Falha ao executar o Isolation Forest: {ex.Message}",
+                DetectorDiagnosticReasonCodes.ModelResolutionFailed
             );
         }
 
@@ -146,7 +151,8 @@ public class IsolationForestDetector : IAnomalyDetector
                 $"para o cliente '{input.ClienteId.Trim()}' " +
                 $"e a tag '{input.TagName.Trim()}'. " +
                 $"Execute o endpoint de treinamento antes " +
-                $"de utilizar este detector."
+                $"de utilizar este detector.",
+                DetectorDiagnosticReasonCodes.NoTrainedModel
             );
         }
 
@@ -175,7 +181,8 @@ public class IsolationForestDetector : IAnomalyDetector
                 $"Histórico insuficiente para executar o " +
                 $"Isolation Forest. " +
                 $"Necessário: {_options.MinimumHistoryPoints}. " +
-                $"Disponível: {historicoValido.Count}."
+                $"Disponível: {historicoValido.Count}.",
+                DetectorDiagnosticReasonCodes.InsufficientHistory
             );
         }
 
@@ -238,7 +245,8 @@ public class IsolationForestDetector : IAnomalyDetector
             {
                 return CriarResultadoNaoAplicavel(
                     "Não foi possível gerar características válidas " +
-                    "para executar o Isolation Forest."
+                    "para executar o Isolation Forest.",
+                    DetectorDiagnosticReasonCodes.InvalidFeatureVector
                 );
             }
 
@@ -382,14 +390,16 @@ public class IsolationForestDetector : IAnomalyDetector
         {
             return CriarResultadoNaoAplicavel(
                 $"O Isolation Forest não pôde ser executado: " +
-                $"{ex.Message}"
+                $"{ex.Message}",
+                DetectorDiagnosticReasonCodes.IsolationForestProcessingFailed
             );
         }
         catch (Exception ex)
         {
             return CriarResultadoNaoAplicavel(
                 $"Falha ao executar o Isolation Forest: " +
-                $"{ex.Message}"
+                $"{ex.Message}",
+                DetectorDiagnosticReasonCodes.IsolationForestProcessingFailed
             );
         }
     }
@@ -780,11 +790,14 @@ public class IsolationForestDetector : IAnomalyDetector
     }
 
     private DetectorResult CriarResultadoNaoAplicavel(
-        string explicacao)
+        string explicacao,
+        string? nonApplicabilityReasonCode = null)
     {
         return new DetectorResult
         {
             Aplicavel = false,
+
+            NonApplicabilityReasonCode = nonApplicabilityReasonCode,
 
             EhAnomalia = false,
 

@@ -29,6 +29,13 @@ public static class DetectorDiagnosticReasonCodes
     public const string InvalidRateInterval = "InvalidRateInterval";
     public const string InvalidCurrentRate = "InvalidCurrentRate";
     public const string RateScaleUnavailable = "RateScaleUnavailable";
+    // Isolation Forest: resultado observado diretamente no detector.
+    public const string MissingClientId = "MissingClientId";
+    public const string MissingTagName = "MissingTagName";
+    public const string NoTrainedModel = "NoTrainedModel";
+    public const string ModelResolutionFailed = "ModelResolutionFailed";
+    public const string InvalidFeatureVector = "InvalidFeatureVector";
+    public const string IsolationForestProcessingFailed = "IsolationForestProcessingFailed";
     public const string ExcludedByExperimentalTemporalConfirmationPolicy =
         "ExcludedByExperimentalTemporalConfirmationPolicy";
 }

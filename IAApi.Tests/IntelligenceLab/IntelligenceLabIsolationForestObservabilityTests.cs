@@ -1,3 +1,4 @@
+using System.Text.Json;
 using IAApi.Infrastructure.Observability;
 using IAApi.IntelligenceLab.Observability;
 using IAApi.IntelligenceLab.Observability.Application;
@@ -34,6 +35,8 @@ public sealed class IntelligenceLabIsolationForestObservabilityTests
         Assert.Equal("Isolation Forest", detail.Nome);
         Assert.Equal(DetectorDiagnosticStatus.NotApplicable, detail.ExecutionStatus);
         Assert.False(detail.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.NoTrainedModel,
+            detail.NonApplicabilityReasonCode);
         Assert.Contains("Não existe modelo Isolation Forest treinado", detail.Explicacao);
         Assert.Equal(0, ensembleResult.Metricas["quantidadeDetectoresAplicaveis"]);
 
@@ -44,6 +47,79 @@ public sealed class IntelligenceLabIsolationForestObservabilityTests
         Assert.Null(detector.NormalizedScore);
         Assert.False(detector.VotedAnomaly);
         Assert.Empty(detector.Metrics);
+        var contribution = Assert.Single(Assert.IsType<EnsembleDiagnostic>(diagnostic.Ensemble).Contributions!);
+        Assert.Equal(DetectorDiagnosticReasonCodes.NoTrainedModel,
+            contribution.NonApplicabilityReasonCode);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InvokedAndCompleted,
+            contribution.ExecutionReasonCode);
+        Assert.Null(contribution.NormalizedScore);
+
+        var json = JsonSerializer.Serialize(diagnostic,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Contains("\"nonApplicabilityReasonCode\":\"NoTrainedModel\"", json);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void IdentificadorAusente_RetornaMotivoEspecificoSemInvocarModelo(bool missingClient)
+    {
+        using var fixture = new ModelFixture();
+        var input = CreateInput(
+            missingClient ? "" : fixture.ClienteId,
+            missingClient ? fixture.TagName : "");
+
+        var result = fixture.CreateDetector().Detectar(input);
+
+        Assert.False(result.Aplicavel);
+        Assert.False(result.EhAnomalia);
+        Assert.Equal(0, result.ScoreNormalizado);
+        Assert.Equal(missingClient
+                ? DetectorDiagnosticReasonCodes.MissingClientId
+                : DetectorDiagnosticReasonCodes.MissingTagName,
+            result.NonApplicabilityReasonCode);
+    }
+
+    [Fact]
+    public async Task ModeloTreinado_QuandoHistoricoInsuficiente_PreservaMotivoNoEnsemble()
+    {
+        using var fixture = new ModelFixture();
+        var input = CreateInput(fixture.ClienteId, fixture.TagName);
+        await SaveTrainedModelAsync(fixture, input);
+
+        var shortHistoryInput = new DetectorInput
+        {
+            ClienteId = input.ClienteId,
+            TagName = input.TagName,
+            TipoTag = input.TipoTag,
+            ValorAtual = input.ValorAtual,
+            DataHoraAtual = input.DataHoraAtual,
+            MediaHistorica = input.MediaHistorica,
+            DesvioPadraoHistorico = input.DesvioPadraoHistorico,
+            VariacaoMinimaRelevante = input.VariacaoMinimaRelevante,
+            ConfiancaVariacaoMinima = input.ConfiancaVariacaoMinima,
+            Historico = input.Historico.TakeLast(20).ToArray()
+        };
+
+        var directResult = fixture.CreateDetector().Detectar(shortHistoryInput);
+        Assert.False(directResult.Aplicavel);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            directResult.NonApplicabilityReasonCode);
+
+        var ensembleResult = CreateEnsemble(fixture.CreateDetector()).Detectar(shortHistoryInput);
+        var detail = Assert.Single(ensembleResult.DetalhesDetectores);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            detail.NonApplicabilityReasonCode);
+        Assert.False(ensembleResult.Aplicavel);
+        Assert.False(ensembleResult.EhAnomalia);
+        Assert.Equal(0, ensembleResult.ScoreNormalizado);
+
+        var diagnostic = Capture(ensembleResult, shortHistoryInput);
+        var contribution = Assert.Single(Assert.IsType<EnsembleDiagnostic>(diagnostic.Ensemble).Contributions!);
+        Assert.Equal(DetectorDiagnosticReasonCodes.InsufficientHistory,
+            contribution.NonApplicabilityReasonCode);
+        Assert.False(contribution.Applicable);
+        Assert.Null(contribution.NormalizedScore);
     }
 
     [Fact]
@@ -52,30 +128,7 @@ public sealed class IntelligenceLabIsolationForestObservabilityTests
         using var fixture = new ModelFixture();
         var input = CreateInput(fixture.ClienteId, fixture.TagName);
         var options = fixture.Options;
-        var extractor = new IsolationForestFeatureExtractor();
-
-        // Treino local deterministico pelo componente real, sem banco ou endpoint.
-        var features = extractor.ExtrairTreinamento(input, options.FeatureWindowSize);
-        var samples = features
-            .Select(feature => (IReadOnlyList<double>)feature.ParaVetor().ToArray())
-            .ToList();
-        Assert.NotEmpty(samples);
-
-        var model = new IsolationForestModel(
-            quantidadeArvores: options.TreeCount,
-            tamanhoAmostra: options.SampleSize,
-            sementeAleatoria: options.RandomSeed);
-        model.Treinar(samples);
-
-        var snapshot = model.ExportarSnapshot(
-            fixture.ClienteId,
-            fixture.TagName,
-            options.FeatureWindowSize,
-            options.AnomalyThreshold,
-            ReadingTime.AddDays(-1));
-        snapshot.VersaoModelo = 3;
-        snapshot.QuantidadePontosTreinamento = input.Historico.Count;
-        await fixture.Persistence.SalvarAsync(snapshot);
+        await SaveTrainedModelAsync(fixture, input);
 
         var ensembleResult = CreateEnsemble(fixture.CreateDetector()).Detectar(input);
         var detail = Assert.Single(ensembleResult.DetalhesDetectores);
@@ -83,6 +136,7 @@ public sealed class IntelligenceLabIsolationForestObservabilityTests
         Assert.Equal("Isolation Forest", detail.Nome);
         Assert.Equal(DetectorDiagnosticStatus.Executed, detail.ExecutionStatus);
         Assert.True(detail.Aplicavel);
+        Assert.Null(detail.NonApplicabilityReasonCode);
         Assert.True(double.IsFinite(detail.ScoreOriginal));
         Assert.InRange(detail.ScoreNormalizado, 0, 100);
         Assert.Equal(options.Weight, detail.Peso, precision: 6);
@@ -108,6 +162,35 @@ public sealed class IntelligenceLabIsolationForestObservabilityTests
         // O threshold e preservado em Metrics. Na versao analisada,
         // DetectorDiagnostic.Threshold permanece null; melhorar isso numa
         // etapa futura sem prender o teste ao formato parcial atual.
+    }
+
+    private static async Task SaveTrainedModelAsync(ModelFixture fixture, DetectorInput input)
+    {
+        var options = fixture.Options;
+        var extractor = new IsolationForestFeatureExtractor();
+
+        // Treinamento isolado e deterministico, sem modelo ou banco do cliente.
+        var features = extractor.ExtrairTreinamento(input, options.FeatureWindowSize);
+        var samples = features
+            .Select(feature => (IReadOnlyList<double>)feature.ParaVetor().ToArray())
+            .ToList();
+        Assert.NotEmpty(samples);
+
+        var model = new IsolationForestModel(
+            quantidadeArvores: options.TreeCount,
+            tamanhoAmostra: options.SampleSize,
+            sementeAleatoria: options.RandomSeed);
+        model.Treinar(samples);
+
+        var snapshot = model.ExportarSnapshot(
+            fixture.ClienteId,
+            fixture.TagName,
+            options.FeatureWindowSize,
+            options.AnomalyThreshold,
+            ReadingTime.AddDays(-1));
+        snapshot.VersaoModelo = 3;
+        snapshot.QuantidadePontosTreinamento = input.Historico.Count;
+        await fixture.Persistence.SalvarAsync(snapshot);
     }
 
     private static EnsembleDetectionService CreateEnsemble(IAnomalyDetector detector) =>
