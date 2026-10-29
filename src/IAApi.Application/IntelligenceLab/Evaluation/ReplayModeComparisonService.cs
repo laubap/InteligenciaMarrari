@@ -106,12 +106,25 @@ public static class ReplayModeComparisonService
                 report.ReadingMetrics.FinalAlertReadings)
             throw new InvalidOperationException("Contagens por leitura divergiram do avaliador oficial.");
         var eventResult = report.Events.Single();
+        var hasExplicitNegativeReadings = fp + tn > 0;
+        double? scorableReadingPrecision = hasExplicitNegativeReadings && tp + fp > 0
+            ? tp / (double)(tp + fp)
+            : null;
+        double? readingRecall = tp + fn > 0 ? tp / (double)(tp + fn) : null;
         return new ReplayClassificationSummary(tp, fn, fp, tn,
             rows.Count(x => x.Phase == "Unlabeled"),
             report.ReadingMetrics.FinalAlertReadings,
             eventResult.Classification.ToString(), eventResult.DetectionDelay?.TotalMinutes,
             report.EventMetrics.StrictRecall,
-            report.EpisodeMetrics.FalsePositiveEpisodes);
+            report.EpisodeMetrics.FalsePositiveEpisodes)
+        {
+            ScorableReadingPrecision = scorableReadingPrecision,
+            ReadingRecall = readingRecall,
+            OnTimeDetectedEvents = report.EventMetrics.DetectedOnTime,
+            LateDetectedEvents = report.EventMetrics.DetectedLate,
+            MissedEvents = report.EventMetrics.Missed,
+            OnTimeEpisodePrecision = report.EpisodeMetrics.OnTimeEpisodePrecision
+        };
     }
 
     private static T Read<T>(string json) where T : class =>
@@ -131,7 +144,16 @@ public sealed record ReplayComparisonPhase(
 public sealed record ReplayClassificationSummary(
     int TruePositives, int FalseNegatives, int FalsePositives, int TrueNegatives,
     int UnlabeledReadings, int FinalAlertReadings, string EventClassification,
-    double? DetectionDelayMinutes, double? StrictEventRecall, int FalsePositiveEpisodes);
+    double? DetectionDelayMinutes, double? StrictEventRecall, int FalsePositiveEpisodes)
+{
+    // Campos aditivos: preservam o construtor/contrato v1 consumido antes da M4.2A.
+    public double? ScorableReadingPrecision { get; init; }
+    public double? ReadingRecall { get; init; }
+    public int OnTimeDetectedEvents { get; init; }
+    public int LateDetectedEvents { get; init; }
+    public int MissedEvents { get; init; }
+    public double? OnTimeEpisodePrecision { get; init; }
+}
 
 public sealed record ReplayModeComparisonResult(
     string SchemaVersion, string ScenarioId, string TestClientId, string TagName,

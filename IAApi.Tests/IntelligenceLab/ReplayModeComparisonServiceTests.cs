@@ -30,6 +30,12 @@ public sealed class ReplayModeComparisonServiceTests
         Assert.Equal(0, result.SevenDetectors.FalseNegatives);
         Assert.Equal(0d, result.SevenDetectors.DetectionDelayMinutes!.Value);
         Assert.Equal(1d, result.SevenDetectors.StrictEventRecall!.Value);
+        Assert.Equal(1d, result.SevenDetectors.ScorableReadingPrecision!.Value);
+        Assert.Equal(1d, result.SevenDetectors.ReadingRecall!.Value);
+        Assert.Equal(1, result.SevenDetectors.OnTimeDetectedEvents);
+        Assert.Equal(0, result.SevenDetectors.LateDetectedEvents);
+        Assert.Equal(0, result.SevenDetectors.MissedEvents);
+        Assert.Equal(1d, result.SevenDetectors.OnTimeEpisodePrecision!.Value);
         Assert.Equal(0, result.SevenDetectors.FalsePositiveEpisodes);
 
         var before = Assert.Single(result.Phases.Where(x => x.Phase == "Before"));
@@ -70,6 +76,36 @@ public sealed class ReplayModeComparisonServiceTests
         Assert.Equal(89, result.SevenDetectors.TrueNegatives);
         Assert.Equal(1, result.SevenDetectors.FalsePositiveEpisodes);
         Assert.Equal(1d, result.SevenDetectors.DetectionDelayMinutes!.Value);
+        Assert.Equal(29d / 30d, result.SevenDetectors.ScorableReadingPrecision!.Value);
+        Assert.Equal(29d / 30d, result.SevenDetectors.ReadingRecall!.Value);
+        Assert.Equal(1, result.SevenDetectors.OnTimeDetectedEvents);
+        Assert.Equal(0, result.SevenDetectors.LateDetectedEvents);
+        Assert.Equal(0, result.SevenDetectors.MissedEvents);
+    }
+
+    [Fact]
+    public void DeteccaoAposJanelaInicial_EhRegistradaComoTardiaSemAumentarRecallEstrito()
+    {
+        var fixture = CreateFixture();
+        var changed = fixture.Seven with
+        {
+            Readings = fixture.Seven.Readings.Select((r, i) =>
+                i is >= 60 and <= 70 ? r with { FinalAlert = false } : r).ToArray()
+        };
+
+        var result = ReplayModeComparisonService.Compare(
+            fixture.ExportSix, fixture.LabelsSix,
+            JsonSerializer.Serialize(changed, Options), fixture.LabelsSeven);
+
+        Assert.Equal(19, result.SevenDetectors.TruePositives);
+        Assert.Equal(11, result.SevenDetectors.FalseNegatives);
+        Assert.Equal("DetectedLate", result.SevenDetectors.EventClassification);
+        Assert.Equal(11d, result.SevenDetectors.DetectionDelayMinutes!.Value);
+        Assert.Equal(0, result.SevenDetectors.OnTimeDetectedEvents);
+        Assert.Equal(1, result.SevenDetectors.LateDetectedEvents);
+        Assert.Equal(0, result.SevenDetectors.MissedEvents);
+        Assert.Equal(0d, result.SevenDetectors.StrictEventRecall!.Value);
+        Assert.Null(result.SevenDetectors.OnTimeEpisodePrecision);
     }
 
     [Fact]
@@ -113,6 +149,8 @@ public sealed class ReplayModeComparisonServiceTests
         Assert.Equal(0, result.SixDetectors.TrueNegatives);
         Assert.Equal(0, result.SixDetectors.FalsePositives);
         Assert.Equal(30, result.SixDetectors.TruePositives);
+        Assert.Null(result.SixDetectors.ScorableReadingPrecision);
+        Assert.Equal(1d, result.SixDetectors.ReadingRecall!.Value);
         Assert.Equal(90, Assert.Single(result.Phases.Where(p => p.Phase == "Unlabeled")).Readings);
     }
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using IAApi.IntelligenceLab.Evaluation;
 using Xunit;
 
 namespace IAApi.Tests.IntelligenceLab;
@@ -13,6 +14,8 @@ namespace IAApi.Tests.IntelligenceLab;
 /// </summary>
 public sealed class IntelligenceLabReplayModesIntegrationTests
 {
+    private static readonly JsonSerializerOptions ReplayInputJsonOptions =
+        new(JsonSerializerDefaults.Web);
     private const string DiagnosticsName = "intelligence-lab-replay-diagnostics.jsonl";
     private const string ManifestName = "intelligence-lab-run-manifest.json";
     private const string ReportName = "intelligence-lab-replay-report.json";
@@ -73,17 +76,65 @@ public sealed class IntelligenceLabReplayModesIntegrationTests
         }
     }
 
-    private static void AssertReplay(string folder, int expectedDetectorCount, bool fullEnsemble)
+    [Fact]
+    public async Task GradualDriftScenario_ReplaysIdenticalInputsAndKeepsRecoveryUnlabeled()
+    {
+        var scenario = SyntheticGradualDriftScenario.Create();
+        using var fixture = new ReplayFixture(scenario);
+        var sixOutput = Path.Combine(fixture.Root, "gradual-six");
+        var sevenOutput = Path.Combine(fixture.Root, "gradual-seven");
+
+        await RunReplayAsync(fixture, sixOutput, fullEnsemble: false, evaluationLimit: null);
+        await RunReplayAsync(fixture, sevenOutput, fullEnsemble: true, evaluationLimit: null);
+
+        AssertReplay(sixOutput, expectedDetectorCount: 6, fullEnsemble: false, expectedEvaluationCount: 120);
+        AssertReplay(sevenOutput, expectedDetectorCount: 7, fullEnsemble: true, expectedEvaluationCount: 120);
+        var sixLabels = BindLabels(sixOutput, scenario.IndependentLabelsTemplate);
+        var sevenLabels = BindLabels(sevenOutput, scenario.IndependentLabelsTemplate);
+        var comparison = ReplayModeComparisonService.Compare(
+            File.ReadAllText(Path.Combine(sixOutput, "intelligence-lab-replay-evaluation-readings.json")),
+            sixLabels,
+            File.ReadAllText(Path.Combine(sevenOutput, "intelligence-lab-replay-evaluation-readings.json")),
+            sevenLabels);
+
+        Assert.Equal(120, comparison.AlignedReadings);
+        Assert.Equal(15, comparison.SixDetectors.UnlabeledReadings);
+        Assert.Equal(15, comparison.SevenDetectors.UnlabeledReadings);
+        AssertScorableReadingCounts(comparison.SixDetectors);
+        AssertScorableReadingCounts(comparison.SevenDetectors);
+        Assert.InRange(comparison.SixDetectors.ReadingRecall!.Value, 0d, 1d);
+        Assert.InRange(comparison.SevenDetectors.ReadingRecall!.Value, 0d, 1d);
+        Assert.All(comparison.Phases, phase =>
+        {
+            Assert.True(phase.Readings > 0);
+            Assert.True(double.IsFinite(phase.MeanScoreSix!.Value));
+            Assert.True(double.IsFinite(phase.MeanScoreSeven!.Value));
+        });
+        Assert.Equal(30, comparison.Phases.Single(phase => phase.Phase == "Before").Readings);
+        Assert.Equal(60, comparison.Phases.Single(phase => phase.Phase == "During").Readings);
+        Assert.Equal(15, comparison.Phases.Single(phase => phase.Phase == "Unlabeled").Readings);
+        Assert.Equal(15, comparison.Phases.Single(phase => phase.Phase == "After").Readings);
+
+        var sixManifest = ReadJson(Path.Combine(sixOutput, ManifestName));
+        var sevenManifest = ReadJson(Path.Combine(sevenOutput, ManifestName));
+        Assert.Equal(sixManifest.GetProperty("trainingInput").GetProperty("sha256").GetString(),
+            sevenManifest.GetProperty("trainingInput").GetProperty("sha256").GetString());
+        Assert.Equal(sixManifest.GetProperty("evaluationInput").GetProperty("sha256").GetString(),
+            sevenManifest.GetProperty("evaluationInput").GetProperty("sha256").GetString());
+    }
+
+    private static void AssertReplay(string folder, int expectedDetectorCount, bool fullEnsemble,
+        int expectedEvaluationCount = 20)
     {
         var report = ReadJson(Path.Combine(folder, ReportName));
         Assert.True(report.GetProperty("EquivalentDecisions").GetBoolean());
         Assert.Empty(report.GetProperty("Mismatches").EnumerateArray());
         Assert.Equal(fullEnsemble, report.GetProperty("IsolationForestEnabled").GetBoolean());
         Assert.False(report.GetProperty("DatasetLabeled").GetBoolean());
-        Assert.Equal(20, report.GetProperty("EvaluationCount").GetInt32());
+        Assert.Equal(expectedEvaluationCount, report.GetProperty("EvaluationCount").GetInt32());
         var on = report.GetProperty("On");
-        Assert.Equal(20, on.GetProperty("DiagnosticCount").GetInt32());
-        Assert.Equal(20, on.GetProperty("StoredTotal").GetInt32());
+        Assert.Equal(expectedEvaluationCount, on.GetProperty("DiagnosticCount").GetInt32());
+        Assert.Equal(expectedEvaluationCount, on.GetProperty("StoredTotal").GetInt32());
         Assert.Equal(0, on.GetProperty("CaptureFailures").GetInt32());
         Assert.Equal(0, on.GetProperty("EvictedTotal").GetInt32());
 
@@ -91,7 +142,7 @@ public sealed class IntelligenceLabReplayModesIntegrationTests
             .Where(line => !string.IsNullOrWhiteSpace(line))
             .Select(ReadJsonText)
             .ToArray();
-        Assert.Equal(20, diagnostics.Length);
+        Assert.Equal(expectedEvaluationCount, diagnostics.Length);
         foreach (var entry in diagnostics)
         {
             var ensemble = entry.GetProperty("diagnostic").GetProperty("ensemble");
@@ -169,7 +220,31 @@ public sealed class IntelligenceLabReplayModesIntegrationTests
     private static string FileHash(string file) =>
         Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))).ToLowerInvariant();
 
-    private static async Task RunReplayAsync(ReplayFixture fixture, string output, bool fullEnsemble)
+    private static void AssertScorableReadingCounts(ReplayClassificationSummary summary)
+    {
+        Assert.Equal(60, summary.TruePositives + summary.FalseNegatives);
+        Assert.Equal(45, summary.FalsePositives + summary.TrueNegatives);
+        Assert.InRange(summary.LateDetectedEvents, 0, 1);
+        Assert.InRange(summary.OnTimeDetectedEvents, 0, 1);
+        Assert.InRange(summary.MissedEvents, 0, 1);
+        Assert.Equal(1, summary.OnTimeDetectedEvents + summary.LateDetectedEvents + summary.MissedEvents);
+    }
+
+    private static string BindLabels(string output, ReplayIndependentLabels template)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var export = JsonSerializer.Deserialize<UnlabeledReplayReadingsExport>(
+            File.ReadAllText(Path.Combine(output, "intelligence-lab-replay-evaluation-readings.json")), options)
+            ?? throw new InvalidDataException("Exportacao do replay ausente.");
+        return JsonSerializer.Serialize(template with
+        {
+            ReplayRunId = export.RunId,
+            ReplayContentSha256 = export.ReplayContentSha256
+        }, options);
+    }
+
+    private static async Task RunReplayAsync(ReplayFixture fixture, string output, bool fullEnsemble,
+        int? evaluationLimit = 20)
     {
         var repo = FindRepositoryRoot();
         var project = Path.Combine(repo, "tools", "IntelligenceLabReplay",
@@ -182,8 +257,11 @@ public sealed class IntelligenceLabReplayModesIntegrationTests
             RedirectStandardError = true,
             CreateNoWindow = true
         };
-        foreach (var argument in new[] { "run", "--no-build", "--project", project, "--",
-            fixture.Training, fixture.Evaluation, output, "20" })
+        var arguments = new List<string> { "run", "--no-build", "--project", project, "--",
+            fixture.Training, fixture.Evaluation, output };
+        if (evaluationLimit is not null)
+            arguments.Add(evaluationLimit.Value.ToString(CultureInfo.InvariantCulture));
+        foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
         if (fullEnsemble)
             start.ArgumentList.Add("--full-ensemble");
@@ -230,9 +308,19 @@ public sealed class IntelligenceLabReplayModesIntegrationTests
         public string Training => Path.Combine(Root, "treino.json");
         public string Evaluation => Path.Combine(Root, "avaliacao.json");
 
-        public ReplayFixture()
+        public ReplayFixture(SyntheticReplayDataset? scenario = null)
         {
             Directory.CreateDirectory(Root);
+            if (scenario is not null)
+            {
+                // O replay valida o contrato do Bridge em camelCase (tagName,
+                // dataHora, valor). O gerador de cenarios usa a mesma opcao.
+                File.WriteAllText(Training, JsonSerializer.Serialize(
+                    scenario.Training, ReplayInputJsonOptions));
+                File.WriteAllText(Evaluation, JsonSerializer.Serialize(
+                    scenario.Evaluation, ReplayInputJsonOptions));
+                return;
+            }
             var start = new DateTime(2026, 10, 1, 8, 0, 0);
             var values = new[] { 99.4, 99.6, 99.8, 100.0, 100.2, 100.4, 100.6 };
             var training = Enumerable.Range(0, 120).Select(index => new

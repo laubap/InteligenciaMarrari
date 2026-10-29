@@ -4,16 +4,31 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using IAApi.IntelligenceLab.Evaluation;
 
-if (args.Length != 1 || args[0].StartsWith("--", StringComparison.Ordinal))
+var (scenarioName, outputArgument) = args switch
 {
-    Console.Error.WriteLine("Uso: dotnet run --project tools/IntelligenceLabScenarioGenerator -- <pasta_saida_vazia>");
+    [var output] when !output.StartsWith("--", StringComparison.Ordinal) =>
+        ("flow-drop-sustained", output),
+    ["--scenario", "flow-drop-sustained", var output] =>
+        ("flow-drop-sustained", output),
+    ["--scenario", "gradual-drift", var output] =>
+        ("gradual-drift", output),
+    _ => (null, null)
+};
+
+if (scenarioName is null || outputArgument is null)
+{
+    Console.Error.WriteLine("Uso: dotnet run --project tools/IntelligenceLabScenarioGenerator -- " +
+        "[--scenario flow-drop-sustained|gradual-drift] <pasta_saida_vazia>");
     return 2;
 }
 
 try
 {
-    var folder = Path.GetFullPath(args[0]);
-    var dataset = SyntheticFlowDropScenario.Create();
+    var folder = Path.GetFullPath(outputArgument);
+    var dataset = scenarioName == "gradual-drift"
+        ? SyntheticGradualDriftScenario.Create()
+        : SyntheticFlowDropScenario.Create();
+    var definition = dataset.Metadata;
     var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -30,18 +45,21 @@ try
     var metadata = Serialize(new
     {
         schemaVersion = "industrial-synthetic-scenario-definition/v1",
-        scenarioDefinitionId = SyntheticFlowDropScenario.ScenarioDefinitionId,
-        replayScenarioId = SyntheticFlowDropScenario.ReplayScenarioId,
-        testClientId = SyntheticFlowDropScenario.TestClientId,
-        tagName = SyntheticFlowDropScenario.TagName,
-        unit = SyntheticFlowDropScenario.Unit,
-        trainingCount = SyntheticFlowDropScenario.TrainingCount,
-        evaluationCount = SyntheticFlowDropScenario.EvaluationCount,
-        eventStartIndex = SyntheticFlowDropScenario.EventStartIndex,
-        eventEndExclusiveIndex = SyntheticFlowDropScenario.EventEndExclusiveIndex,
-        cadenceSeconds = SyntheticFlowDropScenario.CadenceSeconds,
+        scenarioDefinitionId = definition.ScenarioDefinitionId,
+        replayScenarioId = definition.ReplayScenarioId,
+        testClientId = definition.TestClientId,
+        tagName = definition.TagName,
+        unit = definition.Unit,
+        trainingCount = definition.TrainingCount,
+        evaluationCount = definition.EvaluationCount,
+        eventStartIndex = definition.EventStartIndex,
+        eventEndExclusiveIndex = definition.EventEndExclusiveIndex,
+        recoveryStartIndex = definition.RecoveryStartIndex,
+        recoveryEndExclusiveIndex = definition.RecoveryEndExclusiveIndex,
+        cadenceSeconds = definition.CadenceSeconds,
         sourceTimestampAssumption = "UTC-03:00 (relogio local sem offset)",
         groundTruthStatus = "IndependentTemplatePendingReplayBinding",
+        groundTruthDescription = definition.GroundTruthDescription,
         limitation = "PK7.TAG1 e nome tecnico do replay sintetico, nao comprovacao de tag fisica de vazao ou parada de bomba.",
         trainingSha256 = Hash(training),
         evaluationSha256 = Hash(evaluation),
@@ -78,10 +96,10 @@ try
         throw;
     }
 
-    Console.WriteLine($"Cenario: {SyntheticFlowDropScenario.ScenarioDefinitionId}");
+    Console.WriteLine($"Cenario: {definition.ScenarioDefinitionId}");
     Console.WriteLine($"Treino: {dataset.Training.Count} leituras; avaliacao: {dataset.Evaluation.Count} leituras.");
-    Console.WriteLine($"Evento: indices [{SyntheticFlowDropScenario.EventStartIndex}, " +
-        $"{SyntheticFlowDropScenario.EventEndExclusiveIndex}) da avaliacao.");
+    Console.WriteLine($"Evento: indices [{definition.EventStartIndex}, " +
+        $"{definition.EventEndExclusiveIndex}) da avaliacao.");
     Console.WriteLine($"Saida: {folder}");
     Console.WriteLine("IMPORTANTE: gabarito independente ainda e TEMPLATE: runId/hash serao vinculados na M4.1B.");
     Console.WriteLine("Nao calcular metricas nem inferir parada real de bomba nesta etapa.");

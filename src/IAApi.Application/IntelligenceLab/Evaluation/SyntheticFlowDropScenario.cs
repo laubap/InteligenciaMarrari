@@ -12,10 +12,30 @@ public sealed record SyntheticReplayReading(
     float Valor,
     string Unidade);
 
-public sealed record SyntheticFlowDropDataset(
+/// <summary>
+/// Artefatos de entrada e gabarito independente compartilhados por cenarios
+/// sinteticos do Intelligence Lab. Nenhum campo contem uma decisao da IA.
+/// </summary>
+public sealed record SyntheticReplayDataset(
     IReadOnlyList<SyntheticReplayReading> Training,
     IReadOnlyList<SyntheticReplayReading> Evaluation,
-    ReplayIndependentLabels IndependentLabelsTemplate);
+    ReplayIndependentLabels IndependentLabelsTemplate,
+    SyntheticScenarioMetadata Metadata);
+
+public sealed record SyntheticScenarioMetadata(
+    string ScenarioDefinitionId,
+    string ReplayScenarioId,
+    string TestClientId,
+    string TagName,
+    string Unit,
+    int TrainingCount,
+    int EvaluationCount,
+    int EventStartIndex,
+    int EventEndExclusiveIndex,
+    int? RecoveryStartIndex,
+    int? RecoveryEndExclusiveIndex,
+    int CadenceSeconds,
+    string GroundTruthDescription);
 
 /// <summary>
 /// M4.1A: verdade-terreno criada independentemente das decisoes da IA.
@@ -42,7 +62,7 @@ public static class SyntheticFlowDropScenario
     private static readonly float[] NormalValues =
         [49.4f, 49.6f, 49.8f, 50.0f, 50.2f, 50.4f, 50.6f];
 
-    public static SyntheticFlowDropDataset Create()
+    public static SyntheticReplayDataset Create()
     {
         // A serie de treinamento nao contem incidente nem dados da avaliacao.
         var training = Enumerable.Range(0, TrainingCount)
@@ -106,7 +126,12 @@ public static class SyntheticFlowDropScenario
             [labeledEvent],
             normals);
 
-        return new SyntheticFlowDropDataset(training, evaluation, labels);
+        return new SyntheticReplayDataset(training, evaluation, labels,
+            new SyntheticScenarioMetadata(
+                ScenarioDefinitionId, ReplayScenarioId, TestClientId, TagName, Unit,
+                TrainingCount, EvaluationCount, EventStartIndex, EventEndExclusiveIndex,
+                null, null, CadenceSeconds,
+                "Sustained zero-flow incident with normal periods before and after recovery."));
     }
 
     private static SyntheticReplayReading Reading(DateTimeOffset instant, float value) =>
