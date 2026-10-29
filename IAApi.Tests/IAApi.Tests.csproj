@@ -22,6 +22,8 @@
   <ItemGroup>
     <ProjectReference Include="..\IAApi.csproj" />
     <ProjectReference Include="..\tools\IAApi.Benchmarks\IAApi.Benchmarks.csproj" />
+    <!-- Mantem o comparador offline compilavel junto aos testes. -->
+    <ProjectReference Include="..\tools\IntelligenceLabComparer\IAApi.IntelligenceLabComparer.csproj" ReferenceOutputAssembly="false" />
     <!-- Compila o CLI do gerador para os testes do cenario sintetico. -->
     <ProjectReference Include="..\tools\IntelligenceLabScenarioGenerator\IAApi.IntelligenceLabScenarioGenerator.csproj" ReferenceOutputAssembly="false" />
     <!-- Compila o CLI do replay antes dos testes de regressao dos dois modos. -->
