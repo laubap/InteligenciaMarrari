@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using IAApi.Services.Diagnostics;
+using System.Diagnostics;
 using IAApi.Infrastructure.Observability;
 using IAApi.IntelligenceLab.Observability;
 using IAApi.IntelligenceLab.Observability.Application;
@@ -13,6 +14,8 @@ using IAApi.Services.AnomalyDetection.Orchestration;
 
 public class PredictionService
 {
+    private readonly PerformanceDiagnostics? _performanceDiagnostics;
+
     private readonly PredictionContextLoader _predictionContextLoader;
 
     private readonly IIntelligenceLabDiagnosticCollector? _diagnosticCollector;
@@ -43,8 +46,11 @@ public class PredictionService
         MultivariateShadowRuntimeCoordinator? multivariateShadowRuntimeCoordinator = null,
         IIntelligenceLabDiagnosticCollector? diagnosticCollector = null,
         DiagnosticVersionMetadata? diagnosticVersion = null,
-        IntelligenceLabHealthMetrics? diagnosticHealth = null)
+        IntelligenceLabHealthMetrics? diagnosticHealth = null,
+        PerformanceDiagnostics? performanceDiagnostics = null)
     {
+        _performanceDiagnostics = performanceDiagnostics;
+
         _predictionContextLoader =
             predictionContextLoader;
 
@@ -76,206 +82,240 @@ public class PredictionService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Nenhum cronometro ou coleta na configuracao padrao.
-        var diagnosticTimer =
-            _diagnosticCollector is not null && _diagnosticVersion is not null
-                ? Stopwatch.StartNew()
-                : null;
-        var diagnosticReceivedAtUtc = diagnosticTimer is not null
-            ? DateTimeOffset.UtcNow
-            : (DateTimeOffset?)null;
+        return await PerformanceDiagnostics.MeasureAsync(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.Total",
+            async () =>
+            {
+                // Nenhum cronometro ou coleta na configuracao padrao.
+                var diagnosticTimer =
+                    _diagnosticCollector is not null && _diagnosticVersion is not null
+                        ? Stopwatch.StartNew()
+                        : null;
+                var diagnosticReceivedAtUtc = diagnosticTimer is not null
+                    ? DateTimeOffset.UtcNow
+                    : (DateTimeOffset?)null;
 
-        var config =
-            _predictionContextLoader.BuscarConfiguracaoAtiva(
-                request.ClienteId,
-                request.TagName);
+                // A mesma identidade é transportada para a leitura do buffer shadow.
+                // O vetor pode fechar em outra requisição e, por isso, a correlação não
+                // depende da disponibilidade do resultado na resposta atual.
+                var diagnosticCorrelationId = diagnosticTimer is not null
+                    ? Guid.NewGuid().ToString("N")
+                    : null;
 
-        if (config == null)
-        {
-            throw new Exception(
-                $"IA nÃ£o configurada para a tag " +
-                $"{request.TagName} do cliente " +
-                $"{request.ClienteId}."
-            );
-        }
-
-        var dataHoraAtual =
-            request.DataHora == default
-                ? DateTime.Now
-                : request.DataHora;
-
-        IReadOnlyList<MultivariateDetectionResult>
-            multivariateShadowResults =
-                Array.Empty<MultivariateDetectionResult>();
-
-        if (_multivariateShadowRuntimeCoordinator is not null)
-        {
-            multivariateShadowResults =
-                await _multivariateShadowRuntimeCoordinator
-                    .ProcessarLeituraAsync(
+                var config =
+                    PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.ActiveConfiguration",
+                    () => _predictionContextLoader.BuscarConfiguracaoAtiva(
                         request.ClienteId,
-                        request.TagName,
+                        request.TagName));
+
+                if (config == null)
+                {
+                    throw new Exception(
+                        $"IA nÃ£o configurada para a tag " +
+                        $"{request.TagName} do cliente " +
+                        $"{request.ClienteId}."
+                    );
+                }
+
+                var dataHoraAtual =
+                    request.DataHora == default
+                        ? DateTime.Now
+                        : request.DataHora;
+
+                IReadOnlyList<MultivariateDetectionResult>
+                    multivariateShadowResults =
+                        Array.Empty<MultivariateDetectionResult>();
+
+                if (_multivariateShadowRuntimeCoordinator is not null)
+                {
+                    multivariateShadowResults =
+                        await PerformanceDiagnostics.MeasureAsync(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.MultivariateShadow",
+                    () => _multivariateShadowRuntimeCoordinator
+                            .ProcessarLeituraAsync(
+                                request.ClienteId,
+                                request.TagName,
+                                dataHoraAtual,
+                                request.Valor,
+                                diagnosticCorrelationId,
+                                cancellationToken));
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var perfil =
+                    PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.TrainedProfile",
+                    () => _predictionContextLoader.BuscarPerfil(
+                        request.ClienteId,
+                        request.TagName));
+
+                if (perfil == null)
+                {
+                    throw new Exception(
+                        $"Perfil da tag {request.TagName} " +
+                        "ainda nÃ£o foi treinado. Execute o " +
+                        "treinamento de perfil antes da detecÃ§Ã£o."
+                    );
+                }
+
+                var contextoOperacional =
+                    PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.OperationalContext",
+                    () => _predictionContextLoader.CarregarContextoOperacional(
+                        request.ClienteId,
+                        request.TagName));
+
+                var contexto =
+                    contextoOperacional.Contexto;
+
+                var processo =
+                    contextoOperacional.Processo;
+
+                var tipoTag =
+                    contexto?.TipoRepresentacao
+                    ?? "perfil-comportamental";
+
+                var preparation =
+                    await PerformanceDiagnostics.MeasureAsync(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.Preparation",
+                    () => _predictionDetectionPreparationService.PrepararAsync(
+                        request,
+                        perfil,
+                        tipoTag,
                         dataHoraAtual,
-                        request.Valor,
-                        cancellationToken);
-        }
+                        cancellationToken));
 
-        cancellationToken.ThrowIfCancellationRequested();
+                var entradaDetector =
+                    preparation.EntradaDetector;
 
-        var perfil =
-            _predictionContextLoader.BuscarPerfil(
-                request.ClienteId,
-                request.TagName);
+                var baselineComportamentalAplicado =
+                    preparation.BaselineComportamentalAplicado;
 
-        if (perfil == null)
-        {
-            throw new Exception(
-                $"Perfil da tag {request.TagName} " +
-                "ainda nÃ£o foi treinado. Execute o " +
-                "treinamento de perfil antes da detecÃ§Ã£o."
-            );
-        }
+                var comportamentoReconhecido =
+                    preparation.ComportamentoReconhecido;
 
-        var contextoOperacional =
-            _predictionContextLoader.CarregarContextoOperacional(
-                request.ClienteId,
-                request.TagName);
+                var codigoComportamentoReconhecido =
+                    preparation.CodigoComportamentoReconhecido;
 
-        var contexto =
-            contextoOperacional.Contexto;
+                var classificacaoComportamentoReconhecido =
+                    preparation.ClassificacaoComportamentoReconhecido;
 
-        var processo =
-            contextoOperacional.Processo;
+                var mediaHistoricaDetector =
+                    preparation.MediaHistoricaDetector;
 
-        var tipoTag =
-            contexto?.TipoRepresentacao
-            ?? "perfil-comportamental";
+                var decisionOrchestration =
+                    await PerformanceDiagnostics.MeasureAsync(
+                            _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.Decision",
+                            () => _predictionDecisionOrchestrationService.ExecutarAsync(
+                        request,
+                        entradaDetector,
+                        dataHoraAtual,
+                        multivariateShadowResults,
+                        baselineComportamentalAplicado,
+                        comportamentoReconhecido,
+                        codigoComportamentoReconhecido,
+                        classificacaoComportamentoReconhecido,
+                        _predictionPostDecisionAnalysisService,
+                        cancellationToken));
 
-        var preparation =
-            await _predictionDetectionPreparationService.PrepararAsync(
-                request,
-                perfil,
-                tipoTag,
-                dataHoraAtual,
-                cancellationToken);
+                var resultadoDetector =
+                    decisionOrchestration.ResultadoDetector;
 
-        var entradaDetector =
-            preparation.EntradaDetector;
+                var runtimeDecision =
+                    decisionOrchestration.RuntimeDecision;
 
-        var baselineComportamentalAplicado =
-            preparation.BaselineComportamentalAplicado;
+                var runtimeAudit =
+                    decisionOrchestration.RuntimeAudit;
 
-        var comportamentoReconhecido =
-            preparation.ComportamentoReconhecido;
+                var resultadoInterpretacao =
+                    decisionOrchestration.ResultadoInterpretacao;
 
-        var codigoComportamentoReconhecido =
-            preparation.CodigoComportamentoReconhecido;
+                var multivariatePromotionApplied =
+                    decisionOrchestration.MultivariatePromotionApplied;
 
-        var classificacaoComportamentoReconhecido =
-            preparation.ClassificacaoComportamentoReconhecido;
+                var multivariateOperationalEvidence =
+                    decisionOrchestration.MultivariateOperationalEvidence;
 
-        var mediaHistoricaDetector =
-            preparation.MediaHistoricaDetector;
+                var limiteInferior =
+                    resultadoDetector.LimiteInferior;
 
-var decisionOrchestration =
-    await _predictionDecisionOrchestrationService.ExecutarAsync(
-        request,
-        entradaDetector,
-        dataHoraAtual,
-        multivariateShadowResults,
-        baselineComportamentalAplicado,
-        comportamentoReconhecido,
-        codigoComportamentoReconhecido,
-        classificacaoComportamentoReconhecido,
-        _predictionPostDecisionAnalysisService,
-        cancellationToken);
+                var limiteSuperior =
+                    resultadoDetector.LimiteSuperior;
 
-        var resultadoDetector =
-            decisionOrchestration.ResultadoDetector;
+                var ehAnomalia =
+                    runtimeDecision.EmitAnomaly;
 
-        var runtimeDecision =
-            decisionOrchestration.RuntimeDecision;
+                var score =
+                    resultadoDetector.Score;
 
-        var runtimeAudit =
-            decisionOrchestration.RuntimeAudit;
+                cancellationToken.ThrowIfCancellationRequested();
 
-        var resultadoInterpretacao =
-            decisionOrchestration.ResultadoInterpretacao;
+                var postDecisionAnalysis =
+                    await PerformanceDiagnostics.MeasureAsync(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.PostDecision",
+                    () => _predictionPostDecisionAnalysisService.AnalisarAsync(
+                        request,
+                        tipoTag,
+                        ehAnomalia,
+                        score,
+                        contexto,
+                        resultadoInterpretacao,
+                        multivariatePromotionApplied,
+                        multivariateOperationalEvidence,
+                        preparation.RawHistorySnapshot));
 
-        var multivariatePromotionApplied =
-            decisionOrchestration.MultivariatePromotionApplied;
+                cancellationToken.ThrowIfCancellationRequested();
 
-        var multivariateOperationalEvidence =
-            decisionOrchestration.MultivariateOperationalEvidence;
+                _performanceDiagnostics?.PredictionOutcome(resultadoDetector,
+                    postDecisionAnalysis.TendenciaValor.Tendencia, dataHoraAtual);
 
-        var limiteInferior =
-            resultadoDetector.LimiteInferior;
+                var response = PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Prediction.Finalization",
+                    () => _predictionFinalizationService.Finalizar(
+                    new PredictionFinalizationInput(
+                        request,
+                        tipoTag,
+                        ehAnomalia,
+                        score,
+                        comportamentoReconhecido,
+                        classificacaoComportamentoReconhecido,
+                        mediaHistoricaDetector,
+                        limiteInferior,
+                        limiteSuperior,
+                        contexto,
+                        processo,
+                        postDecisionAnalysis,
+                        multivariatePromotionApplied,
+                        multivariateOperationalEvidence,
+                        runtimeDecision.Source,
+                        resultadoDetector,
+                        runtimeAudit)));
 
-        var limiteSuperior =
-            resultadoDetector.LimiteSuperior;
+                // A decisao e a persistencia operacional ja foram finalizadas.
+                // Uma falha na telemetria nunca pode alterar o retorno HTTP.
+                if (diagnosticTimer is not null)
+                {
+                    diagnosticTimer.Stop();
+                    PredictionDiagnosticCapture.TryCapture(
+                        _diagnosticCollector,
+                        _diagnosticVersion,
+                        request,
+                        dataHoraAtual,
+                        preparation.BaselineEfetivo,
+                        resultadoDetector,
+                        runtimeDecision,
+                        diagnosticTimer.Elapsed,
+                        diagnosticReceivedAtUtc!.Value,
+                        _diagnosticHealth,
+                        multivariateShadowResults: _multivariateShadowRuntimeCoordinator is null
+                            ? null
+                            : multivariateShadowResults,
+                        correlationId: diagnosticCorrelationId);
+                }
 
-        var ehAnomalia =
-            runtimeDecision.EmitAnomaly;
-
-        var score =
-            resultadoDetector.Score;
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var postDecisionAnalysis =
-            await _predictionPostDecisionAnalysisService.AnalisarAsync(
-                request,
-                tipoTag,
-                ehAnomalia,
-                score,
-                contexto,
-                resultadoInterpretacao,
-                multivariatePromotionApplied,
-                multivariateOperationalEvidence);
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var response = _predictionFinalizationService.Finalizar(
-            new PredictionFinalizationInput(
-                request,
-                tipoTag,
-                ehAnomalia,
-                score,
-                comportamentoReconhecido,
-                classificacaoComportamentoReconhecido,
-                mediaHistoricaDetector,
-                limiteInferior,
-                limiteSuperior,
-                contexto,
-                processo,
-                postDecisionAnalysis,
-                multivariatePromotionApplied,
-                multivariateOperationalEvidence,
-                runtimeDecision.Source,
-                resultadoDetector,
-                runtimeAudit));
-
-        // A decisao e a persistencia operacional ja foram finalizadas.
-        // Uma falha na telemetria nunca pode alterar o retorno HTTP.
-        if (diagnosticTimer is not null)
-        {
-            diagnosticTimer.Stop();
-            PredictionDiagnosticCapture.TryCapture(
-                _diagnosticCollector,
-                _diagnosticVersion,
-                request,
-                dataHoraAtual,
-                preparation.BaselineEfetivo,
-                resultadoDetector,
-                runtimeDecision,
-                diagnosticTimer.Elapsed,
-                diagnosticReceivedAtUtc!.Value,
-                _diagnosticHealth,
-                multivariateShadowResults: _multivariateShadowRuntimeCoordinator is null
-                    ? null
-                    : multivariateShadowResults);
-        }
-
-        return response;
+                return response;
+            });
     }
 }

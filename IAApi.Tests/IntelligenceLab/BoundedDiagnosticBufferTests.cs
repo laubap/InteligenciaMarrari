@@ -87,6 +87,24 @@ public sealed class BoundedDiagnosticBufferTests
         Assert.Empty(buffer.Snapshot());
     }
 
+    [Fact]
+    public void MultivariateShadow_IsBoundedAndDoesNotEvictUnivariateDiagnostics()
+    {
+        var buffer = new BoundedDiagnosticBuffer(capacity: 1, enabled: true);
+        var univariate = CreateDiagnostic("PK2.TAG1");
+        var first = CreateMultivariateDiagnostic("PK2", "CP300-B01-Piloto");
+        var second = CreateMultivariateDiagnostic("PK2", "CP300-B01-Piloto");
+
+        Assert.True(buffer.TryAdd(univariate));
+        Assert.True(buffer.TryAddMultivariateShadow(first));
+        Assert.True(buffer.TryAddMultivariateShadow(second));
+
+        Assert.Same(univariate, Assert.Single(buffer.Snapshot()));
+        Assert.Same(second, Assert.Single(buffer.SnapshotMultivariateShadow()));
+        Assert.Equal(0, buffer.EvictedCount);
+        Assert.Equal(1, buffer.MultivariateShadowEvictedCount);
+    }
+
     private static IntelligenceLabReadingDiagnostic CreateDiagnostic(string tagName)
     {
         var context = DiagnosticContext.CreateNew();
@@ -105,4 +123,14 @@ public sealed class BoundedDiagnosticBufferTests
                 reason: "Teste de armazenamento: nao inclui as secoes de inferencia."),
             new DiagnosticTiming(TimeSpan.Zero));
     }
+
+    private static MultivariateShadowDiagnostic CreateMultivariateDiagnostic(
+        string client,
+        string groupName) => new(
+            Guid.NewGuid(), Guid.NewGuid(),
+            MultivariateShadowEventKind.MahalanobisNotApplicable,
+            client, groupName, 1,
+            ["TAG-A", "TAG-B"], [], 2, 0, false,
+            "ModelNotFound", false, null, null, null, null,
+            DateTimeOffset.UtcNow);
 }

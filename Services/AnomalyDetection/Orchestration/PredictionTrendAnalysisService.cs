@@ -1,7 +1,10 @@
+using IAApi.Services.Diagnostics;
 namespace IAApi.Services.AnomalyDetection.Orchestration;
 
 public sealed class PredictionTrendAnalysisService
 {
+    private readonly PerformanceDiagnostics? _performanceDiagnostics;
+
     private readonly TendenciaRiscoService
         _tendenciaRiscoService;
 
@@ -10,8 +13,11 @@ public sealed class PredictionTrendAnalysisService
 
     public PredictionTrendAnalysisService(
         TendenciaRiscoService tendenciaRiscoService,
-        TendenciaValorService tendenciaValorService)
+        TendenciaValorService tendenciaValorService,
+        PerformanceDiagnostics? performanceDiagnostics = null)
     {
+        _performanceDiagnostics = performanceDiagnostics;
+
         _tendenciaRiscoService =
             tendenciaRiscoService;
 
@@ -22,18 +28,24 @@ public sealed class PredictionTrendAnalysisService
     public PredictionTrendAnalysisResult Analisar(
         string clienteId,
         string tagName,
-        string tipoTag)
+        string tipoTag,
+        PredictionRawHistorySnapshot? rawHistorySnapshot = null)
     {
         var tendenciaRisco =
-            _tendenciaRiscoService.Analisar(
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, clienteId, tagName, "Trend.Risk",
+            () => _tendenciaRiscoService.Analisar(
                 clienteId,
-                tagName);
+                tagName));
 
         var tendenciaValor =
-            _tendenciaValorService.Analisar(
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, clienteId, tagName, "Trend.Value",
+            () => _tendenciaValorService.Analisar(
                 clienteId,
                 tagName,
-                tipoTag);
+                tipoTag,
+                rawHistorySnapshot));
 
         return new PredictionTrendAnalysisResult(
             tendenciaRisco,

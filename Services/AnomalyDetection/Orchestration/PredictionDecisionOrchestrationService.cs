@@ -1,3 +1,4 @@
+using IAApi.Services.Diagnostics;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Services.AnomalyDetection.Runtime;
@@ -6,6 +7,8 @@ namespace IAApi.Services.AnomalyDetection.Orchestration;
 
 public sealed class PredictionDecisionOrchestrationService
 {
+    private readonly PerformanceDiagnostics? _performanceDiagnostics;
+
     private const double LimiteEnsembleInterpretacao = 50.0;
 
     private readonly EnsembleDetectionService
@@ -28,8 +31,11 @@ public sealed class PredictionDecisionOrchestrationService
         PredictionInterpretationService predictionInterpretationService,
         RuntimeFunctionalDecisionContextProvider runtimeFunctionalDecisionContextProvider,
         PredictionRuntimeDecisionService predictionRuntimeDecisionService,
-        PredictionMultivariateDecisionService? predictionMultivariateDecisionService = null)
+        PredictionMultivariateDecisionService? predictionMultivariateDecisionService = null,
+        PerformanceDiagnostics? performanceDiagnostics = null)
     {
+        _performanceDiagnostics = performanceDiagnostics;
+
         _ensembleDetectionService =
             ensembleDetectionService;
 
@@ -46,26 +52,30 @@ public sealed class PredictionDecisionOrchestrationService
             predictionMultivariateDecisionService;
     }
 
-public async Task<PredictionDecisionOrchestrationResult> ExecutarAsync(
-    AnomaliaRequest request,
-    DetectorInput entradaDetector,
-    DateTime dataHoraAtual,
-    IReadOnlyList<MultivariateDetectionResult> multivariateShadowResults,
-    bool baselineComportamentalAplicado,
-    bool comportamentoReconhecido,
-    string? codigoComportamentoReconhecido,
-    string? classificacaoComportamentoReconhecido,
-    PredictionPostDecisionAnalysisService predictionPostDecisionAnalysisService,
-    CancellationToken cancellationToken = default)
+    public async Task<PredictionDecisionOrchestrationResult> ExecutarAsync(
+        AnomaliaRequest request,
+        DetectorInput entradaDetector,
+        DateTime dataHoraAtual,
+        IReadOnlyList<MultivariateDetectionResult> multivariateShadowResults,
+        bool baselineComportamentalAplicado,
+        bool comportamentoReconhecido,
+        string? codigoComportamentoReconhecido,
+        string? classificacaoComportamentoReconhecido,
+        PredictionPostDecisionAnalysisService predictionPostDecisionAnalysisService,
+        CancellationToken cancellationToken = default)
     {
         var resultadoDetector =
-            _ensembleDetectionService.Detectar(
-                entradaDetector);
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Decision.Ensemble",
+            () => _ensembleDetectionService.Detectar(
+                entradaDetector));
 
         var runtimeFunctionalContext =
-            _runtimeFunctionalDecisionContextProvider.Evaluate(
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Decision.FunctionalContext",
+            () => _runtimeFunctionalDecisionContextProvider.Evaluate(
                 entradaDetector,
-                resultadoDetector);
+                resultadoDetector));
 
         Console.WriteLine(
             $"B3.25 RUNTIME BEHAVIOR CONTEXT " +
@@ -76,11 +86,13 @@ public async Task<PredictionDecisionOrchestrationResult> ExecutarAsync(
             $"Classification={classificacaoComportamentoReconhecido ?? "-"} " +
             $"BaselineApplied={baselineComportamentalAplicado}");
 
-var runtimeDecision =
-    _predictionRuntimeDecisionService.Resolve(
-        resultadoDetector.EhAnomalia,
-        runtimeFunctionalContext,
-        request.ClienteId);
+        var runtimeDecision =
+            PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, request.ClienteId, request.TagName, "Decision.OperationalResolution",
+                    () => _predictionRuntimeDecisionService.Resolve(
+                resultadoDetector.EhAnomalia,
+                runtimeFunctionalContext,
+                request.ClienteId));
 
         MultivariateOperationalFusionResult?
             multivariateOperationalFusion =
@@ -89,7 +101,9 @@ var runtimeDecision =
         if (_predictionMultivariateDecisionService is not null)
         {
             var multivariateDecision =
-                await _predictionMultivariateDecisionService.ResolveAsync(
+                await PerformanceDiagnostics.MeasureAsync(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Decision.MultivariateFusion",
+            () => _predictionMultivariateDecisionService.ResolveAsync(
                     runtimeDecision,
                     request.ClienteId,
                     request.TagName,
@@ -98,7 +112,7 @@ var runtimeDecision =
                     resultadoDetector.Score,
                     predictionPostDecisionAnalysisService
     .MultivariateInterpretationAvailable,
-                    cancellationToken);
+                    cancellationToken));
 
             runtimeDecision =
                 multivariateDecision.RuntimeDecision;
@@ -119,7 +133,9 @@ var runtimeDecision =
                 runtimeFunctionalContext);
 
         var resultadoInterpretacao =
-            await _predictionInterpretationService.InterpretarAsync(
+            await PerformanceDiagnostics.MeasureAsync(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Decision.Interpretation",
+            () => _predictionInterpretationService.InterpretarAsync(
                 entradaDetector,
                 resultadoDetector,
                 runtimeDecision,
@@ -128,7 +144,7 @@ var runtimeDecision =
                 comportamentoReconhecido,
                 classificacaoComportamentoReconhecido,
                 codigoComportamentoReconhecido,
-                cancellationToken);
+                cancellationToken));
 
         return new PredictionDecisionOrchestrationResult(
             resultadoDetector,

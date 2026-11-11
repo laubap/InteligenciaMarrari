@@ -738,12 +738,41 @@ public sealed record DiagnosticFailure
 
 public sealed record IntelligenceLabReadingDiagnostic
 {
+    // Compatibilidade com consumidores que ja conhecem o instante UTC.
     public IntelligenceLabReadingDiagnostic(
         DiagnosticContext context,
         DiagnosticVersionMetadata version,
         string clienteId,
         string tagName,
         DateTimeOffset readingTimestampUtc,
+        double readingValue,
+        DiagnosticCompleteness completeness,
+        DiagnosticTiming timing,
+        BaselineDiagnostic? baseline = null,
+        HistoryQualityDiagnostic? historyQuality = null,
+        IEnumerable<DetectorDiagnostic>? detectors = null,
+        EnsembleDiagnostic? ensemble = null,
+        RuntimeDecisionDiagnostic? runtimeDecision = null,
+        RegimeDiagnostic? regime = null,
+        BehaviorMemoryDiagnostic? behaviorMemory = null,
+        IEnumerable<MultivariateDiagnostic>? multivariate = null,
+        DiagnosticFailure? failure = null,
+        DateTimeOffset? completedAtUtc = null)
+        : this(context, version, clienteId, tagName,
+            readingTimestampUtc.UtcDateTime, readingValue, completeness, timing,
+            baseline, historyQuality, detectors, ensemble, runtimeDecision, regime,
+            behaviorMemory, multivariate, failure, completedAtUtc)
+    {
+    }
+
+    // A origem industrial pode informar apenas a data civil, sem fuso.
+    // Nao atribuir UTC a DateTimeKind.Unspecified.
+    public IntelligenceLabReadingDiagnostic(
+        DiagnosticContext context,
+        DiagnosticVersionMetadata version,
+        string clienteId,
+        string tagName,
+        DateTime readingTimestamp,
         double readingValue,
         DiagnosticCompleteness completeness,
         DiagnosticTiming timing,
@@ -796,7 +825,10 @@ public sealed record IntelligenceLabReadingDiagnostic
             }
         }
 
-        ReadingTimestampUtc = readingTimestampUtc.ToUniversalTime();
+        ReadingTimestampOriginal = readingTimestamp;
+        ReadingTimestampUtc = readingTimestamp.Kind == DateTimeKind.Unspecified
+            ? null
+            : new DateTimeOffset(readingTimestamp).ToUniversalTime();
         ReadingValue = readingValue;
         Baseline = baseline;
         HistoryQuality = historyQuality;
@@ -814,7 +846,11 @@ public sealed record IntelligenceLabReadingDiagnostic
     public DiagnosticVersionMetadata Version { get; }
     public string ClienteId { get; }
     public string TagName { get; }
-    public DateTimeOffset ReadingTimestampUtc { get; }
+    /// <summary>Data/hora original recebida para diagnostico, com Kind preservado.</summary>
+    public DateTime ReadingTimestampOriginal { get; }
+    public string ReadingTimestampKind => ReadingTimestampOriginal.Kind.ToString();
+    /// <summary>Null quando a origem nao permite estabelecer UTC com seguranca.</summary>
+    public DateTimeOffset? ReadingTimestampUtc { get; }
     public double ReadingValue { get; }
     public DiagnosticCompleteness Completeness { get; }
     public DiagnosticTiming Timing { get; }

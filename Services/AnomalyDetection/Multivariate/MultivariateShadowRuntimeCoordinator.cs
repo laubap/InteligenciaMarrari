@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using IAApi.IntelligenceLab.Observability;
+using IAApi.IntelligenceLab.Observability.Application;
 
 namespace IAApi.Services.AnomalyDetection.Multivariate;
 
@@ -20,11 +22,15 @@ public sealed class MultivariateShadowRuntimeCoordinator
     private readonly MultivariateGroupBufferService _bufferService;
     private readonly MultivariateDetector _detector;
     private readonly ILogger<MultivariateShadowRuntimeCoordinator> _logger;
+    private readonly IIntelligenceLabMultivariateShadowCollector?
+        _shadowDiagnosticCollector;
 
     public MultivariateShadowRuntimeCoordinator(
         MultivariateGroupBufferService bufferService,
         MultivariateDetector detector,
-        ILogger<MultivariateShadowRuntimeCoordinator> logger)
+        ILogger<MultivariateShadowRuntimeCoordinator> logger,
+        IIntelligenceLabMultivariateShadowCollector?
+            shadowDiagnosticCollector = null)
     {
         _bufferService =
             bufferService ??
@@ -37,6 +43,8 @@ public sealed class MultivariateShadowRuntimeCoordinator
         _logger =
             logger ??
             throw new ArgumentNullException(nameof(logger));
+
+        _shadowDiagnosticCollector = shadowDiagnosticCollector;
     }
 
     public async Task<IReadOnlyList<MultivariateDetectionResult>>
@@ -45,6 +53,7 @@ public sealed class MultivariateShadowRuntimeCoordinator
             string tagName,
             DateTime dataHora,
             double valor,
+            string? sourceAnalysisCorrelationId = null,
             CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clienteId);
@@ -68,7 +77,9 @@ public sealed class MultivariateShadowRuntimeCoordinator
                     tagName,
                     minuteIndex,
                     valor,
-                    cancellationToken);
+                        dataHora,
+                        sourceAnalysisCorrelationId,
+                        cancellationToken);
 
             if (gruposFinalizados.Count == 0)
             {
@@ -83,10 +94,20 @@ public sealed class MultivariateShadowRuntimeCoordinator
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var resultado =
-                    await _detector.DetectarAsync(
+                MultivariateDetectionResult resultado;
+                try
+                {
+                    resultado = await _detector.DetectarAsync(
                         grupo,
                         cancellationToken: cancellationToken);
+                }
+                catch
+                {
+                    RegistrarFalhaMahalanobis(grupo);
+                    throw;
+                }
+
+                RegistrarResultadoMahalanobis(grupo, resultado);
 
                 resultados.Add(resultado);
 
@@ -161,5 +182,121 @@ public sealed class MultivariateShadowRuntimeCoordinator
 
         return referencia.Ticks /
                TimeSpan.TicksPerMinute;
+    }
+
+    private void RegistrarResultadoMahalanobis(
+        BufferedGroupReading grupo,
+        MultivariateDetectionResult resultado)
+    {
+        if (_shadowDiagnosticCollector is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _shadowDiagnosticCollector.Record(
+                CriarDiagnostico(
+                    grupo,
+                    resultado.Aplicavel
+                        ? MultivariateShadowEventKind.MahalanobisExecuted
+                        : MultivariateShadowEventKind.MahalanobisNotApplicable,
+                    resultado.ReasonCode,
+                    mahalanobisExecuted: resultado.Aplicavel,
+                    anomaly: resultado.Aplicavel
+                        ? resultado.EhAnomalia
+                        : null,
+                    normalizedScore: resultado.Aplicavel
+                        ? resultado.ScoreNormalizado
+                        : null,
+                    threshold: resultado.Aplicavel
+                        ? resultado.LimiteScore
+                        : null,
+                    mahalanobisSquared: resultado.Aplicavel
+                        ? resultado.MahalanobisSquared
+                        : null));
+        }
+        catch (Exception)
+        {
+            // Nenhuma falha de captura pode mudar o shadow.
+        }
+    }
+
+    private void RegistrarFalhaMahalanobis(BufferedGroupReading grupo)
+    {
+        if (_shadowDiagnosticCollector is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _shadowDiagnosticCollector.Record(
+                CriarDiagnostico(
+                    grupo,
+                    MultivariateShadowEventKind.MahalanobisFailed,
+                    reasonCode: "MahalanobisExecutionFailed",
+                    mahalanobisExecuted: false,
+                    anomaly: null,
+                    normalizedScore: null,
+                    threshold: null,
+                    mahalanobisSquared: null));
+        }
+        catch (Exception)
+        {
+            // Fail-open.
+        }
+    }
+
+    private static MultivariateShadowDiagnostic CriarDiagnostico(
+        BufferedGroupReading grupo,
+        MultivariateShadowEventKind eventKind,
+        string? reasonCode,
+        bool mahalanobisExecuted,
+        bool? anomaly,
+        double? normalizedScore,
+        double? threshold,
+        double? mahalanobisSquared)
+    {
+        var timestamps = grupo.TimestampsPorTag;
+        var correlationIds = grupo.SourceAnalysisCorrelationIdsPorTag;
+        var tags = grupo.ExpectedTags
+            .Concat(grupo.Valores.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var readings = grupo.Valores
+            .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(item => new MultivariateShadowTagReading(
+                item.Key,
+                timestamps.TryGetValue(item.Key, out var timestamp)
+                    ? timestamp
+                    : null,
+                item.Value,
+                correlationIds.TryGetValue(item.Key, out var correlationId)
+                    ? correlationId
+                    : null))
+            .ToArray();
+
+        return new MultivariateShadowDiagnostic(
+            Guid.NewGuid(),
+            grupo.VectorId,
+            eventKind,
+            grupo.ClienteId,
+            grupo.GroupName,
+            grupo.MinuteIndex,
+            tags,
+            readings,
+            grupo.MinimumAvailableTags,
+            grupo.MaxLagMinutes,
+            grupo.EstaCompleto(),
+            reasonCode,
+            mahalanobisExecuted,
+            anomaly,
+            normalizedScore,
+            threshold,
+            mahalanobisSquared,
+            DateTimeOffset.UtcNow);
     }
 }

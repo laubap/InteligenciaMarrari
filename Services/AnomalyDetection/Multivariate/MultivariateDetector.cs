@@ -34,7 +34,8 @@ public sealed class MultivariateDetector
         {
             return MultivariateDetectionResult.NaoAplicavel(
                 reading,
-                "O threshold multivariado deve estar no intervalo (0, 100).");
+                "O threshold multivariado deve estar no intervalo (0, 100).",
+                "InvalidThreshold");
         }
 
         var model =
@@ -48,7 +49,8 @@ public sealed class MultivariateDetector
             return MultivariateDetectionResult.NaoAplicavel(
                 reading,
                 $"Nenhum modelo multivariado treinado foi " +
-                $"encontrado para o grupo '{reading.GroupName}'.");
+                $"encontrado para o grupo '{reading.GroupName}'.",
+                "ModelNotFound");
         }
 
         var availableIndexes =
@@ -67,7 +69,8 @@ public sealed class MultivariateDetector
                 reading,
                 $"O grupo possui {availableIndexes.Count} tag(s) " +
                 $"disponível(is), mas o modelo exige pelo menos " +
-                $"{minimumRequired}.");
+                $"{minimumRequired}.",
+                "InsufficientAvailableTags");
         }
 
         var values =
@@ -123,7 +126,8 @@ public sealed class MultivariateDetector
             return MultivariateDetectionResult.NaoAplicavel(
                 reading,
                 "Não foi possível estabilizar/inverter a matriz de " +
-                "covariância do grupo após regularização adaptativa.");
+                "covariância do grupo após regularização adaptativa.",
+                "CovarianceInversionFailed");
         }
 
         var delta =
@@ -146,7 +150,8 @@ public sealed class MultivariateDetector
         {
             return MultivariateDetectionResult.NaoAplicavel(
                 reading,
-                "A distância de Mahalanobis resultou em valor numérico inválido.");
+                "A distância de Mahalanobis resultou em valor numérico inválido.",
+                "InvalidMahalanobisDistance");
         }
 
         mahalanobisSquared =
@@ -594,9 +599,13 @@ public sealed class MultivariateDetectionResult
 
     public string Explicacao { get; set; } = "";
 
+    /// <summary>Código seguro para telemetria; não altera a decisão shadow.</summary>
+    public string? ReasonCode { get; set; }
+
     public static MultivariateDetectionResult NaoAplicavel(
         BufferedGroupReading reading,
-        string explanation)
+        string explanation,
+        string? reasonCode = null)
     {
         return new MultivariateDetectionResult
         {
@@ -610,7 +619,8 @@ public sealed class MultivariateDetectionResult
             MahalanobisSquared = 0,
             TagsUtilizadas = [],
             Contribuicoes = [],
-            Explicacao = explanation
+            Explicacao = explanation,
+            ReasonCode = reasonCode
         };
     }
 }

@@ -40,6 +40,27 @@ public sealed class IntelligenceLabDiagnosticsEndpointTests
     }
 
     [Fact]
+    public void List_UnknownIndustrialTimestamp_IsExplicitlyUndetermined()
+    {
+        var buffer = new BoundedDiagnosticBuffer(capacity: 5, enabled: true);
+        var sourceTime = new DateTime(2026, 11, 4, 14, 29, 0, DateTimeKind.Unspecified);
+        buffer.TryAdd(new IntelligenceLabReadingDiagnostic(
+            DiagnosticContext.CreateNew(),
+            new DiagnosticVersionMetadata("api", "build", "commit", "config"),
+            "PK2", "PK2.TAG31", sourceTime, 0,
+            new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial,
+                ["ReadingTimestampUtc"]),
+            new DiagnosticTiming(TimeSpan.Zero)));
+        var controller = CreateController(buffer: buffer);
+
+        var result = Assert.IsType<OkObjectResult>(controller.List(Secret).Result);
+        var summary = Assert.Single(Assert.IsType<IntelligenceLabDiagnosticSummary[]>(result.Value));
+        Assert.Null(summary.ReadingTimestampUtc);
+        Assert.Equal(sourceTime, summary.ReadingTimestampOriginal);
+        Assert.Equal("Unspecified", summary.ReadingTimestampKind);
+    }
+
+    [Fact]
     public void List_FiltersByExactClientAndTag_WithoutReturningOtherClients()
     {
         var buffer = new BoundedDiagnosticBuffer(capacity: 5, enabled: true);
@@ -204,12 +225,50 @@ public sealed class IntelligenceLabDiagnosticsEndpointTests
         Assert.Equal("no-store", controller.Response.Headers["Cache-Control"].ToString());
     }
 
+    [Fact]
+    public void MultivariateShadowEndpoints_KeepLocalAccessAndClientFiltering()
+    {
+        var buffer = new BoundedDiagnosticBuffer(3, enabled: true);
+        var expected = MultivariateDiagnostic("PK2", "CP300-B01-Piloto");
+        buffer.TryAddMultivariateShadow(MultivariateDiagnostic("PK7", "OTHER"));
+        buffer.TryAddMultivariateShadow(expected);
+        var controller = CreateController(buffer: buffer);
+
+        Assert.IsType<UnauthorizedResult>(
+            controller.ListMultivariateShadow(accessKey: null).Result);
+
+        var list = Assert.IsType<OkObjectResult>(
+            controller.ListMultivariateShadow(Secret, clienteId: "PK2").Result);
+        var summary = Assert.Single(
+            Assert.IsType<MultivariateShadowDiagnosticSummary[]>(list.Value));
+        Assert.Equal(expected.DiagnosticId, summary.DiagnosticId);
+        Assert.Equal("PK2", summary.ClienteId);
+
+        var detail = Assert.IsType<OkObjectResult>(
+            controller.GetMultivariateShadowById(expected.DiagnosticId, Secret).Result);
+        Assert.Same(expected, detail.Value);
+
+        var blocked = CreateController(buffer: buffer, environment: "Production");
+        Assert.IsType<NotFoundResult>(
+            blocked.ListMultivariateShadow(Secret).Result);
+    }
+
     private static IntelligenceLabReadingDiagnostic Diagnostic(string client, string tag) => new(
         DiagnosticContext.CreateNew(),
         new DiagnosticVersionMetadata("api-test", "build-test", "commit-test", "config-test"),
         client, tag, DateTimeOffset.UtcNow, 100,
         new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial, reason: "Teste local."),
         new DiagnosticTiming(TimeSpan.Zero));
+
+    private static MultivariateShadowDiagnostic MultivariateDiagnostic(
+        string client,
+        string group) => new(
+            Guid.NewGuid(), Guid.NewGuid(),
+            MultivariateShadowEventKind.MahalanobisExecuted,
+            client, group, 1, ["TAG-A", "TAG-B"], [], 2, 0, true,
+            ReasonCode: null, MahalanobisExecuted: true, Anomaly: false,
+            NormalizedScore: 1, Threshold: 75, MahalanobisSquared: .01,
+            RecordedAtUtc: DateTimeOffset.UtcNow);
 
     private static IntelligenceLabDiagnosticsController CreateController(
         bool enabled = true,

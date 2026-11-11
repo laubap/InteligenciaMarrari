@@ -24,6 +24,8 @@ db-backups/
 
 # Ferramentas históricas de análise
 Tools/*
+!tools/IAApi.LiveMonitor/
+!tools/IAApi.LiveMonitor/**
 !Tools/IAApi.Benchmarks/
 Tools/IAApi.Benchmarks/*
 !Tools/IAApi.Benchmarks/IAApi.Benchmarks.csproj

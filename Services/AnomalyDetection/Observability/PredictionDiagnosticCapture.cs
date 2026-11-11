@@ -71,7 +71,8 @@ public static class PredictionDiagnosticCapture
         TimeSpan elapsed,
         DateTimeOffset receivedAtUtc,
         IntelligenceLabHealthMetrics? health = null,
-        IReadOnlyList<MultivariateDetectionResult>? multivariateShadowResults = null)
+        IReadOnlyList<MultivariateDetectionResult>? multivariateShadowResults = null,
+        string? correlationId = null)
     {
         if (collector is null || version is null)
         {
@@ -83,18 +84,21 @@ public static class PredictionDiagnosticCapture
         try
         {
             health?.RecordCaptureAttempt();
-            // Unspecified nao possui fuso definido. Nao inventar UTC.
-            if (readingTimestamp.Kind == DateTimeKind.Unspecified ||
-                !double.IsFinite(request.Valor) ||
+            // O timestamp Unspecified e preservado como horario industrial,
+            // sem atribuir-lhe um instante UTC inexistente.
+            if (!double.IsFinite(request.Valor) ||
                 elapsed < TimeSpan.Zero)
             {
                 health?.RecordRejected();
                 return;
             }
 
-            var readingUtc = new DateTimeOffset(readingTimestamp).ToUniversalTime();
-            var context = DiagnosticContext.CreateNew(
-                receivedAtUtc: receivedAtUtc);
+            var context = string.IsNullOrWhiteSpace(correlationId)
+                ? DiagnosticContext.CreateNew(receivedAtUtc: receivedAtUtc)
+                : DiagnosticContext.Create(
+                    correlationId,
+                    runId: null,
+                    receivedAtUtc: receivedAtUtc);
 
             var missingSections = new List<string>
             {
@@ -105,6 +109,11 @@ public static class PredictionDiagnosticCapture
                 "HttpCorrelationAndRunId",
                 "StageObservations"
             };
+
+            if (readingTimestamp.Kind == DateTimeKind.Unspecified)
+            {
+                missingSections.Add("ReadingTimestampUtc");
+            }
 
             if (baseline is null)
             {
@@ -130,7 +139,7 @@ public static class PredictionDiagnosticCapture
                 version,
                 request.ClienteId,
                 request.TagName,
-                readingUtc,
+                readingTimestamp,
                 request.Valor,
                 new DiagnosticCompleteness(
                     DiagnosticCompletenessStatus.Partial,

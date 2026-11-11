@@ -1,3 +1,4 @@
+using IAApi.Services.Diagnostics;
 using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
 
@@ -5,6 +6,9 @@ namespace IAApi.Services.AnomalyDetection.Orchestration;
 
 public sealed class PredictionDetectionPreparationService
 {
+    private readonly PerformanceDiagnostics? _performanceDiagnostics;
+    private readonly PredictionHistoryReuseOptions? _historyReuse;
+
     private readonly IHistoricoService _servicoHistorico;
 
     private readonly OperationalRegimeBaselineProvider?
@@ -18,8 +22,13 @@ public sealed class PredictionDetectionPreparationService
         OperationalRegimeBaselineProvider?
             operationalRegimeBaselineProvider = null,
         BehaviorRuntimeBaselineProvider?
-            behaviorRuntimeBaselineProvider = null)
+            behaviorRuntimeBaselineProvider = null,
+        PerformanceDiagnostics? performanceDiagnostics = null,
+        PredictionHistoryReuseOptions? historyReuse = null)
     {
+        _performanceDiagnostics = performanceDiagnostics;
+        _historyReuse = historyReuse;
+
         _servicoHistorico =
             servicoHistorico;
 
@@ -38,11 +47,20 @@ public sealed class PredictionDetectionPreparationService
             DateTime dataHoraAtual,
             CancellationToken cancellationToken = default)
     {
+        var historyStartedUtc = _historyReuse?.Enabled == true || _performanceDiagnostics?.Enabled == true
+            ? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
+        DateTimeOffset? historyCompletedUtc = null;
         var historicoBruto =
-            _servicoHistorico.BuscarHistorico(
-                request.ClienteId,
-                request.TagName,
-                tipoTag);
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Preparation.History",
+            () =>
+            {
+                var history = _servicoHistorico.BuscarHistorico(request.ClienteId, request.TagName, tipoTag);
+                historyCompletedUtc = historyStartedUtc is not null ? DateTimeOffset.UtcNow : null;
+                _performanceDiagnostics?.HistoryAcquisition("Fetched", historyStartedUtc,
+                    historyCompletedUtc, history, dataHoraAtual);
+                return history;
+            });
 
         if (historicoBruto == null)
         {
@@ -54,8 +72,18 @@ public sealed class PredictionDetectionPreparationService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Capture the service's original values before any preparation or baseline selection.
+        var rawSnapshot = _historyReuse?.Enabled == true
+            ? PerformanceDiagnostics.Measure(_performanceDiagnostics, request.ClienteId, request.TagName,
+                "Preparation.RawHistorySnapshot", () => new PredictionRawHistorySnapshot(
+                    _servicoHistorico, request.ClienteId, request.TagName, tipoTag, historicoBruto,
+                    historyStartedUtc!.Value, historyCompletedUtc!.Value, dataHoraAtual))
+            : null;
+
         var historicoRecebido =
-            historicoBruto
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Preparation.ConvertRecords",
+            () => historicoBruto
                 .Where(leitura =>
                     leitura != null)
                 .Select(leitura =>
@@ -67,7 +95,7 @@ public sealed class PredictionDetectionPreparationService
                         Valor =
                             leitura.Valor
                     })
-                .ToList();
+                .ToList());
 
         var mediaHistoricaDetector =
             perfil.Media;
@@ -122,11 +150,13 @@ public sealed class PredictionDetectionPreparationService
             try
             {
                 var regimeBaseline =
-                    _operationalRegimeBaselineProvider.Resolve(
+                    PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Preparation.RegimeBaseline",
+            () => _operationalRegimeBaselineProvider.Resolve(
                         request.ClienteId,
                         request.TagName,
                         historicoBruto,
-                        dataHoraAtual);
+                        dataHoraAtual));
 
                 if (regimeBaseline.Applied &&
                     regimeBaseline.Statistics is not null)
@@ -189,12 +219,14 @@ public sealed class PredictionDetectionPreparationService
             try
             {
                 var behaviorShadow =
-                    await _behaviorRuntimeBaselineProvider.ResolveAsync(
+                    await PerformanceDiagnostics.MeasureAsync(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Preparation.BehaviorBaseline",
+            () => _behaviorRuntimeBaselineProvider.ResolveAsync(
                         request.ClienteId,
                         request.TagName,
                         historicoBruto,
                         dataHoraAtual,
-                        cancellationToken);
+                        cancellationToken));
 
                 comportamentoReconhecido =
                     behaviorShadow.Recognized;
@@ -296,7 +328,9 @@ public sealed class PredictionDetectionPreparationService
         }
 
         var entradaDetector =
-            new DetectorInput
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Preparation.DetectorInput",
+            () => new DetectorInput
             {
                 ClienteId =
                     request.ClienteId,
@@ -330,7 +364,7 @@ public sealed class PredictionDetectionPreparationService
 
                 Historico =
                     historicoRecebido
-            };
+            });
 
         var historicoDetector =
             entradaDetector.Historico;
@@ -432,7 +466,9 @@ public sealed class PredictionDetectionPreparationService
         cancellationToken.ThrowIfCancellationRequested();
 
         var baselineEfetivo =
-            CriarBaselineEfetivo(
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "Preparation.BaselineSnapshot",
+            () => CriarBaselineEfetivo(
                 entradaDetector,
                 baselineRegimeAplicado,
                 baselineComportamentalAplicado,
@@ -442,7 +478,7 @@ public sealed class PredictionDetectionPreparationService
                 baselineRegimeNaoAplicado,
                 baselineRegimeFalhou,
                 baselineComportamentalNaoAplicado,
-                baselineComportamentalFalhou);
+                baselineComportamentalFalhou));
 
         return new PredictionDetectionPreparationResult(
             entradaDetector,
@@ -451,7 +487,7 @@ public sealed class PredictionDetectionPreparationService
             codigoComportamentoReconhecido,
             classificacaoComportamentoReconhecido,
             mediaHistoricaDetector,
-            baselineEfetivo);
+            baselineEfetivo) { RawHistorySnapshot = rawSnapshot };
     }
 
     private static BaselineDiagnostic? CriarBaselineEfetivo(
@@ -567,4 +603,7 @@ public sealed record PredictionDetectionPreparationResult(
     string? CodigoComportamentoReconhecido,
     string? ClassificacaoComportamentoReconhecido,
     double MediaHistoricaDetector,
-    BaselineDiagnostic? BaselineEfetivo);
+    BaselineDiagnostic? BaselineEfetivo)
+{
+    public PredictionRawHistorySnapshot? RawHistorySnapshot { get; init; }
+}

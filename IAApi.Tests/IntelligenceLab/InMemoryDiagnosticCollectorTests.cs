@@ -155,6 +155,29 @@ public sealed class InMemoryDiagnosticCollectorTests
         Assert.Equal(0, buffer.EvictedCount);
     }
 
+    [Fact]
+    public void MarkIncomplete_PreservesUnknownIndustrialTimestamp()
+    {
+        var buffer = new BoundedDiagnosticBuffer(enabled: true);
+        var collector = new InMemoryDiagnosticCollector(buffer);
+        var (context, version) = Identity();
+        var sourceTime = new DateTime(2026, 11, 4, 14, 29, 0, DateTimeKind.Unspecified);
+        var diagnostic = new IntelligenceLabReadingDiagnostic(
+            context, version, "PK2", "PK2.TAG31", sourceTime, 0,
+            new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial,
+                reason: "Captura original."),
+            new DiagnosticTiming(TimeSpan.Zero));
+
+        var session = collector.Begin(context, version);
+        var revised = session.MarkIncomplete(diagnostic,
+            new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial,
+                ["ReadingTimestampUtc"]));
+
+        Assert.Null(revised.ReadingTimestampUtc);
+        Assert.Equal(sourceTime, revised.ReadingTimestampOriginal);
+        Assert.Same(revised, Assert.Single(buffer.Snapshot()));
+    }
+
     private static (DiagnosticContext, DiagnosticVersionMetadata) Identity() =>
         (DiagnosticContext.CreateNew(),
          new DiagnosticVersionMetadata("api", "build", "commit", "config"));

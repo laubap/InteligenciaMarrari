@@ -175,7 +175,7 @@ public sealed class InMemoryDiagnosticSession : IIntelligenceLabDiagnosticSessio
                 diagnostic.Version,
                 diagnostic.ClienteId,
                 diagnostic.TagName,
-                diagnostic.ReadingTimestampUtc,
+                diagnostic.ReadingTimestampOriginal,
                 diagnostic.ReadingValue,
                 completeness,
                 diagnostic.Timing,

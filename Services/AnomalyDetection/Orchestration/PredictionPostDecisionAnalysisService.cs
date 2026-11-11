@@ -1,3 +1,4 @@
+using IAApi.Services.Diagnostics;
 using IAApi.Services.AnomalyDetection.Interpretation;
 using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Services.AnomalyDetection.Presentation;
@@ -6,6 +7,8 @@ namespace IAApi.Services.AnomalyDetection.Orchestration;
 
 public sealed class PredictionPostDecisionAnalysisService
 {
+    private readonly PerformanceDiagnostics? _performanceDiagnostics;
+
     private readonly AnaliseRelacionadasService
         _analiseRelacionadasService;
 
@@ -27,8 +30,11 @@ public sealed class PredictionPostDecisionAnalysisService
         PredictionTrendAnalysisService predictionTrendAnalysisService,
         FeedbackAnomaliaAnaliseService feedbackAnomaliaAnaliseService,
         MultivariateOperationalInterpretationFactory?
-            multivariateOperationalInterpretationFactory = null)
+            multivariateOperationalInterpretationFactory = null,
+        PerformanceDiagnostics? performanceDiagnostics = null)
     {
+        _performanceDiagnostics = performanceDiagnostics;
+
         _analiseRelacionadasService =
             analiseRelacionadasService;
 
@@ -58,19 +64,24 @@ public sealed class PredictionPostDecisionAnalysisService
             AnomalyInterpretationResult? resultadoInterpretacao,
             bool multivariatePromotionApplied,
             MultivariateDecisionEvidence?
-                multivariateOperationalEvidence)
+                multivariateOperationalEvidence,
+            PredictionRawHistorySnapshot? rawHistorySnapshot = null)
     {
         var analiseRelacionadas =
-            await _analiseRelacionadasService.Analisar(
+            await PerformanceDiagnostics.MeasureAsync(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "PostDecision.RelatedAnalyses",
+            () => _analiseRelacionadasService.Analisar(
                 request.ClienteId,
-                request.TagName);
+                request.TagName));
 
         var analiseRisco =
-            _predictionRiskAnalysisService.Analisar(
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "PostDecision.Risk",
+            () => _predictionRiskAnalysisService.Analisar(
                 ehAnomalia,
                 score,
                 contexto,
-                analiseRelacionadas);
+                analiseRelacionadas));
 
         var riscoProcesso =
             analiseRisco.Risco;
@@ -82,11 +93,13 @@ public sealed class PredictionPostDecisionAnalysisService
             multivariateOperationalEvidence is not null)
         {
             resultadoInterpretacao =
-                _multivariateOperationalInterpretationFactory!.Create(
+                PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "PostDecision.MultivariateInterpretation",
+            () => _multivariateOperationalInterpretationFactory!.Create(
                     multivariateOperationalEvidence,
                     score,
                     PredictionResponseFormatter.MapearSeveridadeRisco(
-                        riscoProcesso.Classificacao));
+                        riscoProcesso.Classificacao)));
 
             fatoresRisco.Add(
                 $"Anomalia multivariada operacional no grupo " +
@@ -102,10 +115,13 @@ public sealed class PredictionPostDecisionAnalysisService
         }
 
         var analiseTendencias =
-            _predictionTrendAnalysisService.Analisar(
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "PostDecision.Trends",
+            () => _predictionTrendAnalysisService.Analisar(
                 request.ClienteId,
                 request.TagName,
-                tipoTag);
+                tipoTag,
+                rawHistorySnapshot));
 
         var tendenciaRisco =
             analiseTendencias.TendenciaRisco;
@@ -114,15 +130,19 @@ public sealed class PredictionPostDecisionAnalysisService
             analiseTendencias.TendenciaValor;
 
         var analiseFeedbacks =
-            _feedbackAnomaliaAnaliseService
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "PostDecision.Feedback",
+            () => _feedbackAnomaliaAnaliseService
                 .GerarAnaliseFeedbacks(
                     request.ClienteId,
                     request.TagName,
                     score,
-                    request.Valor);
+                    request.Valor));
 
         var mensagem =
-            multivariatePromotionApplied &&
+            PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, request.ClienteId, request.TagName, "PostDecision.FormatMessage",
+            () => multivariatePromotionApplied &&
             multivariateOperationalEvidence is not null
                 ? PredictionResponseFormatter.MontarMensagemMultivariada(
                     request,
@@ -135,7 +155,7 @@ public sealed class PredictionPostDecisionAnalysisService
                     ehAnomalia,
                     score,
                     riscoProcesso,
-                    tendenciaValor);
+                    tendenciaValor));
 
         return new PredictionPostDecisionAnalysisResult(
             analiseRelacionadas,

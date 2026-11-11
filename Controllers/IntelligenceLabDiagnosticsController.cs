@@ -76,7 +76,9 @@ public sealed class IntelligenceLabDiagnosticsController : ControllerBase
                 d.ReadingTimestampUtc,
                 d.Completeness.Status,
                 d.Ensemble?.NormalizedScore,
-                d.RuntimeDecision?.FinalAnomaly))
+                d.RuntimeDecision?.FinalAnomaly,
+                d.ReadingTimestampOriginal,
+                d.ReadingTimestampKind))
             .ToArray();
 
         return Ok(summaries);
@@ -108,6 +110,81 @@ public sealed class IntelligenceLabDiagnosticsController : ControllerBase
         return diagnostic is null ? NotFound() : Ok(diagnostic);
     }
 
+    /// <summary>
+    /// Eventos locais da montagem e execução shadow multivariada. Um mesmo
+    /// VectorId pode ter múltiplos eventos porque o vetor pode fechar depois
+    /// das análises univariadas que forneceram suas leituras.
+    /// </summary>
+    [HttpGet("multivariate-shadow")]
+    [ProducesResponseType(typeof(IReadOnlyList<MultivariateShadowDiagnosticSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<IReadOnlyList<MultivariateShadowDiagnosticSummary>> ListMultivariateShadow(
+        [FromHeader(Name = IntelligenceLabLocalReadAccess.KeyHeader)] string? accessKey,
+        [FromQuery] int limit = DefaultLimit,
+        [FromQuery] string? clienteId = null,
+        [FromQuery] string? groupName = null)
+    {
+        var denial = IntelligenceLabLocalReadAccess.DenyIfUnauthorized(
+            this, _configuration, _environment, _buffer, accessKey);
+        if (denial is not null)
+        {
+            return denial;
+        }
+
+        if (limit is < 1 or > MaximumLimit ||
+            !ValidFilter(clienteId) || !ValidFilter(groupName))
+        {
+            return BadRequest("Limite deve estar entre 1 e 100 e filtros devem ter ate 128 caracteres nao vazios.");
+        }
+
+        var summaries = _buffer!.SnapshotMultivariateShadow()
+            .Reverse()
+            .Where(d => clienteId is null || string.Equals(d.ClienteId, clienteId, StringComparison.Ordinal))
+            .Where(d => groupName is null || string.Equals(d.GroupName, groupName, StringComparison.Ordinal))
+            .Take(limit)
+            .Select(d => new MultivariateShadowDiagnosticSummary(
+                d.DiagnosticId,
+                d.VectorId,
+                d.EventKind,
+                d.ClienteId,
+                d.GroupName,
+                d.MinuteIndex,
+                d.VectorComplete,
+                d.MahalanobisExecuted,
+                d.Anomaly,
+                d.ReasonCode,
+                d.RecordedAtUtc))
+            .ToArray();
+
+        return Ok(summaries);
+    }
+
+    [HttpGet("multivariate-shadow/{id:guid}")]
+    [ProducesResponseType(typeof(MultivariateShadowDiagnostic), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<MultivariateShadowDiagnostic> GetMultivariateShadowById(
+        [FromRoute] Guid id,
+        [FromHeader(Name = IntelligenceLabLocalReadAccess.KeyHeader)] string? accessKey)
+    {
+        var denial = IntelligenceLabLocalReadAccess.DenyIfUnauthorized(
+            this, _configuration, _environment, _buffer, accessKey);
+        if (denial is not null)
+        {
+            return denial;
+        }
+
+        if (id == Guid.Empty)
+        {
+            return NotFound();
+        }
+
+        var diagnostic = _buffer!.SnapshotMultivariateShadow()
+            .LastOrDefault(d => d.DiagnosticId == id);
+        return diagnostic is null ? NotFound() : Ok(diagnostic);
+    }
+
     private static bool ValidFilter(string? value) =>
         value is null || (value.Length <= MaximumFilterLength &&
                           !string.IsNullOrWhiteSpace(value));
@@ -118,7 +195,22 @@ public sealed record IntelligenceLabDiagnosticSummary(
     Guid DiagnosticId,
     string ClienteId,
     string TagName,
-    DateTimeOffset ReadingTimestampUtc,
+    DateTimeOffset? ReadingTimestampUtc,
     DiagnosticCompletenessStatus Completeness,
     double? EnsembleScoreNormalized,
-    bool? FinalAnomaly);
+    bool? FinalAnomaly,
+    DateTime ReadingTimestampOriginal,
+    string ReadingTimestampKind);
+
+public sealed record MultivariateShadowDiagnosticSummary(
+    Guid DiagnosticId,
+    Guid VectorId,
+    MultivariateShadowEventKind EventKind,
+    string ClienteId,
+    string GroupName,
+    long MinuteIndex,
+    bool VectorComplete,
+    bool MahalanobisExecuted,
+    bool? Anomaly,
+    string? ReasonCode,
+    DateTimeOffset RecordedAtUtc);

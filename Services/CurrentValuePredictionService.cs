@@ -38,8 +38,30 @@ public sealed class CurrentValuePredictionService
                     tagName,
                     StringComparison.OrdinalIgnoreCase));
 
+        return await DetectarComValorAtual(
+            clienteId,
+            tagName,
+            valorAtual,
+            cancellationToken);
+    }
+
+    // Usa um valor ja adquirido em lote, sem consultar o Bridge novamente.
+    // A validacao e a chamada a PredictionService sao compartilhadas
+    // com a rota existente de leitura individual.
+    public Task<AnomaliaResponse> DetectarComValorAtual(
+        string clienteId,
+        string tagName,
+        ValorAtualTagResponse? valorAtual,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (valorAtual == null ||
-            !valorAtual.Encontrado)
+            !valorAtual.Encontrado ||
+            !string.Equals(
+                valorAtual.TagName,
+                tagName,
+                StringComparison.OrdinalIgnoreCase))
         {
             throw new Exception(
                 $"Valor atual da tag {tagName} " +
@@ -62,7 +84,7 @@ public sealed class CurrentValuePredictionService
                     valorAtual.DataHora
             };
 
-        return await _predictionService.Detectar(
+        return _predictionService.Detectar(
             request,
             cancellationToken);
     }

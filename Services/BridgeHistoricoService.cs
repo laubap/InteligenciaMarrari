@@ -1,3 +1,4 @@
+using IAApi.Services.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -12,11 +13,16 @@ using Microsoft.Extensions.Configuration;
 /// </summary>
 public class BridgeHistoricoService : IHistoricoService
 {
+    private readonly PerformanceDiagnostics? _performanceDiagnostics;
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
 
-    public BridgeHistoricoService(IConfiguration configuration)
+    public BridgeHistoricoService(IConfiguration configuration,
+        PerformanceDiagnostics? performanceDiagnostics = null)
     {
+        _performanceDiagnostics = performanceDiagnostics;
+
         _configuration =
             configuration
             ?? throw new ArgumentNullException(nameof(configuration));
@@ -71,7 +77,7 @@ public class BridgeHistoricoService : IHistoricoService
         Console.WriteLine($"URL: {url}");
         Console.WriteLine("================================");
 
-        var json = BuscarJson(url, baseUrl);
+        var json = BuscarJson(url, baseUrl, clienteId, tagName);
 
         return ConverterHistorico(
             json,
@@ -143,7 +149,7 @@ public class BridgeHistoricoService : IHistoricoService
         Console.WriteLine($"URL: {url}");
         Console.WriteLine("================================");
 
-        var json = BuscarJson(url, baseUrl);
+        var json = BuscarJson(url, baseUrl, clienteId, tagName);
 
         var historico = ConverterHistorico(
             json,
@@ -203,138 +209,168 @@ public class BridgeHistoricoService : IHistoricoService
     /// </summary>
     private string BuscarJson(
         string url,
-        string baseUrl)
+        string baseUrl,
+        string clienteId,
+        string tagName)
     {
-        try
-        {
-            using var response = _httpClient
-                .GetAsync(url)
-                .GetAwaiter()
-                .GetResult();
-
-            var conteudo = response.Content
-                .ReadAsStringAsync()
-                .GetAwaiter()
-                .GetResult();
-
-            if (!response.IsSuccessStatusCode)
+        return PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, clienteId, tagName, "Bridge.Transport",
+            () =>
             {
-                throw new InvalidOperationException(
-                    $"O Bridge respondeu com o status " +
-                    $"{(int)response.StatusCode} " +
-                    $"({response.ReasonPhrase}). " +
-                    $"Resposta: {conteudo}"
-                );
-            }
+                try
+                {
+                    using var response = PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, clienteId, tagName, "Bridge.HttpBuffered",
+                    () =>
+                    {
+                        _performanceDiagnostics?.HistoricalRequest();
+                        return _httpClient
+                        .GetAsync(url)
+                        .GetAwaiter()
+                        .GetResult();
+                    });
 
-            if (string.IsNullOrWhiteSpace(conteudo))
-            {
-                throw new InvalidOperationException(
-                    "O Bridge retornou uma resposta vazia."
-                );
-            }
+                    var conteudo = PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, clienteId, tagName, "Bridge.ReadBufferedResponse",
+                    () => response.Content
+                        .ReadAsStringAsync()
+                        .GetAwaiter()
+                        .GetResult());
 
-            return conteudo;
-        }
-        catch (TaskCanceledException ex)
-        {
-            throw new Exception(
-                "Tempo limite excedido ao consultar o Bridge.",
-                ex
-            );
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new Exception(
-                $"Não foi possível conectar ao Bridge em " +
-                $"'{baseUrl}'. Verifique se o Bridge está rodando.",
-                ex
-            );
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            throw new Exception(
-                $"Erro inesperado ao consultar o Bridge: " +
-                $"{ex.Message}",
-                ex
-            );
-        }
+                    _performanceDiagnostics?.HttpStatus((int)response.StatusCode);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new InvalidOperationException(
+                            $"O Bridge respondeu com o status " +
+                            $"{(int)response.StatusCode} " +
+                            $"({response.ReasonPhrase}). " +
+                            $"Resposta: {conteudo}"
+                        );
+                    }
+
+                    if (string.IsNullOrWhiteSpace(conteudo))
+                    {
+                        throw new InvalidOperationException(
+                            "O Bridge retornou uma resposta vazia."
+                        );
+                    }
+
+                    return conteudo;
+                }
+                catch (TaskCanceledException ex)
+                {
+                    throw new Exception(
+                        "Tempo limite excedido ao consultar o Bridge.",
+                        ex
+                    );
+                }
+                catch (HttpRequestException ex)
+                {
+                    throw new Exception(
+                        $"Não foi possível conectar ao Bridge em " +
+                        $"'{baseUrl}'. Verifique se o Bridge está rodando.",
+                        ex
+                    );
+                }
+                catch (InvalidOperationException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception(
+                        $"Erro inesperado ao consultar o Bridge: " +
+                        $"{ex.Message}",
+                        ex
+                    );
+                }
+            });
     }
 
     /// <summary>
     /// Converte a resposta JSON do Bridge para o modelo usado pela IA.
     /// </summary>
-    private static List<LeituraBruta> ConverterHistorico(
+    private List<LeituraBruta> ConverterHistorico(
         string json,
         string clienteId,
         string tagName)
     {
-        try
-        {
-            var dados =
-                JsonSerializer.Deserialize<List<BridgeHistoricoItem>>(
-                    json,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    }
-                );
-
-            if (dados == null || dados.Count == 0)
+        return PerformanceDiagnostics.Measure(
+            _performanceDiagnostics, clienteId, tagName, "Bridge.Decode",
+            () =>
             {
-                throw new InvalidOperationException(
-                    $"Nenhum histórico foi encontrado para a tag " +
-                    $"'{tagName}' do cliente '{clienteId}'."
-                );
-            }
-
-            Console.WriteLine(
-                $"Histórico recebido do Bridge: {dados.Count} registros"
-            );
-
-            var resultado = dados
-                .Select(item => new LeituraBruta
+                try
                 {
-                    DataHora = item.DataHora,
-                    Valor = ConverterValor(item.Valor)
-                })
-                .Where(leitura =>
-                    !float.IsNaN(leitura.Valor)
-                    && !float.IsInfinity(leitura.Valor)
-                )
-                .GroupBy(leitura => leitura.DataHora)
-                .Select(grupo => grupo.Last())
-                .OrderBy(leitura => leitura.DataHora)
-                .ToList();
+                    var dados =
+                        PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, clienteId, tagName, "Bridge.Deserialize",
+                    () => JsonSerializer.Deserialize<List<BridgeHistoricoItem>>(
+                            json,
+                            new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            }
+                        ));
 
-            Console.WriteLine(
-                $"Histórico válido convertido para IA: " +
-                $"{resultado.Count} registros"
-            );
+                    _performanceDiagnostics?.Records(dados?.Count, null);
 
-            if (resultado.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    $"O Bridge retornou registros para a tag " +
-                    $"'{tagName}', mas nenhum possui valor numérico válido."
-                );
-            }
+                    if (dados == null || dados.Count == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Nenhum histórico foi encontrado para a tag " +
+                            $"'{tagName}' do cliente '{clienteId}'."
+                        );
+                    }
 
-            return resultado;
-        }
-        catch (JsonException ex)
-        {
-            throw new Exception(
-                $"O Bridge retornou um JSON inválido. " +
-                $"Erro: {ex.Message}. " +
-                $"Resposta recebida: {json}",
-                ex
-            );
-        }
+                    Console.WriteLine(
+                        $"Histórico recebido do Bridge: {dados.Count} registros"
+                    );
+
+                    var resultado = PerformanceDiagnostics.Measure(
+                    _performanceDiagnostics, clienteId, tagName, "Bridge.ConvertRecords",
+                    () => dados
+                        .Select(item => new LeituraBruta
+                        {
+                            DataHora = item.DataHora,
+                            Valor = ConverterValor(item.Valor)
+                        })
+                        .Where(leitura =>
+                            !float.IsNaN(leitura.Valor)
+                            && !float.IsInfinity(leitura.Valor)
+                        )
+                        .GroupBy(leitura => leitura.DataHora)
+                        .Select(grupo => grupo.Last())
+                        .OrderBy(leitura => leitura.DataHora)
+                        .ToList());
+
+                    Console.WriteLine(
+                        $"Histórico válido convertido para IA: " +
+                        $"{resultado.Count} registros"
+                    );
+
+                    _performanceDiagnostics?.Records(dados.Count, resultado.Count);
+
+                    if (resultado.Count == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"O Bridge retornou registros para a tag " +
+                            $"'{tagName}', mas nenhum possui valor numérico válido."
+                        );
+                    }
+
+                    return resultado;
+                }
+                catch (JsonException ex)
+                {
+                    throw new Exception(
+                        $"O Bridge retornou um JSON inválido. " +
+                        $"Erro: {ex.Message}. " +
+                        $"Resposta recebida: {json}",
+                        ex
+                    );
+                }
+            });
     }
 
     /// <summary>

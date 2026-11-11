@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using IAApi.IntelligenceLab.Observability;
+using IAApi.IntelligenceLab.Observability.Application;
 
 namespace IAApi.Services.AnomalyDetection.Multivariate;
 
@@ -12,6 +14,8 @@ public sealed class MultivariateGroupBufferService
     // B3.24.2: estado temporal compartilhado entre scopes HTTP.
     // A configuração dos grupos continua scoped no serviço.
     private readonly MultivariateRuntimeStateStore _stateStore;
+    private readonly IIntelligenceLabMultivariateShadowCollector?
+        _shadowDiagnosticCollector;
 
     private readonly ConcurrentDictionary<
         string,
@@ -28,7 +32,9 @@ public sealed class MultivariateGroupBufferService
 
     public MultivariateGroupBufferService(
         GrupoAnaliseService grupoAnaliseService,
-        MultivariateRuntimeStateStore stateStore)
+        MultivariateRuntimeStateStore stateStore,
+        IIntelligenceLabMultivariateShadowCollector?
+            shadowDiagnosticCollector = null)
     {
         _grupoAnaliseService =
             grupoAnaliseService ??
@@ -39,6 +45,8 @@ public sealed class MultivariateGroupBufferService
             stateStore ??
             throw new ArgumentNullException(
                 nameof(stateStore));
+
+        _shadowDiagnosticCollector = shadowDiagnosticCollector;
     }
 
     /// <summary>
@@ -53,6 +61,26 @@ public sealed class MultivariateGroupBufferService
             string tagName,
             long minuteIndex,
             double valor,
+            CancellationToken cancellationToken = default)
+    {
+        return await AdicionarLeituraAsync(
+            clienteId,
+            tagName,
+            minuteIndex,
+            valor,
+            sourceTimestamp: null,
+            sourceAnalysisCorrelationId: null,
+            cancellationToken: cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BufferedGroupReading>>
+        AdicionarLeituraAsync(
+            string clienteId,
+            string tagName,
+            long minuteIndex,
+            double valor,
+            DateTime? sourceTimestamp,
+            string? sourceAnalysisCorrelationId,
             CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clienteId);
@@ -116,7 +144,11 @@ public sealed class MultivariateGroupBufferService
                         bufferExistente.AdicionarValor(
                             tagNormalizada,
                             minuteIndex,
-                            valor);
+                            valor,
+                            sourceTimestamp,
+                            sourceAnalysisCorrelationId);
+
+                        RegistrarLeituraAceita(bufferExistente.CriarCopia());
 
                         continue;
                     }
@@ -154,7 +186,11 @@ public sealed class MultivariateGroupBufferService
             buffer.AdicionarValor(
                 tagNormalizada,
                 minuteIndex,
-                valor);
+                valor,
+                sourceTimestamp,
+                sourceAnalysisCorrelationId);
+
+            RegistrarLeituraAceita(buffer.CriarCopia());
         }
 
         AtualizarUltimoMinuto(
@@ -198,8 +234,16 @@ public sealed class MultivariateGroupBufferService
 
             if (buffer.PossuiMinimoDeTags())
             {
-                finalizados.Add(
-                    buffer.CriarCopia());
+                var leitura = buffer.CriarCopia();
+                finalizados.Add(leitura);
+                RegistrarFechamento(leitura, descartado: false, reasonCode: null);
+            }
+            else
+            {
+                RegistrarFechamento(
+                    buffer.CriarCopia(),
+                    descartado: true,
+                    reasonCode: "InsufficientTagsToFinalizeVector");
             }
         }
 
@@ -298,8 +342,16 @@ public sealed class MultivariateGroupBufferService
 
         if (removido.PossuiMinimoDeTags())
         {
-            finalizados.Add(
-                removido.CriarCopia());
+            var leitura = removido.CriarCopia();
+            finalizados.Add(leitura);
+            RegistrarFechamento(leitura, descartado: false, reasonCode: null);
+        }
+        else
+        {
+            RegistrarFechamento(
+                removido.CriarCopia(),
+                descartado: true,
+                reasonCode: "InsufficientTagsToFinalizeVector");
         }
     }
 
@@ -329,6 +381,99 @@ public sealed class MultivariateGroupBufferService
                         StringComparer.OrdinalIgnoreCase)
                     .ToList()
         };
+    }
+
+    private void RegistrarLeituraAceita(BufferedGroupReading reading) =>
+        RegistrarDiagnostico(
+            reading,
+            MultivariateShadowEventKind.ReadingAccepted,
+            reasonCode: null,
+            mahalanobisExecuted: false,
+            anomaly: null,
+            normalizedScore: null,
+            threshold: null,
+            mahalanobisSquared: null);
+
+    private void RegistrarFechamento(
+        BufferedGroupReading reading,
+        bool descartado,
+        string? reasonCode) =>
+        RegistrarDiagnostico(
+            reading,
+            descartado
+                ? MultivariateShadowEventKind.VectorDiscarded
+                : MultivariateShadowEventKind.VectorFinalized,
+            reasonCode,
+            mahalanobisExecuted: false,
+            anomaly: null,
+            normalizedScore: null,
+            threshold: null,
+            mahalanobisSquared: null);
+
+    private void RegistrarDiagnostico(
+        BufferedGroupReading reading,
+        MultivariateShadowEventKind eventKind,
+        string? reasonCode,
+        bool mahalanobisExecuted,
+        bool? anomaly,
+        double? normalizedScore,
+        double? threshold,
+        double? mahalanobisSquared)
+    {
+        if (_shadowDiagnosticCollector is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var timestamps = reading.TimestampsPorTag;
+            var correlationIds = reading.SourceAnalysisCorrelationIdsPorTag;
+            var tags = reading.ExpectedTags
+                .Concat(reading.Valores.Keys)
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var readings = reading.Valores
+                .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(item => new MultivariateShadowTagReading(
+                    item.Key,
+                    timestamps.TryGetValue(item.Key, out var timestamp)
+                        ? timestamp
+                        : null,
+                    item.Value,
+                    correlationIds.TryGetValue(item.Key, out var correlationId)
+                        ? correlationId
+                        : null))
+                .ToArray();
+
+            _shadowDiagnosticCollector.Record(
+                new MultivariateShadowDiagnostic(
+                    Guid.NewGuid(),
+                    reading.VectorId,
+                    eventKind,
+                    reading.ClienteId,
+                    reading.GroupName,
+                    reading.MinuteIndex,
+                    tags,
+                    readings,
+                    reading.MinimumAvailableTags,
+                    reading.MaxLagMinutes,
+                    reading.EstaCompleto(),
+                    reasonCode,
+                    mahalanobisExecuted,
+                    anomaly,
+                    normalizedScore,
+                    threshold,
+                    mahalanobisSquared,
+                    DateTimeOffset.UtcNow));
+        }
+        catch (Exception)
+        {
+            // Telemetria é estritamente fail-open.
+        }
     }
 
     private async Task<

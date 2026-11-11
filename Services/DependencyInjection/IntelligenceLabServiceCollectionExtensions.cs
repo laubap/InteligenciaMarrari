@@ -50,6 +50,8 @@ public static class IntelligenceLabServiceCollectionExtensions
         services.AddSingleton(buffer);
         services.AddSingleton(buffer.Health);
         services.AddSingleton<IIntelligenceLabDiagnosticCollector, InMemoryDiagnosticCollector>();
+        services.AddSingleton<IIntelligenceLabMultivariateShadowCollector,
+            InMemoryMultivariateShadowDiagnosticCollector>();
         services.AddSingleton(metadata);
 
         return services;

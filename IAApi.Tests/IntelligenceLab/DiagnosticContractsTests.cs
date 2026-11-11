@@ -21,6 +21,47 @@ public sealed class DiagnosticContractsTests
     }
 
     [Fact]
+    public void ReadingDiagnostic_PreservesUnknownIndustrialTimeWithoutInventingUtc()
+    {
+        var original = new DateTime(2026, 11, 4, 14, 29, 0, DateTimeKind.Unspecified);
+        var context = DiagnosticContext.CreateNew(receivedAtUtc:
+            new DateTimeOffset(2026, 11, 4, 17, 30, 0, TimeSpan.Zero));
+        var diagnostic = new IntelligenceLabReadingDiagnostic(
+            context,
+            new DiagnosticVersionMetadata("1", "build", "commit", "config"),
+            "PK2", "PK2.TAG31", original, 0,
+            new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial,
+                ["ReadingTimestampUtc"]),
+            new DiagnosticTiming(TimeSpan.Zero));
+
+        Assert.Equal(original, diagnostic.ReadingTimestampOriginal);
+        Assert.Equal("Unspecified", diagnostic.ReadingTimestampKind);
+        Assert.Null(diagnostic.ReadingTimestampUtc);
+        Assert.Equal(new DateTimeOffset(2026, 11, 4, 17, 30, 0, TimeSpan.Zero),
+            diagnostic.Context.ReceivedAtUtc);
+        var json = JsonSerializer.Serialize(diagnostic);
+        Assert.Contains("\"ReadingTimestampUtc\":null", json);
+        Assert.Contains("\"ReadingTimestampKind\":\"Unspecified\"", json);
+    }
+
+    [Fact]
+    public void ExistingUtcConstructor_RemainsSupported()
+    {
+        var original = new DateTimeOffset(2026, 11, 4, 14, 29, 0,
+            TimeSpan.FromHours(-3));
+        var diagnostic = new IntelligenceLabReadingDiagnostic(
+            DiagnosticContext.CreateNew(),
+            new DiagnosticVersionMetadata("1", "build", "commit", "config"),
+            "PK2", "PK2.TAG31", original, 0,
+            new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial,
+                reason: "No inference"),
+            new DiagnosticTiming(TimeSpan.Zero));
+        Assert.NotNull(diagnostic.ReadingTimestampUtc);
+        Assert.Equal(original.ToUniversalTime(), diagnostic.ReadingTimestampUtc.Value);
+        Assert.Equal(DateTimeKind.Utc, diagnostic.ReadingTimestampOriginal.Kind);
+    }
+
+    [Fact]
     public void DetectorDiagnostic_RequiresScoresWhenExecuted()
     {
         Assert.Throws<ArgumentException>(() => new DetectorDiagnostic(

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using IAApi.IntelligenceLab.Observability;
+using IAApi.IntelligenceLab.Observability.Application;
 using IAApi.Services.AnomalyDetection.Multivariate;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,6 +10,157 @@ namespace IAApi.Tests;
 
 public sealed class MultivariateShadowRuntimeCoordinatorTests
 {
+    [Fact]
+    public async Task ColetaDeObservabilidade_NaoAlteraFormacaoNemFechamentoDoVetor()
+    {
+        var instante = new DateTime(2026, 11, 3, 10, 15, 0);
+
+        async Task<BufferedGroupReading> FormarVetorAsync(
+            IIntelligenceLabMultivariateShadowCollector? collector)
+        {
+            var service = new MultivariateGroupBufferService(
+                new GrupoAnaliseService(
+                    new StaticGrupoProvider(
+                        new GrupoAnaliseDto
+                        {
+                            Id = 1,
+                            Nome = "CP300-B01-Piloto",
+                            MinimumAvailableTags = 2,
+                            MaxLagMinutes = 0,
+                            Tags = ["TAG-A", "TAG-B"]
+                        })),
+                new MultivariateRuntimeStateStore(),
+                collector);
+
+            var minute = MultivariateShadowRuntimeCoordinator.CriarMinuteIndex(instante);
+            await service.AdicionarLeituraAsync(
+                "PK2", "TAG-A", minute, 10, instante, "uni-a");
+            await service.AdicionarLeituraAsync(
+                "PK2", "TAG-B", minute, 20, instante.AddSeconds(20), "uni-b");
+
+            return Assert.Single(await service.AdicionarLeituraAsync(
+                "PK2", "TAG-A", minute + 1, 10,
+                instante.AddMinutes(1), "uni-c"));
+        }
+
+        var semColeta = await FormarVetorAsync(null);
+        var collector = new RecordingShadowCollector();
+        var comColeta = await FormarVetorAsync(collector);
+
+        Assert.Equal(semColeta.ClienteId, comColeta.ClienteId);
+        Assert.Equal(semColeta.GroupName, comColeta.GroupName);
+        Assert.Equal(semColeta.MinuteIndex, comColeta.MinuteIndex);
+        Assert.Equal(semColeta.Valores, comColeta.Valores);
+        foreach (var tag in semColeta.Valores.Keys)
+        {
+            Assert.True(semColeta.TryGetMinuteIndexDaTag(tag, out var minutoSemColeta));
+            Assert.True(comColeta.TryGetMinuteIndexDaTag(tag, out var minutoComColeta));
+            Assert.Equal(minutoSemColeta, minutoComColeta);
+        }
+        Assert.Equal(
+            semColeta.TimestampsPorTag,
+            comColeta.TimestampsPorTag);
+        Assert.Equal(
+            semColeta.SourceAnalysisCorrelationIdsPorTag,
+            comColeta.SourceAnalysisCorrelationIdsPorTag);
+        Assert.Contains(
+            collector.Snapshot(),
+            x => x.EventKind == MultivariateShadowEventKind.VectorFinalized);
+    }
+
+    [Fact]
+    public async Task ObservabilidadeShadow_DistingueVetorElegivelDeMahalanobisEfetivamenteExecutado_SemAlterarResultado()
+    {
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "IAApiTests",
+            Guid.NewGuid().ToString("N"));
+
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            var collector = new RecordingShadowCollector();
+            var grupoService = new GrupoAnaliseService(
+                new StaticGrupoProvider(
+                    new GrupoAnaliseDto
+                    {
+                        Id = 1,
+                        Nome = "CP300-B01-Piloto",
+                        MinimumAvailableTags = 2,
+                        MaxLagMinutes = 0,
+                        Tags = ["TAG-A", "TAG-B"]
+                    }));
+
+            var buffer = new MultivariateGroupBufferService(
+                grupoService,
+                new MultivariateRuntimeStateStore(),
+                collector);
+
+            var persistence = new MultivariateModelPersistenceService(
+                new FakeWebHostEnvironment(tempRoot));
+
+            await GravarModeloAsync(
+                persistence,
+                "PK2",
+                "CP300-B01-Piloto");
+
+            var coordinator = new MultivariateShadowRuntimeCoordinator(
+                buffer,
+                new MultivariateDetector(persistence),
+                NullLogger<MultivariateShadowRuntimeCoordinator>.Instance,
+                collector);
+
+            var instante = new DateTime(2026, 11, 3, 10, 15, 0);
+
+            await coordinator.ProcessarLeituraAsync(
+                "PK2", "TAG-A", instante, 10, "uni-a");
+            await coordinator.ProcessarLeituraAsync(
+                "PK2", "TAG-B", instante.AddSeconds(20), 20, "uni-b");
+
+            var resultados = await coordinator.ProcessarLeituraAsync(
+                "PK2", "TAG-A", instante.AddMinutes(1), 10, "uni-c");
+
+            var resultado = Assert.Single(resultados);
+            Assert.True(resultado.Aplicavel);
+            Assert.False(resultado.EhAnomalia);
+
+            var snapshot = collector.Snapshot();
+            var finalizado = Assert.Single(snapshot.Where(
+                x => x.EventKind == MultivariateShadowEventKind.VectorFinalized));
+            var executado = Assert.Single(snapshot.Where(
+                x => x.EventKind == MultivariateShadowEventKind.MahalanobisExecuted));
+
+            // Fechar um vetor apenas o torna elegível; a execução confirmada é
+            // registrada em evento distinto, depois do detector.
+            Assert.False(finalizado.MahalanobisExecuted);
+            Assert.True(executado.MahalanobisExecuted);
+            Assert.Equal(finalizado.VectorId, executado.VectorId);
+            Assert.Equal(2, finalizado.Readings.Count);
+            Assert.Contains(finalizado.Readings, x =>
+                x.TagName == "TAG-A" &&
+                x.SourceTimestamp == instante &&
+                x.SourceAnalysisCorrelationId == "uni-a");
+            Assert.Contains(finalizado.Readings, x =>
+                x.TagName == "TAG-B" &&
+                x.SourceTimestamp == instante.AddSeconds(20) &&
+                x.SourceAnalysisCorrelationId == "uni-b");
+            Assert.Equal(
+                MultivariateShadowDiagnostic.CounterfactualNotAttached,
+                executado.CounterfactualStatus);
+            Assert.Equal(
+                MultivariateShadowDiagnostic.OperationalDecisionUnaffected,
+                executado.OperationalDecisionStatus);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public async Task LeiturasEntreChamadas_FormamVetorEProduzemResultadoCorrelacionadoAoVetorFinalizado()
     {
@@ -1085,6 +1238,28 @@ public sealed class MultivariateShadowRuntimeCoordinatorTests
         {
             throw new InvalidOperationException(
                 "Falha simulada do provider.");
+        }
+    }
+
+    private sealed class RecordingShadowCollector
+        : IIntelligenceLabMultivariateShadowCollector
+    {
+        private readonly List<MultivariateShadowDiagnostic> _diagnostics = [];
+
+        public void Record(MultivariateShadowDiagnostic diagnostic)
+        {
+            lock (_diagnostics)
+            {
+                _diagnostics.Add(diagnostic);
+            }
+        }
+
+        public IReadOnlyList<MultivariateShadowDiagnostic> Snapshot()
+        {
+            lock (_diagnostics)
+            {
+                return _diagnostics.ToArray();
+            }
         }
     }
 

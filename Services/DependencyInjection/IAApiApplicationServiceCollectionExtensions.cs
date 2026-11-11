@@ -1,3 +1,5 @@
+using IAApi.Services.Diagnostics;
+using IAApi.Services.AnomalyDetection.Orchestration;
 using IAApi.Infrastructure.Llm.DependencyInjection;
 using IAApi.Services;
 using IAApi.Services.AnomalyDetection;
@@ -25,6 +27,16 @@ public static class IAApiApplicationServiceCollectionExtensions
     {
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite("Data Source=ia_config.db"));
+
+        services.AddSingleton<PerformanceDiagnostics>(provider => new PerformanceDiagnostics(
+            provider.GetService<Microsoft.Extensions.Hosting.IHostEnvironment>()?.EnvironmentName ?? "Production",
+            Environment.GetEnvironmentVariable("IAAPI_PERF_DIAGNOSTICS"),
+            provider.GetService<ILogger<PerformanceDiagnostics>>()
+                ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PerformanceDiagnostics>.Instance));
+
+        services.AddSingleton<PredictionHistoryReuseOptions>(provider => new PredictionHistoryReuseOptions(
+            provider.GetService<Microsoft.Extensions.Hosting.IHostEnvironment>()?.EnvironmentName ?? "Production",
+            Environment.GetEnvironmentVariable(PredictionHistoryReuseOptions.EnvironmentVariable)));
 
         services.AddBridgeServices();
 

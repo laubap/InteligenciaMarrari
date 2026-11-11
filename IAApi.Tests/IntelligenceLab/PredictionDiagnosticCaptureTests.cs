@@ -255,9 +255,42 @@ public sealed class PredictionDiagnosticCaptureTests
         PredictionDiagnosticCapture.TryCapture(
             new InMemoryDiagnosticCollector(buffer), Version(), request,
             DateTime.SpecifyKind(ReadingTime, DateTimeKind.Unspecified),
-            null, detector, decision, TimeSpan.Zero, DateTimeOffset.UtcNow);
+            null, detector, decision, TimeSpan.Zero, DateTimeOffset.UtcNow,
+            health: buffer.Health);
 
-        Assert.Empty(buffer.Snapshot());
+        var diagnostic = Assert.Single(buffer.Snapshot());
+        Assert.Equal(DateTimeKind.Unspecified, diagnostic.ReadingTimestampOriginal.Kind);
+        Assert.Equal(ReadingTime.Ticks, diagnostic.ReadingTimestampOriginal.Ticks);
+        Assert.Equal("Unspecified", diagnostic.ReadingTimestampKind);
+        Assert.Null(diagnostic.ReadingTimestampUtc);
+        Assert.Equal(DateTimeOffset.UtcNow.Offset, diagnostic.Context.ReceivedAtUtc.Offset);
+        Assert.Contains("ReadingTimestampUtc", diagnostic.Completeness.MissingSections);
+        Assert.Equal(DiagnosticCompletenessStatus.Partial, diagnostic.Completeness.Status);
+        var health = buffer.Health.Snapshot(buffer);
+        Assert.Equal(1, health.CaptureAttempts);
+        Assert.Equal(0, health.RejectedTotal);
+        Assert.Equal(1, health.StoredTotal);
+    }
+
+    [Theory]
+    [InlineData(DateTimeKind.Utc)]
+    [InlineData(DateTimeKind.Local)]
+    public void TimestampWithKnownKind_IsCapturedWithConsistentUtc(DateTimeKind kind)
+    {
+        var buffer = new BoundedDiagnosticBuffer(5, enabled: true);
+        var (request, detector, decision) = Arrange();
+        var sourceTime = DateTime.SpecifyKind(ReadingTime, kind);
+
+        PredictionDiagnosticCapture.TryCapture(
+            new InMemoryDiagnosticCollector(buffer), Version(), request,
+            sourceTime, null, detector, decision, TimeSpan.Zero, DateTimeOffset.UtcNow);
+
+        var diagnostic = Assert.Single(buffer.Snapshot());
+        Assert.Equal(sourceTime, diagnostic.ReadingTimestampOriginal);
+        Assert.Equal(kind.ToString(), diagnostic.ReadingTimestampKind);
+        Assert.NotNull(diagnostic.ReadingTimestampUtc);
+        Assert.Equal(new DateTimeOffset(sourceTime).ToUniversalTime(), diagnostic.ReadingTimestampUtc.Value);
+        Assert.DoesNotContain("ReadingTimestampUtc", diagnostic.Completeness.MissingSections);
     }
 
     [Fact]

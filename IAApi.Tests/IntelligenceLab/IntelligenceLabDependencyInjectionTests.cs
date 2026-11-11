@@ -18,6 +18,7 @@ public sealed class IntelligenceLabDependencyInjectionTests
         using var provider = services.BuildServiceProvider();
 
         Assert.Null(provider.GetService<IIntelligenceLabDiagnosticCollector>());
+        Assert.Null(provider.GetService<IIntelligenceLabMultivariateShadowCollector>());
         Assert.Null(provider.GetService<BoundedDiagnosticBuffer>());
         Assert.Null(provider.GetService<DiagnosticVersionMetadata>());
     }
@@ -46,7 +47,9 @@ public sealed class IntelligenceLabDependencyInjectionTests
         Assert.Equal(12, buffer.Capacity);
         Assert.Same(buffer, provider.GetRequiredService<BoundedDiagnosticBuffer>());
         var collector = provider.GetRequiredService<IIntelligenceLabDiagnosticCollector>();
+        var shadowCollector = provider.GetRequiredService<IIntelligenceLabMultivariateShadowCollector>();
         Assert.IsType<InMemoryDiagnosticCollector>(collector);
+        Assert.IsType<InMemoryMultivariateShadowDiagnosticCollector>(shadowCollector);
         Assert.Same(collector, provider.GetRequiredService<IIntelligenceLabDiagnosticCollector>());
         var version = provider.GetRequiredService<DiagnosticVersionMetadata>();
         Assert.Equal("1.2.3", version.ApiVersion);
@@ -92,6 +95,7 @@ public sealed class IntelligenceLabDependencyInjectionTests
         Assert.Contains(services, entry => entry.ServiceType == typeof(PredictionService));
         Assert.Contains(services, entry => entry.ServiceType == typeof(BoundedDiagnosticBuffer));
         Assert.Contains(services, entry => entry.ServiceType == typeof(IIntelligenceLabDiagnosticCollector));
+        Assert.Contains(services, entry => entry.ServiceType == typeof(IIntelligenceLabMultivariateShadowCollector));
         Assert.Contains(services, entry => entry.ServiceType == typeof(DiagnosticVersionMetadata));
     }
 

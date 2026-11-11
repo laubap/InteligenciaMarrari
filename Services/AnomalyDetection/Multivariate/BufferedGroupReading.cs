@@ -11,9 +11,21 @@ public sealed class BufferedGroupReading
     private readonly Dictionary<string, long> _minuteIndexesPorTag =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly Dictionary<string, DateTime> _timestampsPorTag =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, string?> _sourceAnalysisCorrelationIdsPorTag =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public string ClienteId { get; init; } = "";
 
     public string GroupName { get; init; } = "";
+
+    /// <summary>
+    /// Identidade estável da rodada, usada exclusivamente para correlacionar
+    /// a telemetria shadow com as leituras que a compuseram.
+    /// </summary>
+    public Guid VectorId { get; init; } = Guid.NewGuid();
 
     /// <summary>
     /// Minuto de referência do vetor.
@@ -35,6 +47,32 @@ public sealed class BufferedGroupReading
     public Dictionary<string, double> Valores { get; } =
         new(StringComparer.OrdinalIgnoreCase);
 
+    public IReadOnlyDictionary<string, DateTime> TimestampsPorTag
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return new Dictionary<string, DateTime>(
+                    _timestampsPorTag,
+                    StringComparer.OrdinalIgnoreCase);
+            }
+        }
+    }
+
+    public IReadOnlyDictionary<string, string?> SourceAnalysisCorrelationIdsPorTag
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return new Dictionary<string, string?>(
+                    _sourceAnalysisCorrelationIdsPorTag,
+                    StringComparer.OrdinalIgnoreCase);
+            }
+        }
+    }
+
     /// <summary>
     /// Mantém compatibilidade com chamadas antigas que já entregam
     /// todas as tags no mesmo minuto de referência do buffer.
@@ -53,6 +91,21 @@ public sealed class BufferedGroupReading
         string tagName,
         long minuteIndex,
         double valor)
+    {
+        AdicionarValor(
+            tagName,
+            minuteIndex,
+            valor,
+            sourceTimestamp: null,
+            sourceAnalysisCorrelationId: null);
+    }
+
+    public void AdicionarValor(
+        string tagName,
+        long minuteIndex,
+        double valor,
+        DateTime? sourceTimestamp,
+        string? sourceAnalysisCorrelationId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tagName);
 
@@ -75,6 +128,16 @@ public sealed class BufferedGroupReading
         {
             Valores[tagNormalizada] = valor;
             _minuteIndexesPorTag[tagNormalizada] = minuteIndex;
+
+            if (sourceTimestamp.HasValue && sourceTimestamp.Value != default)
+            {
+                _timestampsPorTag[tagNormalizada] = sourceTimestamp.Value;
+            }
+
+            _sourceAnalysisCorrelationIdsPorTag[tagNormalizada] =
+                string.IsNullOrWhiteSpace(sourceAnalysisCorrelationId)
+                    ? null
+                    : sourceAnalysisCorrelationId.Trim();
         }
     }
 
@@ -211,6 +274,7 @@ public sealed class BufferedGroupReading
             {
                 ClienteId = ClienteId,
                 GroupName = GroupName,
+                VectorId = VectorId,
                 MinuteIndex = minuteIndexFinal,
                 MinimumAvailableTags = MinimumAvailableTags,
                 MaxLagMinutes = MaxLagMinutes,
@@ -225,6 +289,16 @@ public sealed class BufferedGroupReading
             foreach (var item in _minuteIndexesPorTag)
             {
                 copia._minuteIndexesPorTag[item.Key] = item.Value;
+            }
+
+            foreach (var item in _timestampsPorTag)
+            {
+                copia._timestampsPorTag[item.Key] = item.Value;
+            }
+
+            foreach (var item in _sourceAnalysisCorrelationIdsPorTag)
+            {
+                copia._sourceAnalysisCorrelationIdsPorTag[item.Key] = item.Value;
             }
 
             return copia;

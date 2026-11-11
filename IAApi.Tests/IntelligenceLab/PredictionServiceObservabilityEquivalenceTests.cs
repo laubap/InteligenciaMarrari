@@ -12,6 +12,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xunit;
+using IAApi.Services.Diagnostics;
 
 namespace IAApi.Tests.IntelligenceLab;
 
@@ -24,6 +25,29 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
 {
     private static readonly DateTime ReadingTime =
         new(2026, 10, 23, 14, 0, 0, DateTimeKind.Utc);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PerformanceDiagnostics_MantemRespostaPersistenciaEQuantidadeDeConsultas(bool failingLogger)
+    {
+        var logger = new PerfTestLogger { Throw = failingLogger };
+        var off = await ExecuteAsync(Mode.Off);
+        var on = await ExecuteAsync(Mode.Off,
+            new PerformanceDiagnostics("Development", "1", logger));
+        AssertEquivalent(off, on);
+        Assert.Equal(1, on.DetectorInvocations);
+        Assert.Equal(2, off.HistoryCalls);
+        Assert.Equal(2, on.HistoryCalls); // Preparation and value trend still fetch independently.
+        if (failingLogger) return;
+        Assert.Contains(logger.Events, e => Equals(e["Stage"], "Preparation.History"));
+        Assert.Contains(logger.Events, e => Equals(e["Stage"], "ValueTrend.History"));
+        var total = Assert.Single(logger.Events, e => Equals(e["Stage"], "Prediction.Total"));
+        Assert.Equal("Succeeded", total["Status"]);
+        Assert.All(logger.Events, e => Assert.Equal(total["TraceId"], e["TraceId"]));
+        var directChildren = logger.Events.Where(e => Equals(e["ParentSpanId"], total["SpanId"]));
+        Assert.True(directChildren.Sum(e => (double)e["DurationMs"]!) <= (double)total["DurationMs"]!);
+    }
 
     [Fact]
     public async Task ObservabilidadeLigada_MantemRespostaHistoricoEDetector()
@@ -76,7 +100,7 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
         Assert.Equal(expected.HistoryReasonsJson, actual.HistoryReasonsJson);
     }
 
-    private static async Task<RunSnapshot> ExecuteAsync(Mode mode)
+    private static async Task<RunSnapshot> ExecuteAsync(Mode mode, PerformanceDiagnostics? performance = null)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -132,14 +156,14 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
             new RuntimeAnomalyDecisionOptions { Enabled = false },
             new RuntimeDecisionMetrics());
         var decision = new PredictionDecisionOrchestrationService(
-            ensemble, interpretation, runtimeContext, runtimeDecision);
+            ensemble, interpretation, runtimeContext, runtimeDecision, performanceDiagnostics: performance);
         var postDecision = new PredictionPostDecisionAnalysisService(
             new AnaliseRelacionadasService(db, null!),
             new PredictionRiskAnalysisService(
                 new RiskScoreService(), new ExplicacaoRiscoService()),
             new PredictionTrendAnalysisService(
-                new TendenciaRiscoService(db), new TendenciaValorService(history)),
-            new FeedbackAnomaliaAnaliseService(db));
+                new TendenciaRiscoService(db), new TendenciaValorService(history, performance), performance),
+            new FeedbackAnomaliaAnaliseService(db), performanceDiagnostics: performance);
         var finalization = new PredictionFinalizationService(
             new AnomaliaHistoricoService(db),
             new PredictionResponseBuilder(
@@ -157,11 +181,12 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
         var service = new PredictionService(
             new PredictionContextLoader(db, new ProcessoAnaliseService(db)),
             postDecision, finalization, decision,
-            new PredictionDetectionPreparationService(history),
+            new PredictionDetectionPreparationService(history, performanceDiagnostics: performance),
             multivariateShadowRuntimeCoordinator: null,
             diagnosticCollector: collector,
             diagnosticVersion: version,
-            diagnosticHealth: mode == Mode.Off ? null : buffer.Health);
+            diagnosticHealth: mode == Mode.Off ? null : buffer.Health,
+            performanceDiagnostics: performance);
 
         var response = await service.Detectar(new AnomaliaRequest
         {
@@ -186,7 +211,7 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
             captured?.Completeness.Status,
             captured?.Ensemble?.OriginalScore,
             captured?.RuntimeDecision?.FinalAnomaly,
-            health.CaptureAttempts, health.StoredTotal, health.CaptureFailures);
+            health.CaptureAttempts, health.StoredTotal, health.CaptureFailures, history.Calls);
     }
 
     private enum Mode { Off, On, Throwing }
@@ -209,7 +234,8 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
         bool? DiagnosticFinalAnomaly,
         long CaptureAttempts,
         long StoredTotal,
-        long CaptureFailures);
+        long CaptureFailures,
+        int HistoryCalls);
 
     private sealed class NormalDetector : IAnomalyDetector
     {
@@ -231,8 +257,9 @@ public sealed class PredictionServiceObservabilityEquivalenceTests
 
     private sealed class FixedHistory(List<LeituraBruta> values) : IHistoricoService
     {
+        public int Calls { get; private set; }
         public List<LeituraBruta> BuscarHistorico(string clienteId, string tagName, string tipoTag)
-            => values.ToList();
+        { Calls++; return values.ToList(); }
         public List<LeituraBruta> BuscarHistoricoPorPeriodo(
             string clienteId, string tagName, DateTime inicio, DateTime fim)
             => values.Where(x => x.DataHora >= inicio && x.DataHora <= fim).ToList();
