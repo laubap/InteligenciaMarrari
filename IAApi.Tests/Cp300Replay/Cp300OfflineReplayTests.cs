@@ -1,0 +1,266 @@
+using System.Globalization;
+using System.Text;
+using IAApi.Cp300OfflineReplay;
+
+namespace IAApi.Tests.Cp300OfflineReplayTool;
+
+/// <summary>
+/// Replay offline CP300 sobre um CSV sintetico pequeno. Isolamento: SQLite em
+/// memoria, historico servido do CSV, appsettings.json do repositorio lido
+/// apenas para pesos/limiares. Nenhum acesso a Bridge, PSi4 ou banco real.
+///
+/// Serie: 1 leitura/min. Janela de historico reduzida a 2 h para o teste.
+/// Treino [00:00, 02:00), replay [02:00, 02:59].
+///   TAG22: continua com ruido decimal; degrau de +15 as 02:30.
+///   TAG28: bomba reserva, 0 o tempo todo ate 02:40, depois liga (~25).
+///   TAG24: continua com ruido; congelada a partir de 02:20.
+///   TAG73: rotulo do simulador; nunca pode entrar no replay.
+/// </summary>
+public sealed class Cp300OfflineReplayTests : IDisposable
+{
+    private static readonly DateTime Inicio = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+    private static readonly DateTime T = Inicio.AddHours(2);
+    private static readonly DateTime Degrau = T.AddMinutes(30);
+    private static readonly DateTime ReservaLiga = T.AddMinutes(40);
+    private static readonly DateTime Congela = T.AddMinutes(20);
+    private const int TotalMinutos = 180;
+
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "IAApi-Cp300Replay-Tests", Guid.NewGuid().ToString("N"));
+
+    public Cp300OfflineReplayTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+            Directory.Delete(_root, recursive: true);
+    }
+
+    [Fact]
+    public async Task Replay_GeraSeisDetectoresPorLeitura_ConferidoContraPredictionService()
+    {
+        var (summary, rows) = await RunAsync();
+
+        Assert.Equal(3, summary.TagsReproduzidas);
+        Assert.Equal(3 * 60, summary.Leituras);
+        Assert.Equal(0, summary.LeiturasComErro);
+        Assert.Equal(0, summary.Divergencias);
+        Assert.Empty(summary.TagsIgnoradas);
+
+        // Rotulo do simulador nunca vira entrada.
+        Assert.DoesNotContain(rows, r => r["tag"] == "TAG73");
+        Assert.Equal(["TAG22", "TAG24", "TAG28"], rows.Select(r => r["tag"]).Distinct().Order().ToArray());
+
+        foreach (var reading in rows.GroupBy(r => (r["tag"], r["data_hora"])))
+        {
+            Assert.Equal(6, reading.Count());
+            Assert.All(reading, r => Assert.Equal("ok", r["conferencia"]));
+            Assert.All(reading, r => Assert.Equal("0", r["entrada_invalida"]));
+            Assert.All(reading, r => Assert.Equal("Global", r["origem_baseline"]));
+            // Contribuicoes somam a nota final (pontos ponderados / soma dos pesos).
+            var soma = reading.Sum(r => D(r["contribuicao"]));
+            // CSV grava 9 digitos significativos; tolerancia de arredondamento.
+            Assert.InRange(soma - D(reading.First()["nota_final"]), -1e-4, 1e-4);
+        }
+
+        Assert.Equal(6, rows.Select(r => r["detector"]).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task Replay_UsaPesosDoAppsettings_ELimiarDoEnsemble()
+    {
+        var (_, rows) = await RunAsync();
+        var pesos = rows.GroupBy(r => r["detector"]).ToDictionary(g => g.Key, g => D(g.First()["peso"]));
+
+        // appsettings.json: Z/MAD/EWMA 0,15; RoC/Persistence/LevelShift 0,10 (defaults do codigo diferem).
+        Assert.Equal(3, pesos.Values.Count(p => Math.Abs(p - 0.15) < 1e-9));
+        Assert.Equal(3, pesos.Values.Count(p => Math.Abs(p - 0.10) < 1e-9));
+        Assert.All(rows, r => Assert.Equal(60, D(r["limiar"])));
+    }
+
+    [Fact]
+    public async Task Replay_HistoricoDeDeteccao_EJanelaDeTempoAnteriorALeitura()
+    {
+        var (_, semAtual) = await RunAsync();
+        Assert.All(semAtual, r => Assert.Equal("120", r["pontos_historico"]));
+
+        var (_, comAtual) = await RunAsync(incluiAtual: true);
+        Assert.All(comAtual, r => Assert.Equal("121", r["pontos_historico"]));
+    }
+
+    [Fact]
+    public async Task TagContinua_ComDegrau_DisparaAnomaliaNoDegrau()
+    {
+        var (_, rows) = await RunAsync();
+        var tag = rows.Where(r => r["tag"] == "TAG22").ToList();
+
+        Assert.All(tag, r => Assert.NotEqual("Discrete", r["tipo_tag"]));
+        Assert.All(tag, r => Assert.Equal("profile", r["origem_deadband"]));
+
+        var noDegrau = tag.Where(r => At(r) >= Degrau && At(r) < Degrau.AddMinutes(5)).ToList();
+        Assert.Contains(noDegrau, r => r["decisao_final"] == "1");
+        // No primeiro minuto do degrau o Z-Score satura.
+        var z = noDegrau.Single(r => At(r) == Degrau && r["detector"] == "Z-Score");
+        Assert.Equal("1", z["aplicavel"]);
+        Assert.Equal(100, D(z["nota_detector"]));
+    }
+
+    [Fact]
+    public async Task BombaReservaEmZero_ClassificadaDiscreta_BloqueiaTodosOsDetectores()
+    {
+        var (_, rows) = await RunAsync();
+        var parada = rows.Where(r => r["tag"] == "TAG28" && At(r) < ReservaLiga).ToList();
+
+        Assert.NotEmpty(parada);
+        Assert.All(parada, r =>
+        {
+            Assert.Equal("Discrete", r["tipo_tag"]);
+            Assert.True(D(r["confianca_tipo"]) >= 0.85);
+            Assert.Equal("1", r["roteamento_por_tipo"]);
+            Assert.Equal("0", r["aplicavel"]);
+            Assert.Equal("BlockedByApplicabilityPolicy", r["motivo_nao_aplicavel"]);
+            Assert.Equal(0, D(r["nota_final"]));
+            Assert.Equal("0", r["decisao_final"]);
+            // Perfil treinado so com zeros: media 0 / desvio 0 / deadband 0.
+            Assert.Equal(0, D(r["media"]));
+            Assert.Equal(0, D(r["desvio"]));
+            Assert.Equal("relative-floor", r["origem_deadband"]);
+        });
+    }
+
+    [Fact]
+    public async Task ValorCongelado_ReportaDetectoresEBaseline()
+    {
+        var (_, rows) = await RunAsync();
+        var congelado = rows.Where(r => r["tag"] == "TAG24" && At(r) >= Congela).ToList();
+
+        Assert.Equal(40 * 6, congelado.Count);
+        Assert.Single(congelado.Select(r => r["valor"]).Distinct());
+        Assert.All(congelado, r =>
+        {
+            Assert.Equal("profile", r["origem_deadband"]);
+            Assert.True(D(r["deadband"]) > 0);
+            Assert.True(D(r["desvio"]) > 0);
+            Assert.False(string.IsNullOrEmpty(r["tipo_tag"]));
+            Assert.Equal("", r["erro"]);
+        });
+    }
+
+    [Fact]
+    public async Task RotuloPedidoExplicitamente_ERecusado()
+    {
+        var input = WriteCsv();
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Cp300Replay.RunAsync(
+            Options(input, Path.Combine(_root, "x.csv"), tags: ["TAG73"])));
+        Assert.Contains("rotulo", ex.Message);
+    }
+
+    // ---------------------------------------------------------------------
+
+    private async Task<(Cp300ReplaySummary Summary, List<Dictionary<string, string>> Rows)> RunAsync(
+        bool incluiAtual = false)
+    {
+        var input = WriteCsv();
+        var output = Path.Combine(_root, $"saida-{Guid.NewGuid():N}.csv");
+        var summary = await Cp300Replay.RunAsync(Options(input, output, incluiAtual: incluiAtual));
+        return (summary, ReadOutput(output));
+    }
+
+    private static Cp300ReplayOptions Options(string input, string output,
+        bool incluiAtual = false, string[]? tags = null) => new()
+    {
+        CsvEntrada = input,
+        CsvSaida = output,
+        InstanteTreino = T,
+        FimReplay = T.AddMinutes(59),
+        AppSettingsPath = FindAppSettings(),
+        HorasHistorico = 2,
+        HistoricoIncluiLeituraAtual = incluiAtual,
+        Tags = tags
+    };
+
+    private string WriteCsv()
+    {
+        var path = Path.Combine(_root, "historico.csv");
+        if (File.Exists(path))
+            return path;
+
+        var sb = new StringBuilder("ClienteId,TagName,DataHora,Valor\n");
+        var congelado = 0.0;
+        for (var i = 0; i < TotalMinutos; i++)
+        {
+            var t = Inicio.AddMinutes(i);
+            var ts = t.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+
+            var degrau = 50 + Ruido(i, 0) + (t >= Degrau ? 15 : 0);
+            var reserva = t >= ReservaLiga ? 25 + Ruido(i, 3) : 0;
+            if (t < Congela)
+                congelado = 300 + 2 * Ruido(i, 7);
+
+            Append(sb, "TAG22", ts, degrau);
+            Append(sb, "TAG28", ts, reserva);
+            Append(sb, "TAG24", ts, congelado);
+            Append(sb, "TAG73", ts, 0);
+        }
+
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+        return path;
+    }
+
+    // Ruido deterministico, decimal, amplitude ~1.
+    private static double Ruido(int i, int fase) =>
+        Math.Round(0.6 * Math.Sin(0.7 * i + fase) + 0.4 * Math.Sin(1.9 * i + 2 * fase), 3);
+
+    private static void Append(StringBuilder sb, string tag, string ts, double valor) =>
+        sb.Append("PK2,").Append(tag).Append(',').Append(ts).Append(',')
+          .Append(valor.ToString(CultureInfo.InvariantCulture)).Append('\n');
+
+    private static List<Dictionary<string, string>> ReadOutput(string path)
+    {
+        var lines = File.ReadAllLines(path, Encoding.UTF8);
+        var header = lines[0].Split(',');
+        Assert.Equal(Cp300Replay.Colunas, header);
+        return lines.Skip(1).Select(line =>
+        {
+            var fields = SplitCsv(line);
+            Assert.Equal(header.Length, fields.Count);
+            return header.Zip(fields).ToDictionary(p => p.First, p => p.Second);
+        }).ToList();
+    }
+
+    private static List<string> SplitCsv(string line)
+    {
+        var fields = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (quoted)
+            {
+                if (c == '"' && i + 1 < line.Length && line[i + 1] == '"') { current.Append('"'); i++; }
+                else if (c == '"') quoted = false;
+                else current.Append(c);
+            }
+            else if (c == '"') quoted = true;
+            else if (c == ',') { fields.Add(current.ToString()); current.Clear(); }
+            else current.Append(c);
+        }
+
+        fields.Add(current.ToString());
+        return fields;
+    }
+
+    private static DateTime At(Dictionary<string, string> row) =>
+        DateTime.ParseExact(row["data_hora"], "yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+
+    private static double D(string text) => double.Parse(text, CultureInfo.InvariantCulture);
+
+    private static string FindAppSettings()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "IAApi.csproj")))
+            dir = dir.Parent;
+        return Path.Combine(dir?.FullName ?? throw new InvalidOperationException("Raiz do repo nao encontrada."),
+            "appsettings.json");
+    }
+}
