@@ -154,7 +154,88 @@ public sealed class Cp300OfflineReplayTests : IDisposable
         Assert.Contains("rotulo", ex.Message);
     }
 
+    [Fact]
+    public async Task Regime_AplicaBaselinePorEstado_ConferidoContraPredictionService()
+    {
+        // TAG30 alterna entre parada (0) e ligada (~100) em blocos de 15 min;
+        // TAG43 informa o estado (0 = parada, 2 = operando).
+        var input = WriteRegimeCsv();
+        var output = Path.Combine(_root, $"regime-{Guid.NewGuid():N}.csv");
+        var regimes = Cp300Replay.ParseRegimes(["TAG30=TAG43"]);
+
+        var summary = await Cp300Replay.RunAsync(Options(input, output, tags: ["TAG30"], regimes: regimes));
+        var rows = ReadOutput(output);
+
+        Assert.Equal(60, summary.Leituras);
+        Assert.Equal(0, summary.LeiturasComErro);
+        Assert.Equal(0, summary.Divergencias);
+        Assert.All(rows, r =>
+        {
+            Assert.Equal("ok", r["conferencia"]);
+            Assert.Equal("OperationalRegime", r["origem_baseline"]);
+            var estado = EstadoRegime(At(r));
+            Assert.Equal(estado, D(r["valor_regime"]));
+            // Media do regime: ~0 com a bomba parada, ~100 com ela ligada.
+            if (estado == 0)
+                Assert.InRange(D(r["media"]), -1, 1);
+            else
+                Assert.InRange(D(r["media"]), 95, 105);
+        });
+
+        // Sem --regime, o mesmo CSV continua no baseline global.
+        var semRegime = Path.Combine(_root, $"sem-regime-{Guid.NewGuid():N}.csv");
+        await Cp300Replay.RunAsync(Options(input, semRegime, tags: ["TAG30"]));
+        Assert.All(ReadOutput(semRegime), r =>
+        {
+            Assert.Equal("Global", r["origem_baseline"]);
+            Assert.Equal("", r["valor_regime"]);
+        });
+    }
+
+    [Fact]
+    public async Task Regime_RecusaRotuloComoTagDeRegime_ETagDeSiMesma()
+    {
+        var input = WriteRegimeCsv();
+        var output = Path.Combine(_root, "x.csv");
+
+        var rotulo = await Assert.ThrowsAsync<InvalidOperationException>(() => Cp300Replay.RunAsync(
+            Options(input, output, tags: ["TAG30"], regimes: Cp300Replay.ParseRegimes(["TAG30=TAG73"]))));
+        Assert.Contains("rotulo", rotulo.Message);
+        Assert.Contains("TAG73", rotulo.Message);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Cp300Replay.RunAsync(
+            Options(input, output, tags: ["TAG30"], regimes: Cp300Replay.ParseRegimes(["TAG30=TAG30"]))));
+
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimes(["TAG30"]));
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimes(["TAG30=TAG43", "TAG30=TAG42"]));
+        Assert.Equal(2, Cp300Replay.ParseRegimes(["TAG27=TAG42,TAG28=TAG43"]).Count);
+    }
+
     // ---------------------------------------------------------------------
+
+    private static double EstadoRegime(DateTime t) =>
+        (int)(t - Inicio).TotalMinutes / 15 % 2 == 0 ? 0 : 2;
+
+    private string WriteRegimeCsv()
+    {
+        var path = Path.Combine(_root, "historico-regime.csv");
+        if (File.Exists(path))
+            return path;
+
+        var sb = new StringBuilder("ClienteId,TagName,DataHora,Valor\n");
+        for (var i = 0; i < TotalMinutos; i++)
+        {
+            var t = Inicio.AddMinutes(i);
+            var ts = t.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+            var estado = EstadoRegime(t);
+            Append(sb, "TAG30", ts, estado == 0 ? 0 : 100 + 3 * Ruido(i, 1));
+            Append(sb, "TAG43", ts, estado);
+            Append(sb, "TAG73", ts, 0);
+        }
+
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+        return path;
+    }
 
     private async Task<(Cp300ReplaySummary Summary, List<Dictionary<string, string>> Rows)> RunAsync(
         bool incluiAtual = false)
@@ -166,8 +247,10 @@ public sealed class Cp300OfflineReplayTests : IDisposable
     }
 
     private static Cp300ReplayOptions Options(string input, string output,
-        bool incluiAtual = false, string[]? tags = null) => new()
+        bool incluiAtual = false, string[]? tags = null,
+        IReadOnlyDictionary<string, string>? regimes = null) => new()
     {
+        Regimes = regimes,
         CsvEntrada = input,
         CsvSaida = output,
         InstanteTreino = T,

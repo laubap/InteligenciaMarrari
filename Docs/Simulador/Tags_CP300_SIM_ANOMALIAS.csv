@@ -1,0 +1,53 @@
+﻿Nome;Apelido;Unidade;ModoOper;ModoIni;ValorIni;Dispositivo;Endereco;Expressao;Multiplicador;Offset;ModoAtualiz;Prioridade;Intervalo;Estab;Permissoes;Minimo;Maximo;ModoBd;GatilhoBd;RefLote;Descricao
+TAG22;W21;% x10;Device;None;;CP300;1054h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - LT-01 Nivel do Reservatorio (% x10)
+TAG23;W22;mbar;Device;None;;CP300;1058h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - PT-01 Pressao de Succao (mbar abs)
+TAG24;W23;bar x100;Device;None;;CP300;105Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - PT-02 Pressao de Recalque (bar x100)
+TAG25;W24;m3/h x10;Device;None;;CP300;1060h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - FT-01 Vazao de Recalque (m3/h x10)
+TAG26;W25;m3/h x10;Device;None;;CP300;1064h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - FT-02 Vazao de Entrada (m3/h x10)
+TAG27;W26;A x10;Device;None;;CP300;1068h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - IT-01 Corrente M-01 (A x10)
+TAG28;W27;A x10;Device;None;;CP300;106Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - IT-02 Corrente M-02 (A x10)
+TAG29;W28;mm/s x100;Device;None;;CP300;1070h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - VT-01 Vibracao B-01 (mm/s x100)
+TAG30;W29;mm/s x100;Device;None;;CP300;1074h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - VT-02 Vibracao B-02 (mm/s x100)
+TAG31;W30;Hz x10;Device;None;;CP300;1078h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - ST-01 Frequencia Inversor B-01 (Hz x10)
+TAG32;W31;Hz x10;Device;None;;CP300;107Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - ST-02 Frequencia Inversor B-02 (Hz x10)
+TAG33;W32;kW x10;Device;None;;CP300;1080h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - JT-01 Potencia Ativa da Estacao (kW x10)
+TAG34;W33;°C x10;Device;None;;CP300;1084h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - TT-01 Temperatura Enrolamento M-01 (°C x10)
+TAG35;W34;°C x10;Device;None;;CP300;1088h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - TT-02 Temperatura Enrolamento M-02 (°C x10)
+TAG36;W35;°C x10;Device;None;;CP300;108Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - TT-03 Temperatura Mancal B-01 (°C x10)
+TAG37;W36;°C x10;Device;None;;CP300;1090h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - TT-04 Temperatura Mancal B-02 (°C x10)
+TAG38;W37;°C x10;Device;None;;CP300;1094h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - TT-05 Temperatura da Agua (°C x10)
+TAG39;W38;°C x10;Device;None;;CP300;1098h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - TT-06 Temperatura Ambiente (°C x10)
+TAG40;HBT;;Device;None;;CP300;109Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Heartbeat da Publicacao (0...59999, +1 por publicacao de 1 s)
+TAG41;W40;;Device;None;;CP300;10A0h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Estado da Estacao (0=Deslig 1=Partindo 2=1 Bomba 3=2 Bombas 4=Nivel Baixo 5=Falha 6=Manut 7=Emerg)
+TAG42;W41;;Device;None;;CP300;10A4h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Estado B-01 (0=Parada 1=Partindo 2=Operando 3=Parando 4=Falha 5=Manutencao)
+TAG43;W42;;Device;None;;CP300;10A8h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Estado B-02 (idem)
+TAG44;W43;;Device;None;;CP300;10ACh;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Bomba Principal (1/2)
+TAG45;W44;;Device;None;;CP300;10B0h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Estado XV-01 (0=Fechada 1=Abrindo 2=Aberta 3=Fechando 4=Falha)
+TAG46;W45;bar x100;Device;None;;CP300;10B4h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Set-point de Pressao em Uso (bar x100)
+TAG47;W46;% x10;Device;None;;CP300;10B8h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Referencia de Velocidade (% x10)
+TAG48;W47;;Device;None;;CP300;10BCh;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Ultimo Alarme Ocorrido (01...20)
+TAG49;W48;;Device;None;;CP300;10C0h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Numero de Alarmes Ativos
+TAG50;W49;;Device;None;;CP300;10C4h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - ED1...ED13 Empacotadas (bit0=ED1 ... bit12=ED13)
+TAG51;W50;;Device;None;;CP300;10C8h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - SD1...SD8 Empacotadas (bit0=SD1 ... bit7=SD8)
+TAG60;HBR;;Device;None;;CP300;10ECh;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Heartbeat dos Rotulos (0...59999, +1 por segundo, imune as falhas de comunicacao)
+TAG61;W60;;Device;None;;CP300;10F0h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot A: Codigo da Falha (0=Livre)
+TAG62;W61;;Device;None;;CP300;10F4h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot A: Alvo
+TAG63;W62;permil;Device;None;;CP300;10F8h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot A: Severidade Instantanea (permil)
+TAG64;W63;;Device;None;;CP300;10FCh;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot A: Fase (0=Livre 2=Rampa 3=Plena 4=Recuperacao)
+TAG65;W64;;Device;None;;CP300;1100h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot B: Codigo da Falha
+TAG66;W65;;Device;None;;CP300;1104h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot B: Alvo
+TAG67;W66;permil;Device;None;;CP300;1108h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot B: Severidade (permil)
+TAG68;W67;;Device;None;;CP300;110Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot B: Fase
+TAG69;W68;;Device;None;;CP300;1110h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot C: Codigo da Falha
+TAG70;W69;;Device;None;;CP300;1114h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot C: Alvo
+TAG71;W70;permil;Device;None;;CP300;1118h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot C: Severidade (permil)
+TAG72;W71;;Device;None;;CP300;111Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Slot C: Fase
+TAG73;W72;;Device;None;;CP300;1120h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Anomalia Ativa (0=Normal / 1=Algum slot em fase 2...4)
+TAG74;W73;;Device;None;;CP300;1124h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Cenario em Execucao (0=Tabela SCN / 1...6=Preset)
+TAG75;W74;;Device;None;;CP300;1128h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Passo do Cenario (0...19)
+TAG76;W75;;Device;None;;CP300;112Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Estado do Cenario (0=Parado 1=Rodando 2=Pausado 3=Concluido)
+TAG77;W76;h;Device;None;;CP300;1130h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Tempo de Cenario: Horas
+TAG78;W77;s;Device;None;;CP300;1134h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Tempo de Cenario: Segundos na Hora (0...3599)
+TAG79;W78;permil;Device;None;;CP300;1138h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Consumo Efetivo da Rede (permil da condutancia nominal)
+TAG80;W79;;Device;None;;CP300;113Ch;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Ultimo Evento Operacional (1=Partida 2=Parada 3=Troca p/ Reserva 4=Set-point 5=Rodizio 6=Liga Auxiliar 7=Desliga Auxiliar 8=Mudanca de Carga)
+TAG81;W80;;Device;None;;CP300;1140h;;1;0;Realtime;0;0;0;;;;EveryMinute;;0;CLP - Contador de Eventos Operacionais (0...59999)

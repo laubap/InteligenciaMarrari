@@ -11,14 +11,18 @@ internal static class Cp300ReplayCli
         "Uso: dotnet run --project tools/Cp300OfflineReplay -- " +
         "--entrada <historico.csv> --saida <replay.csv> --treino-ate <yyyy-MM-ddTHH:mm:ss> " +
         "[--fim <yyyy-MM-ddTHH:mm:ss>] [--cliente PK2] [--tags TAG22,TAG23,...] " +
-        "[--appsettings appsettings.json] [--horas-historico N] [--historico-inclui-atual] [--verbose]";
+        "[--appsettings appsettings.json] [--horas-historico N] [--historico-inclui-atual] " +
+        "[--regime TAGx=TAGy]... [--verbose]";
 
     public static async Task<int> RunAsync(string[] args)
     {
         Dictionary<string, string?> parsed;
+        IReadOnlyDictionary<string, string> regimes;
         try
         {
-            parsed = Parse(args);
+            var regimeArgs = new List<string>();
+            parsed = Parse(args, regimeArgs);
+            regimes = Cp300Replay.ParseRegimes(regimeArgs);
         }
         catch (ArgumentException ex)
         {
@@ -54,6 +58,7 @@ internal static class Cp300ReplayCli
                     ? int.Parse(horas, NumberStyles.Integer, CultureInfo.InvariantCulture)
                     : null,
                 HistoricoIncluiLeituraAtual = parsed.ContainsKey("historico-inclui-atual"),
+                Regimes = regimes,
                 Log = stdout
             };
 
@@ -83,7 +88,7 @@ internal static class Cp300ReplayCli
         DateTime.ParseExact(text, ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm:ss"],
             CultureInfo.InvariantCulture, DateTimeStyles.None);
 
-    private static Dictionary<string, string?> Parse(string[] args)
+    private static Dictionary<string, string?> Parse(string[] args, List<string> regimeArgs)
     {
         string[] flags = ["historico-inclui-atual", "verbose"];
         string[] valued = ["entrada", "saida", "treino-ate", "fim", "cliente", "tags", "appsettings", "horas-historico"];
@@ -93,7 +98,14 @@ internal static class Cp300ReplayCli
             if (!args[i].StartsWith("--", StringComparison.Ordinal))
                 throw new ArgumentException($"Argumento inesperado: {args[i]}");
             var name = args[i][2..];
-            if (flags.Contains(name, StringComparer.OrdinalIgnoreCase))
+            if (string.Equals(name, "regime", StringComparison.OrdinalIgnoreCase))
+            {
+                // Repetivel: --regime TAG27=TAG42 --regime TAG28=TAG43 (ou pares separados por virgula).
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("Falta valor para --regime");
+                regimeArgs.Add(args[++i]);
+            }
+            else if (flags.Contains(name, StringComparer.OrdinalIgnoreCase))
                 result[name] = null;
             else if (valued.Contains(name, StringComparer.OrdinalIgnoreCase))
             {

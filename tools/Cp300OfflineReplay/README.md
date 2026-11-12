@@ -35,6 +35,7 @@ dotnet run --project tools/Cp300OfflineReplay -- `
 | `--appsettings` | Padrão: `appsettings.json` da pasta atual. Fornece pesos, limiares e `Bridge:HorasHistorico`. |
 | `--horas-historico N` | Substitui `Bridge:HorasHistorico`, tanto no treino quanto na detecção. |
 | `--historico-inclui-atual` | Inclui a própria leitura t no histórico servido a ela. Padrão: não inclui. |
+| `--regime TAGx=TAGy` | Baseline por regime: TAGy (tag de estado) vira a `TagRegime` de TAGx. Pode ser repetida, ou receber pares separados por vírgula. Cria a linha em `TagsRegimesOperacionaisIa` (SQLite em memória) com os padrões do modelo: lag 0, tolerância de 2 min, `ToleranciaEstado` 0,001 e mínimo de 30 amostras. **Recusa TAG60–TAG81** (rótulos), uma tag como regime de si mesma, TAGx fora das tags reproduzidas e TAGy ausente do CSV. TAGy precisa estar no CSV, mas não precisa ser reproduzida. |
 | `--verbose` | Mostra os `Console.WriteLine` do runtime. Por padrão ficam ocultos. |
 
 Código de saída: 0 = ok; 1 = erro ou divergência na conferência; 2 = uso incorreto.
@@ -51,7 +52,8 @@ Código de saída: 0 = ok; 1 = erro ou divergência na conferência; 2 = uso inc
 - **Isolation Forest:** desligado. O PK2 não tem modelo no repositório.
 - **Multivariado** (shadow e fusão): desligado.
 - **Decisão runtime/canário:** desligada, então a decisão é a legada do ensemble. Isso vale para o PK2, que está fora do canário.
-- **Baseline por regime e por comportamento:** não instanciados. O banco do PK2 não foi inventariado (BACKLOG, tarefa 2). A coluna `origem_baseline` sai sempre `Global`.
+- **Baseline por regime:** só com `--regime`. Nesse caso usa o `OperationalRegimeBaselineProvider` real, nas duas instâncias da preparação. Sem a opção, a coluna `origem_baseline` sai sempre `Global`, como antes.
+- **Baseline por comportamento:** não instanciado. O banco do PK2 não foi inventariado (BACKLOG, tarefa 2).
 - **Latência, ciclo de 60 s e processamento sequencial:** não reproduzidos. Cada leitura do CSV é avaliada no próprio minuto.
 - **Contexto da tag** (`TipoRepresentacao`) do banco real: não usado.
 
@@ -71,6 +73,7 @@ Uma linha por leitura e detector (6 por leitura). Se a leitura falhar antes do e
 | `entrada_invalida`, `motivo_entrada_invalida` | `DetectionInputValidator.Validate` |
 | `erro` | Exceção do `PredictionService` ou do detalhamento. Exemplos: histórico com menos de 10 pontos, perfil não treinado. |
 | `conferencia` | `ok`, ou `divergente:<itens>` |
+| `valor_regime`, `motivo_baseline` | `BaselineEfetivo.RegimeValue` (vazio se o regime não foi aplicado) e `BaselineEfetivo.Reason` |
 
 **Como o detalhamento é obtido.** A resposta de produção não expõe tipo, origem do deadband nem motivo de entrada inválida. Por isso, para cada leitura, a ferramenta pede o mesmo `DetectorInput` ao `PredictionDetectionPreparationService` real e roda nele uma **segunda instância** do mesmo `EnsembleDetectionService`. A coluna `conferencia` compara a decisão e a nota dessa execução com as do `PredictionService` e confere se as contribuições somam a nota final.
 

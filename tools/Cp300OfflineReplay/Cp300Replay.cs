@@ -54,6 +54,15 @@ public sealed record Cp300ReplayOptions
     /// </summary>
     public bool HistoricoIncluiLeituraAtual { get; init; }
 
+    /// <summary>
+    /// Baseline por regime operacional: tag analisada -> tag de regime (estado).
+    /// Null ou vazio = sem regime (comportamento anterior). Cada par vira uma
+    /// linha em TagsRegimesOperacionaisIa do SQLite em memoria, com os valores
+    /// padrao do modelo (Lag 0, tolerancia 2 min, ToleranciaEstado 0,001,
+    /// minimo 30 amostras). Rotulos TAG60-TAG81 sao sempre recusados.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? Regimes { get; init; }
+
     /// <summary>Destino das mensagens da ferramenta (nao do runtime).</summary>
     public TextWriter? Log { get; init; }
 }
@@ -81,8 +90,55 @@ public static class Cp300Replay
         "tipo_tag", "confianca_tipo", "roteamento_por_tipo",
         "deadband", "origem_deadband", "confianca_deadband", "origem_baseline",
         "media", "desvio", "pontos_historico",
-        "entrada_invalida", "motivo_entrada_invalida", "erro", "conferencia"
+        "entrada_invalida", "motivo_entrada_invalida", "erro", "conferencia",
+        "valor_regime", "motivo_baseline"
     ];
+
+    /// <summary>
+    /// Converte "TAGx=TAGy" (uma ou mais entradas; cada uma pode ter varios
+    /// pares separados por virgula) em tag analisada -> tag de regime.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ParseRegimes(IEnumerable<string> entradas)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entrada in entradas)
+        {
+            foreach (var par in entrada.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var partes = par.Split('=', StringSplitOptions.TrimEntries);
+                if (partes.Length != 2 || partes[0].Length == 0 || partes[1].Length == 0)
+                    throw new ArgumentException($"--regime invalido: '{par}'. Formato: TAGx=TAGy");
+                if (!result.TryAdd(partes[0], partes[1]))
+                    throw new ArgumentException($"--regime repetido para {partes[0]}.");
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Recusa rotulo do simulador como tag de regime ou analisada, regime
+    /// igual a propria tag, tag analisada fora do replay e regime ausente do CSV.
+    /// </summary>
+    private static void ValidateRegimes(
+        IReadOnlyDictionary<string, string> regimes, IReadOnlyCollection<string> tags, Cp300Dataset dataset)
+    {
+        foreach (var (alvo, regime) in regimes)
+        {
+            if (IsLabelTag(regime))
+                throw new InvalidOperationException(
+                    $"{regime} e rotulo do simulador (TAG60-TAG81) e nunca pode ser tag de regime.");
+            if (IsLabelTag(alvo))
+                throw new InvalidOperationException(
+                    $"{alvo} e rotulo do simulador (TAG60-TAG81) e nunca pode ser entrada da IA.");
+            if (string.Equals(alvo, regime, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"{alvo} nao pode ser tag de regime de si mesma.");
+            if (!tags.Contains(alvo, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"--regime: {alvo} nao esta entre as tags reproduzidas.");
+            if (!dataset.Readings.ContainsKey(regime))
+                throw new InvalidOperationException($"--regime: tag de regime {regime} nao existe no CSV.");
+        }
+    }
 
     public static async Task<Cp300ReplaySummary> RunAsync(Cp300ReplayOptions options)
     {
@@ -94,6 +150,9 @@ public static class Cp300Replay
         var tags = SelectTags(dataset, options.Tags);
         if (tags.Count == 0)
             throw new InvalidOperationException("Nenhuma tag para reproduzir.");
+
+        var regimes = options.Regimes ?? new Dictionary<string, string>();
+        ValidateRegimes(regimes, tags, dataset);
 
         var clienteId = dataset.ClienteId;
         var t0 = options.InstanteTreino;
@@ -120,6 +179,19 @@ public static class Cp300Replay
         // ("perfil-comportamental") e a classificacao real decide o roteamento.
         foreach (var tag in tags)
             db.TagsIaConfig.Add(new TagIaConfig { ClienteId = clienteId, TagName = tag, IaAtiva = true });
+        // Baseline por regime: mesma tabela lida por OperationalRegimeBaselineProvider
+        // em producao, com os valores padrao do modelo.
+        foreach (var (alvo, regime) in regimes)
+        {
+            var nomeAlvo = tags.First(t => string.Equals(t, alvo, StringComparison.OrdinalIgnoreCase));
+            var nomeRegime = dataset.Readings.Keys.First(t => string.Equals(t, regime, StringComparison.OrdinalIgnoreCase));
+            db.TagsRegimesOperacionaisIa.Add(new TagRegimeOperacionalIa
+            {
+                ClienteId = clienteId, TagName = nomeAlvo, TagRegime = nomeRegime, Ativo = true
+            });
+            log.WriteLine($"Regime: {nomeAlvo} <- {nomeRegime}");
+        }
+
         await db.SaveChangesAsync();
 
         // Treino "como em producao": PerfilTagService real, historico = ultimas
@@ -147,10 +219,10 @@ public static class Cp300Replay
             }
         }
 
-        var production = BuildPredictionService(db, history, detectionOptions);
+        var production = BuildPredictionService(db, history, detectionOptions, regimes.Count > 0);
         // Detalhamento: mesmas classes de producao, instancias separadas, sobre
         // o mesmo DetectorInput. A decisao oficial continua vindo do PredictionService.
-        var detailPreparation = new PredictionDetectionPreparationService(history);
+        var detailPreparation = BuildPreparation(db, history, regimes.Count > 0);
         var detailEnsemble = BuildEnsemble(detectionOptions);
         var resolver = new TagBehaviorProfileResolver();
 
@@ -314,8 +386,27 @@ public static class Cp300Replay
         new(BuildDetectors(options), Options.Create(options),
             new TagBehaviorProfileResolver(), new DetectorApplicabilityPolicy());
 
+    /// <summary>
+    /// Preparacao de producao. Com regime, recebe o OperationalRegimeBaselineProvider
+    /// real (mesmo banco em memoria e mesmo historico do CSV); sem regime, fica como antes.
+    /// </summary>
+    private static PredictionDetectionPreparationService BuildPreparation(
+        AppDbContext db, CsvHistorySource history, bool comRegime)
+    {
+        if (!comRegime)
+            return new PredictionDetectionPreparationService(history);
+
+        var provider = new OperationalRegimeBaselineProvider(
+            db,
+            history,
+            new OperationalRegimeBaselineService(
+                new OperationalRegimeHistoryResolver(),
+                new TagProfileStatisticsCalculator(new HistoricoLimpezaService())));
+        return new PredictionDetectionPreparationService(history, provider);
+    }
+
     private static PredictionService BuildPredictionService(
-        AppDbContext db, CsvHistorySource history, AnomalyDetectionOptions options)
+        AppDbContext db, CsvHistorySource history, AnomalyDetectionOptions options, bool comRegime)
     {
         var ensemble = BuildEnsemble(options);
         var interpretation = new PredictionInterpretationService(
@@ -345,7 +436,7 @@ public static class Cp300Replay
         return new PredictionService(
             new PredictionContextLoader(db, new ProcessoAnaliseService(db)),
             postDecision, finalization, decision,
-            new PredictionDetectionPreparationService(history),
+            BuildPreparation(db, history, comRegime),
             multivariateShadowRuntimeCoordinator: null);
     }
 
@@ -360,6 +451,8 @@ public static class Cp300Replay
         row.Desvio = input.DesvioPadraoHistorico;
         row.PontosHistorico = input.Historico.Count;
         row.OrigemBaseline = prepared.BaselineEfetivo?.Kind.ToString() ?? "desconhecida";
+        row.ValorRegime = prepared.BaselineEfetivo?.RegimeValue;
+        row.MotivoBaseline = prepared.BaselineEfetivo?.Reason;
 
         var protection = BaselineProtectionProfile.Build(input, input.MediaHistorica);
         row.Deadband = protection.Deadband;
@@ -463,6 +556,8 @@ public static class Cp300Replay
         public string? OrigemDeadband { get; set; }
         public double? ConfiancaDeadband { get; set; }
         public string? OrigemBaseline { get; set; }
+        public double? ValorRegime { get; set; }
+        public string? MotivoBaseline { get; set; }
         public double? Media { get; set; }
         public double? Desvio { get; set; }
         public int? PontosHistorico { get; set; }
@@ -495,7 +590,8 @@ public static class Cp300Replay
                 TipoTag ?? "", Fmt(ConfiancaTipo), Bool(RoteamentoPorTipo),
                 Fmt(Deadband), OrigemDeadband ?? "", Fmt(ConfiancaDeadband), OrigemBaseline ?? "",
                 Fmt(Media), Fmt(Desvio), PontosHistorico?.ToString(CultureInfo.InvariantCulture) ?? "",
-                Bool(EntradaInvalida), MotivoEntradaInvalida ?? "", Erro ?? "", Conferencia
+                Bool(EntradaInvalida), MotivoEntradaInvalida ?? "", Erro ?? "", Conferencia,
+                Fmt(ValorRegime), MotivoBaseline ?? ""
             ];
             return string.Join(',', fields.Select(Cp300Csv.Escape));
         }
