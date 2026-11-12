@@ -215,3 +215,83 @@ Só com aprovação: migration no banco do PK2, cadastro das configurações e a
 - Hoje (24 h móveis), a tupla seleciona os pontos do mesmo estado nas 24 h.
 - No futuro, a mesma chave seleciona o perfil treinado por período para aquele estado. O relatório de treino por período (`pontos por estado`) passa a mostrar a contagem por chave.
 - Os riscos de absorção (P25) e de IQR dentro do regime (P01) **continuam** no modo de 24 h móveis. O regime combinado reduz a mistura de estados, mas não substitui a referência estável.
+
+---
+
+## 5. Resultado da etapa 0
+
+**Data:** 12/11/2026. **Nível de evidência:** **confirmado no replay** (código de produção sobre dados do simulador, `tools/Cp300OfflineReplay`). Não é validação em planta: sem Isolation Forest, multivariado nem latência. **Nenhum código do projeto foi alterado.**
+
+### 5.1 Séries derivadas (regras)
+
+Arquivo: `dados/cp300_10a11nov_derivado.csv` = `dados/cp300_10a11nov.csv` + 4 séries por minuto (1.742 minutos), geradas por `e0_derivar.py` (scratchpad da sessão, fora do repositório). Os nomes não começam com `TAG`: não colidem com tags reais nem com o gabarito TAG60–TAG81, que **não** foi usado em nenhuma série.
+
+| Série | Regra (valores do mesmo minuto) | Valores e minutos no arquivo |
+|---|---|---|
+| `RB01` | 0 = TAG42 ≠ 2 (B-01 parada, parando ou partindo); 1 = TAG42 = 2 e TAG43 ≠ 2 (**B-01 sozinha**); 2 = TAG42 = 2 e TAG43 = 2 (**paralelo**) | 0: 542, 1: 553, 2: 647 |
+| `RB02` | Igual, trocando TAG42 ↔ TAG43 | 0: 553, 1: 542, 2: 647 |
+| `RB01S` | `RB01` + 10 se TAG46 = 380 (set-point noturno) | 0: 302, 1: 493, 2: 647, 10: 240, 11: 60 |
+| `RB02S` | `RB02` + 10 se TAG46 = 380 | 0: 493, 1: 302, 2: 647, 10: 60, 11: 240 |
+
+O paralelo nunca ocorreu com o set-point 380, por isso não existe o código 12.
+
+### 5.2 Execuções
+
+13 tags (TAG22–TAG33 e TAG44), o mesmo arquivo de entrada nas 12 execuções. Saídas em `dados/e0_<cenário>_<config>.csv` e `.log`.
+
+| Config | `--regime` |
+|---|---|
+| `sem` | — |
+| `rec` (regime recomendado atual) | TAG28/30/32 = TAG43, TAG26 = TAG45, TAG24 = TAG46 |
+| `comb` (regime combinado) | TAG27/29/31 = RB01, TAG28/30/32 = RB02, TAG26 = TAG45, TAG24 = TAG46 |
+| `combs` (combinado + set-point) | TAG27/29/31 = RB01S, TAG28/30/32 = RB02S, TAG26 = TAG45, TAG24 = TAG46 |
+
+| Cenário | Treino e replay |
+|---|---|
+| Preset 1 | `--treino-ate 2026-11-11T12:55` → 14:25 |
+| Madrugada | `--treino-ate 2026-11-11T00:00` → 05:30 |
+| Preset 6 | `--treino-ate 2026-11-11T15:06 --permitir-falha-no-treino` → 17:40 (o treino contém os 12 min da obstrução do preset 1) |
+
+**Conferência:** 12 de 12 execuções com 0 erros e 0 divergências. **Regressão:** `sem` e `rec` ficaram idênticas, linha a linha, aos replays anteriores (`replay_preset1_*`, `replay_madrugada_*`, `replay_preset6_*`: 0 diferenças).
+
+### 5.3 Antes/depois contra as metas
+
+Minutos-tag com alarme. ✅ = atende a meta; ❌ = não atende.
+
+| Medida | Meta | `sem` | `rec` (hoje) | `comb` | `combs` |
+|---|---|---|---|---|---|
+| B-01 (TAG27/29/31), preset 1, fora da falha | ≤ 5 | 23 | 23 | 6 ❌ | **4 ✅** |
+| B-01, madrugada | ≤ 30 | 566 | 566 | **6 ✅** | 82 ❌ (79 por fallback na 1ª noite; 3 com regime) |
+| B-02 (TAG28/30/32), madrugada (sem meta) | — | 152 | 10 | 130 | 32 (30 por fallback na 1ª noite; 2 com regime) |
+| B-02 sozinha após o failover, preset 6 (16:52–17:11) | ≤ 5 | 10 | 56 | 40 ❌ | **0 ✅** |
+| Preset 6, falsos fora da falha (todas as tags) | ≤ 27 | 175 | 27 | **20 ✅** | **20 ✅** |
+| Preset 6, TAG29: primeiro alarme | ≤ 15:32 | 15:32 | 15:32 | **15:32 ✅** | **15:32 ✅** |
+| Preset 6, TAG29 antes da falha | 0 | 0 | 0 | 0 | 0 |
+| Preset 6, alarmes no failover (B-01 parada, B-02 sozinha) | — | 64 | 110 | 40 | **0** |
+| **Total de alarmes:** preset 1 / madrugada / preset 6 | — | 245 / 1.282 / 325 | 41 / 660 / 223 | 33 / 220 / 144 | **31 / 198 / 104** |
+
+### 5.4 Leitura
+
+1. **Separar parada, sozinha e paralelo resolve a B-01** (P03): madrugada 566 → 6 (`comb`); preset 1 23 → 4–6.
+2. **O set-point é necessário para a B-02.**
+   - Em `comb`, a B-02 sozinha mistura dia (450) e noite (380). Ela alarmou na madrugada (TAG28/32, 00:43–01:58, 130 min) e no failover do preset 6 (40 min).
+   - Em `combs`, os dois casos somem: preset 6 = 0 no failover; madrugada = 2 com regime.
+3. **Os 79 + 30 alarmes da madrugada em `combs` são artefato do início do arquivo.** O CSV começa às 12:30 do dia anterior, então não havia uma noite anterior.
+   - Os estados noturnos (`RB0xS` = 10/11) tinham menos de 30 amostras e caíram no perfil global (P08): B-01 00:47–01:12 e B-02 00:01–00:30, todos com `origem_baseline = Global`.
+   - É o mesmo efeito da TAG24 em 00:01–00:30 (P05).
+   - Com uma noite anterior no histórico, provavelmente não aconteceriam [**hipótese**; confirmar com um CSV de 48 h].
+4. **O failover deixa de gerar alarmes** em `combs`: a B-01 parada vira regime próprio (classificada `Discrete`, detectores bloqueados; P20), e a B-02 sozinha de dia tem baseline próprio.
+5. **A detecção não piora nem melhora:** TAG29 às 15:32, como antes. Em `comb`/`combs` há um intervalo em 15:33–15:34 sem alarme (84 contra 86 minutos de falha), e o alarme volta contínuo de 15:35 a 16:51.
+6. **Sinal novo no preset 1** [hipótese, P06/P21]. Em `comb` e `combs`, as 4 tags das bombas alarmam às **13:37–13:38**, dentro da obstrução (777 ‰), quando a B-02 parte e as duas ficam em paralelo.
+   - A frequência foi 435 contra 396 ± 7 no regime "paralelo" (≈5σ), e a vibração da B-01 202 contra 142 ± 9.
+   - Na partida normal das 13:59–14:01, as mesmas tags ficaram com nota ≤ 6.
+   - Pode ser o primeiro efeito visível da obstrução, mas são 2 minutos, num minuto de transição, num único evento. Não conta como detecção até ser repetido.
+7. **Sobram fora das bombas:** TAG26 (vazão alta com a válvula aberta, P04) e TAG24/TAG22 (reset e primeira noite). Esses não dependem do regime combinado.
+
+### 5.5 Resumo
+
+- **A variante com set-point (`combs`: própria bomba × outra bomba × set-point) atende todas as metas**, menos a da B-01 de madrugada.
+- Na madrugada, 79 dos 82 alarmes vêm do fallback para o perfil global na primeira noite do arquivo, por falta de histórico noturno. Com regime aplicado, são **3**.
+- Em relação ao regime recomendado atual: menos 25 % de alarmes no preset 1, menos 70 % na madrugada e menos 53 % no preset 6. Os alarmes do failover zeram, e a detecção da TAG29 continua às 15:32.
+- **Decisão:** a Opção A deve suportar **3 componentes** (estado próprio, estado da outra bomba e TAG46), com mapa de estados.
+- **Antes de implementar:** confirmar com um CSV que tenha uma noite anterior, para eliminar o artefato do fallback.

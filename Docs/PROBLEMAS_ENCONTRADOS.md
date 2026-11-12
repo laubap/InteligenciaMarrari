@@ -28,8 +28,8 @@
 | ID | Problema | Status | Cenário que mostrou | Impacto | Prioridade |
 |---|---|---|---|---|---|
 | P01 | A limpeza de outliers (IQR) do treino joga fora estados normais (reserva parada, pressão noturna). **É instável:** com a janela deslocada 2 h, removeu 1.531 pontos (preset 1) e só 306 (preset 6). **Não removeu os 12 min de falha** presentes no treino | Confirmado nos dados e no código | Treino do preset 1 (RES §1.5); **[preset 6]** RES6 §1.4 | Alarme falso + falha não detectada | **Alta** |
-| P02 | Bomba reserva parada gera alarme falso contínuo (TAG28/30/32; **[preset 6]** também a B-01 depois do failover) | Confirmado no replay; solução validada no replay | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.3, §2.4 | Alarme falso | **Alta** |
-| P03 | A bomba alarma conforme o estado da outra bomba e o set-point; nenhuma configuração atual resolve. **[preset 6]** Também na B-02 com o regime TAG43 | Confirmado no replay | Preset 1, madrugada (RES §4.2, §4.3); **[preset 6]** RES6 §2.3 | Alarme falso | **Alta** |
+| P02 | Bomba reserva parada gera alarme falso contínuo (TAG28/30/32; **[preset 6]** também a B-01 depois do failover) | Confirmado no replay; solução validada no replay (TAG43 para a B-02; **regime combinado com set-point** para as duas bombas, inclusive no failover: etapa 0) | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.3, §2.4; PLANO_REGIME_COMBINADO §5 | Alarme falso | **Alta** |
+| P03 | A bomba alarma conforme o estado da outra bomba e o set-point; nenhuma configuração atual resolve. **[preset 6]** Também na B-02 com o regime TAG43 | Confirmado no replay; **regime combinado (própria × outra × set-point) validado no replay com séries derivadas** (etapa 0); falta suporte no código (Opção A) | Preset 1, madrugada (RES §4.2, §4.3); **[preset 6]** RES6 §2.3 | Alarme falso | **Alta** |
 | P04 | Válvula de entrada fechada (TAG26) gera alarme falso; com regime, surgem alarmes de vazão alta | Confirmado no replay (de novo no preset 6); solução parcial no replay | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.4 | Alarme falso | Média |
 | P05 | Pressão noturna (TAG24) alarma em 300 de 300 minutos de madrugada | Confirmado no replay; solução validada no replay | Madrugada (RES §4.3) | Alarme falso | **Alta** |
 | P06 | Obstrução do recalque (preset 1) não detectada: a falha não se destaca do normal. **[preset 6]** Quando a falha sai da faixa normal (vibração), o univariado detecta | Confirmado no replay | Preset 1 (RES §2.1, §2.2, §4.2); **[preset 6]** RES6 §2.1 | Falha não detectada | **Alta** (solução longa) |
@@ -108,6 +108,10 @@
   - **O IQR não é a única causa.** No preset 6 o treino manteve os zeros (P01), e mesmo assim a reserva parada alarmou: TAG28/30/32 = 10/39/78 minutos sem regime. A nota fica em 62,8 com Z = 47, mas MAD = 100 (distância à mediana das 24 h), EWMA = 100 e Persistência = 100.
   - **O regime TAG43 eliminou os 127 alarmes.** Com a B-02 parada, TAG28/32 viram `Discrete` e os detectores são bloqueados (P20).
   - **A B-01 parada depois do failover alarma pelo mesmo mecanismo** (TAG27 16:54–17:11, TAG31 16:55–17:11, TAG29 16:52–17:11). A B-01 não tem regime na configuração recomendada.
+- **[Etapa 0 do regime combinado] Solução que cobre as duas bombas** (`Docs/PLANO_REGIME_COMBINADO.md` §5; replay com séries derivadas `RB01S/RB02S` = própria bomba × outra bomba × set-point, sem mudar código):
+  - A reserva parada vira regime próprio (`Discrete`, detectores bloqueados), para a B-02 e também para a **B-01 depois do failover**.
+  - No preset 6, os alarmes do failover caíram de 110 (regime recomendado) para **0**.
+  - Na madrugada, os alarmes das bombas com regime aplicado ficaram em 3 (B-01) e 2 (B-02). Os outros 79 + 30 vieram do fallback para o perfil global na primeira noite do arquivo, que não tem noite anterior (P08) [hipótese: some com histórico de 48 h].
 - **BACKLOG:** 9 (opção a, agora testada) e 12.
 
 ### P03. Alarmes da bomba B-01 (TAG27/29/31)
@@ -137,8 +141,22 @@
   - o lado bom: com a B-01 parada no failover, as tags dela viram `Discrete` e os alarmes do failover na B-01 somem (110 → 56).
   
   Confirma de novo que só um regime que separe "sozinha" de "em paralelo" resolve [hipótese].
+- **[Etapa 0] Regime combinado testado no replay, sem mudar código** (`Docs/PLANO_REGIME_COMBINADO.md` §5). Séries derivadas no CSV: `RB01/RB02` (0 parada, 1 sozinha, 2 paralelo, a partir de TAG42/TAG43) e `RB01S/RB02S` (+10 com o set-point noturno, TAG46 = 380). Contra o regime recomendado atual:
+
+  | Medida | Recomendado | Combinado | Combinado + set-point | Meta |
+  |---|---|---|---|---|
+  | B-01, preset 1, fora da falha | 23 | 6 | **4** | ≤ 5 |
+  | B-01, madrugada | 566 | **6** | 82 (79 por fallback na 1ª noite; 3 com regime) | ≤ 30 |
+  | B-02 sozinha após o failover, preset 6 | 56 | 40 | **0** | ≤ 5 |
+  | Preset 6, falsos fora da falha | 27 | 20 | **20** | ≤ 27 |
+  | TAG29, primeiro alarme | 15:32 | 15:32 | **15:32** | ≤ 15:32 |
+
+  - **Confirmado no replay:** separar parada, sozinha e paralelo resolve a B-01. O set-point é necessário para a B-02 sozinha, porque sem ele o regime mistura dia e noite (madrugada 130, failover 40).
+  - Com o set-point, todas as metas são atendidas, exceto a madrugada da B-01, que depende de histórico noturno anterior [hipótese].
+  - Sinal novo: às 13:37–13:38, dentro da obstrução do preset 1, as 4 tags das bombas alarmam na entrada em paralelo (frequência 435 contra 396 ± 7). A partida normal das 14:00 não alarma. Ainda é **hipótese** de detecção (P06/P21).
+  - **Próximo passo:** Opção A do plano com 3 componentes (própria, outra e TAG46), depois de confirmar com um CSV de 48 h.
 - **Solução testada:** TAG42 sozinha (piora de dia, melhora de noite). A estimativa com regime combinado B-01 × B-02 (RES §3.3, com *proxies*, sem set-point) reduziu os alarmes da B-01 a 0–1 min por tag. **Só o regime combinado (bomba × outra bomba × set-point) deve resolver** [hipótese]. Ele não foi testado no replay porque o código não suporta.
-- **BACKLOG:** 12.
+- **BACKLOG:** 12. Plano: `Docs/PLANO_REGIME_COMBINADO.md`.
 
 ### P04. Válvula de entrada fechada (TAG26)
 
