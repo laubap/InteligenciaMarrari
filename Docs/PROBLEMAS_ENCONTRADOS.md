@@ -1,7 +1,9 @@
 # Problemas encontrados na detecção univariada (IAApi × simulador CP300)
 
 **Data:** 12/11/2026. **Cliente:** PK2. **Branch:** `feat/intelligence-lab-e2e-validation`.
-**Fontes:** `Docs/AUDITORIA_STATUS.md` (AUD), `Docs/MAPA_DETECCAO.md` (MAPA), `Docs/RESULTADO_PRESET1.md` (RES) e `Docs/BACKLOG.md`. Este documento **resume** essas fontes; os números completos estão nas seções indicadas.
+**Fontes:** `Docs/AUDITORIA_STATUS.md` (AUD), `Docs/MAPA_DETECCAO.md` (MAPA), `Docs/RESULTADO_PRESET1.md` (RES), `Docs/RESULTADO_PRESET6.md` (RES6) e `Docs/BACKLOG.md`. Este documento **resume** essas fontes; os números completos estão nas seções indicadas.
+
+> **Atualização com o preset 6 (12/11/2026, RES6):** o univariado **detectou** o desbalanceamento na TAG29 (15:32, ≈4 min após o início, a 94 ‰). Confirmou P01, P02, P03, P04, P07, P13, P20 e P21, com novidades em P01, P02, P03 e P20. Ajustou o alcance do P06 e trouxe um problema novo (P24). Itens marcados com **[preset 6]**.
 
 **Como ler o status**
 
@@ -25,29 +27,30 @@
 
 | ID | Problema | Status | Cenário que mostrou | Impacto | Prioridade |
 |---|---|---|---|---|---|
-| P01 | A limpeza de outliers (IQR) do treino joga fora estados normais (reserva parada, pressão noturna) | Confirmado nos dados e no código | Treino do preset 1 (RES §1.5) | Alarme falso + falha não detectada | **Alta** |
-| P02 | Bomba reserva B-02 parada gera alarme falso contínuo (TAG28/30/32) | Confirmado no replay; solução validada no replay | Preset 1, madrugada (RES §2.3, §4) | Alarme falso | **Alta** |
-| P03 | Bomba B-01 (TAG27/29/31) alarma conforme o estado da outra bomba e o set-point; nenhuma configuração atual resolve | Confirmado no replay | Preset 1, madrugada (RES §4.2, §4.3) | Alarme falso | **Alta** |
-| P04 | Válvula de entrada fechada (TAG26) gera alarme falso; com regime, surgem alarmes de vazão alta | Confirmado no replay; solução parcial no replay | Preset 1, madrugada (RES §2.3, §4) | Alarme falso | Média |
+| P01 | A limpeza de outliers (IQR) do treino joga fora estados normais (reserva parada, pressão noturna). **É instável:** com a janela deslocada 2 h, removeu 1.531 pontos (preset 1) e só 306 (preset 6). **Não removeu os 12 min de falha** presentes no treino | Confirmado nos dados e no código | Treino do preset 1 (RES §1.5); **[preset 6]** RES6 §1.4 | Alarme falso + falha não detectada | **Alta** |
+| P02 | Bomba reserva parada gera alarme falso contínuo (TAG28/30/32; **[preset 6]** também a B-01 depois do failover) | Confirmado no replay; solução validada no replay | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.3, §2.4 | Alarme falso | **Alta** |
+| P03 | A bomba alarma conforme o estado da outra bomba e o set-point; nenhuma configuração atual resolve. **[preset 6]** Também na B-02 com o regime TAG43 | Confirmado no replay | Preset 1, madrugada (RES §4.2, §4.3); **[preset 6]** RES6 §2.3 | Alarme falso | **Alta** |
+| P04 | Válvula de entrada fechada (TAG26) gera alarme falso; com regime, surgem alarmes de vazão alta | Confirmado no replay (de novo no preset 6); solução parcial no replay | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.4 | Alarme falso | Média |
 | P05 | Pressão noturna (TAG24) alarma em 300 de 300 minutos de madrugada | Confirmado no replay; solução validada no replay | Madrugada (RES §4.3) | Alarme falso | **Alta** |
-| P06 | Obstrução do recalque (preset 1) não detectada: a falha não se destaca do normal | Confirmado no replay | Preset 1 (RES §2.1, §2.2, §4.2) | Falha não detectada | **Alta** (solução longa) |
-| P07 | A média ponderada dilui reações isoladas: sem IF, Z+MAD+EWMA saturados dão exatamente 60 | Confirmado no código e no replay | Preset 1 (RES §2.2; MAPA §4.1) | Falha não detectada | Média |
+| P06 | Obstrução do recalque (preset 1) não detectada: a falha não se destaca do normal. **[preset 6]** Quando a falha sai da faixa normal (vibração), o univariado detecta | Confirmado no replay | Preset 1 (RES §2.1, §2.2, §4.2); **[preset 6]** RES6 §2.1 | Falha não detectada | **Alta** (solução longa) |
+| P07 | A média ponderada dilui reações isoladas: sem IF, Z+MAD+EWMA saturados dão exatamente 60 | Confirmado no código e no replay | Preset 1 (RES §2.2; MAPA §4.1); **[preset 6]** atraso de ~2 min na TAG29 (RES6 §2.2) | Falha não detectada / atraso | Média |
 | P08 | O baseline por regime volta ao perfil global (ruim) em transições, set-point novo ou poucas amostras | Confirmado no replay | Madrugada, preset 1 (RES §4.2, §4.3) | Alarme falso | Média |
 | P09 | Regime quase constante (bomba parada) fica com desvio 0; a proteção existe só por acaso | Confirmado no código; efeito é hipótese | Estimativa (RES §3.6) | Risco de alarme falso | Média |
 | P10 | O Bridge fica ~8× mais lento com a IAApi e o simulador rodando, e a IAApi consulta 24 h de histórico por tag a cada ciclo | Lentidão do Bridge confirmada em log; efeito na detecção é hipótese | Exportação da TAG73 (`dados/preset1_parte2.csv.pedacos.csv`) | Atraso | **Alta** (medir) |
 | P11 | O ciclo é sequencial: 60 s + soma do tempo de todas as tags | Confirmado no código; não medido | — (MAPA #1, §3) | Atraso | Média |
 | P12 | Não há detector de valor congelado nem de falha de comunicação | Confirmado no código | Presets 3/4 (AUD §5c) | Falha não detectada | **Alta** |
-| P13 | O treino do perfil usa sempre as últimas 24 h, sem escolher período, e só roda sob demanda | Confirmado no código | — (AUD §5d, §5e-6) | Risco (treino contaminado) | **Alta** |
+| P13 | O treino do perfil usa sempre as últimas 24 h, sem escolher período, e só roda sob demanda | Confirmado no código; **[preset 6]** contaminação confirmada nos dados | — (AUD §5d, §5e-6); **[preset 6]** RES6 §1.2 | Risco (treino contaminado) | **Alta** |
 | P14 | O código aceita um rótulo (TAG60–TAG81) como tag de regime | Confirmado no código | — (AUD §5a) | Risco (vazamento do gabarito) | **Alta** (barato) |
 | P15 | `IaAtiva` é `true` por padrão ao cadastrar uma tag | Confirmado no código | — (AUD §5a) | Risco | Baixa |
 | P16 | Os pesos do `appsettings.json` diferem dos padrões do código | Confirmado no código | — (AUD §3, §5e-4) | Risco (ferramentas divergentes) | Baixa |
 | P17 | `MinHistoryPoints` (30) não tem efeito em produção | Confirmado no código | — (AUD §3) | Risco (configuração enganosa) | Baixa |
 | P18 | O registro grava a hora do processamento, não a hora da leitura | Confirmado no código | — (MAPA #14) | Atraso invisível | Média |
 | P19 | Entrada inválida (leitura mais antiga que o histórico) vira "sem anomalia" em silêncio | Confirmado no código; não ocorreu no preset 1 | — (MAPA #7; RES §2.2) | Risco | Baixa |
-| P20 | Tag com poucos valores distintos pode ser classificada como "discreta" e ter todos os detectores bloqueados | Confirmado no código; nas tags monitoradas, não ocorreu no preset 1 | Só TAG44 (RES §2.1) | Falha não detectada | Baixa |
-| P21 | Alarmes que caem por acaso no horário da falha parecem acertos | Confirmado no replay | Preset 1 (RES §2.1, §4.2) | Risco de avaliação errada | Média |
+| P20 | Tag com poucos valores distintos pode ser classificada como "discreta" e ter todos os detectores bloqueados | Confirmado no código; ocorreu nos replays com regime do preset 1 (73 min, não relatado na RES) e **[preset 6]** (TAG28/32, B-02 parada; TAG27/31 na config. 3) | TAG44 (RES §2.1); **[preset 6]** RES6 §2.2 | Falha não detectada (hipótese) | Baixa |
+| P21 | Alarmes que caem por acaso no horário da falha parecem acertos | Confirmado no replay (de novo no preset 6, inclusive no failover) | Preset 1 (RES §2.1, §4.2); **[preset 6]** RES6 §2.1, §2.3 | Risco de avaliação errada | Média |
 | P22 | TAG23 (sucção) teve 40 alarmes de madrugada; a causa não foi investigada | Confirmado no replay | Madrugada (RES §4.3) | Alarme falso | Baixa |
 | P23 | Código em execução fora de commit | **Parcialmente resolvido**: runtime e ferramentas commitados; faltam os 5 `.patch` da raiz | — (AUD §1; git em 12/11) | Risco | Baixa |
+| **P24** | **[preset 6]** Falha encadeada mascarada: com a nota já saturada, uma segunda falha na mesma tag não muda nada | Confirmado no replay | Preset 6 (RES6 §2.1, §2.2) | Falha não detectada (agravamento invisível) | Média |
 
 ---
 
@@ -73,6 +76,17 @@
 - **Solução testada:**
   - **Baseline por regime** (RES §3.6, §4). Dentro de cada regime, a limpeza deixa de cortar o estado normal (TAG24 de noite: 0 de 299 removidos). Funcionou nas tags com regime bem definido (P02, P04, P05).
   - Fica a falhar onde o regime ainda mistura casos (P03) e onde o perfil global continua em uso (P08).
+- **[preset 6] A limpeza é instável e não tira falhas** (RES6 §1.4, §2.7):
+
+  | Treino | Fim da janela | Pontos removidos | Minutos com TAG73 = 1 no treino | Desses, removidos |
+  |---|---|---|---|---|
+  | Preset 1 | 11/11 12:55 | **1.531** (TAG24, 28, 30, 32) | 0 | — |
+  | Preset 6 | 11/11 15:06 | **306** (só TAG24) | **12** (obstrução 13:28–13:39) | **0** em todas as tags |
+
+  - **Instável:** deslocar a janela em ~2 h mudou em 5 vezes o que é removido. O perfil de uma mesma tag depende de quando alguém chama o treino.
+  - **Não protege contra contaminação:** os 12 minutos da obstrução ficaram no perfil, porque os valores da falha estavam dentro da faixa normal. A limpeza remove regimes normais (noite, reserva parada) e deixa passar a falha. Ver P13.
+- **[preset 6] O resultado muda só por mover a janela** (RES6 §1.4). Com o treino até 15:06, apenas 2 h depois do preset 1, a B-02 ficou parada 32,5 % do tempo (contra 24,6 %). O Q1 caiu para ~0 e o IQR **não cortou nada** nas bombas: 306 pontos removidos no total (só a TAG24 noturna), contra 1.531. As duas bombas passam a ter perfil misturado (TAG32: 266,9 ± 188,1 contra 398,7 ± 40,5). A mesma regra dá resultados opostos conforme o tempo parado fique acima ou abaixo de 25 %.
+- **[preset 6] Dentro do regime, o IQR corta a operação minoritária:** no regime TAG43 = 2, corta a B-02 sozinha em carga alta (TAG28 > 234, TAG30 > 174,5; RES6 §2.3). Ver P03.
 - **BACKLOG:** 9 (opção b: proteger o IQR para séries com maioria de zeros), 12 e 8.
 
 ### P02. Alarmes falsos da bomba reserva B-02 (TAG28/30/32)
@@ -89,6 +103,10 @@
 - **Causa no código:** P01 (perfil sem os zeros) mais `src/IAApi.Engine/Detection/StatisticalDetector.cs`, `MadDetector.cs` e `EwmaDetector.cs` (`Detectar`), que medem a distância ao perfil. Na madrugada, a `PersistenceDetector.Detectar` soma 100 depois de ~5 min.
 - **Solução testada:** baseline por regime com TAG43 (estado da B-02). **Validada no replay** (RES §4). Não está em produção: exige cadastrar em `TagsRegimesOperacionaisIa` e aprovação.
   - O que sobra: 10 min na TAG32 logo após o rodízio da madrugada (00:44–00:55), da mesma família de P03.
+- **[preset 6] Novidades** (RES6 §2.3, §2.4):
+  - **O IQR não é a única causa.** No preset 6 o treino manteve os zeros (P01), e mesmo assim a reserva parada alarmou: TAG28/30/32 = 10/39/78 minutos sem regime. A nota fica em 62,8 com Z = 47, mas MAD = 100 (distância à mediana das 24 h), EWMA = 100 e Persistência = 100.
+  - **O regime TAG43 eliminou os 127 alarmes.** Com a B-02 parada, TAG28/32 viram `Discrete` e os detectores são bloqueados (P20).
+  - **A B-01 parada depois do failover alarma pelo mesmo mecanismo** (TAG27 16:54–17:11, TAG31 16:55–17:11, TAG29 16:52–17:11). A B-01 não tem regime na configuração recomendada.
 - **BACKLOG:** 9 (opção a, agora testada) e 12.
 
 ### P03. Alarmes da bomba B-01 (TAG27/29/31)
@@ -110,6 +128,14 @@
   - `Models/TagRegimeOperationalIa.cs` e o índice único (`ClienteId`, `TagName`) em `Data/AppDbContext.cs` permitem **uma só** tag de regime por tag.
   - `Services/AnomalyDetection/OperationalRegimeHistoryResolver.cs : Resolve` compara um único valor de estado.
   - Dentro do regime, `TagProfileStatisticsCalculator.Calculate` aplica o IQR e corta a operação sozinha, que é minoria (142–167 pontos; RES §3.6).
+- **[preset 6] O mesmo problema na B-02 com o regime recomendado** (RES6 §2.3). Depois do failover, a B-02 operou **sozinha** (16:52–17:11) a TAG28 232–271, valores normais no treino (máx. 284). O regime "B-02 ligada" (TAG43 = 2) tem média 168 ± 20, porque é dominado pela operação em paralelo, e o IQR do regime corta a B-02 sozinha em carga alta. Resultado: **56 minutos-tag de alarme** (TAG28 20, TAG30 19, TAG32 17) contra 10 sem regime. No preset 1 isso não apareceu porque a B-02 nunca operou sozinha. A B-01 sozinha em carga alta voltou a alarmar antes das partidas da auxiliar (TAG27/31/33: 11 min).
+- **[preset 6] TAG42 como regime da B-01** (RES6 §2.6), somada ao regime recomendado:
+  - adianta o primeiro alarme da TAG29 de 15:32 (94 ‰) para 15:30 (49 ‰);
+  - mas a TAG29 também alarma 5 vezes **antes** da falha, com nota até 69,0, acima da nota da "detecção" (61,1). O ganho não é confiável;
+  - TAG27/31 passam a alarmar sempre que a B-01 opera sozinha: os falsos fora da falha sobem de 27 para 86;
+  - o lado bom: com a B-01 parada no failover, as tags dela viram `Discrete` e os alarmes do failover na B-01 somem (110 → 56).
+  
+  Confirma de novo que só um regime que separe "sozinha" de "em paralelo" resolve [hipótese].
 - **Solução testada:** TAG42 sozinha (piora de dia, melhora de noite). A estimativa com regime combinado B-01 × B-02 (RES §3.3, com *proxies*, sem set-point) reduziu os alarmes da B-01 a 0–1 min por tag. **Só o regime combinado (bomba × outra bomba × set-point) deve resolver** [hipótese]. Ele não foi testado no replay porque o código não suporta.
 - **BACKLOG:** 12.
 
@@ -124,6 +150,7 @@
   | Madrugada | 215 | **5** (na abertura e no fechamento) |
 
   Fontes: RES §2.3 e §4. A TAG22 (nível) alarmou às 13:35 por causa do nível caindo com a válvula fechada; ela ficou sem regime nos testes.
+- **[preset 6] Repetiu** (RES6 §2.4): sem regime, 33 alarmes com a válvula fechada (15:24–15:44, 16:38–16:55), mais a TAG22 às 15:44. Com TAG45, sobram 12 de vazão alta com a válvula aberta (15:10, 15:15–15:23, 15:57, 16:34) e 1 na TAG22.
 - **Causa no código:** mesma família de P01 e P02 (perfil global misturado); `src/IAApi.Engine/Detection/PersistenceDetector.cs` e `LevelShiftDetector.cs` (`Detectar`).
 - **Solução testada:** regime com TAG45. Ganho claro de madrugada, neutro no preset 1. O pico de vazão de 13:01–13:16 vem logo após o reset do nível no início do cenário, provavelmente um transitório do simulador [hipótese].
 - **BACKLOG:** 9 e 12. Para a TAG22, não há item.
@@ -155,6 +182,7 @@
   - Na estimativa com o regime "certo" (B-01 sozinha), a TAG27 na falha fica a 1,3–2,0 desvios (RES §3.3).
   - O único sinal possível é às 13:37 (vibração da B-01 alta quando a B-02 parte), em um único minuto [hipótese].
 - **Causa:** não é um defeito pontual. É limite do método univariado: cada tag é olhada sozinha, contra o próprio normal. Agrava com a diluição (P07).
+- **[preset 6] Contraprova** (RES6 §2.1): no desbalanceamento, a vibração da B-01 (TAG29) saiu da faixa normal, e o univariado **detectou às 15:32**, ≈4 min após o início da rampa, com a falha a 94 ‰ (≈10 % da intensidade final). Não houve alarme na TAG29 antes nem depois da falha. Isso confirma que o P06 é específico de falhas cujo efeito fica **dentro** da faixa normal, e não um defeito geral do pipeline.
 - **Solução candidata:** usar a **relação entre tags** (por exemplo, corrente e frequência contra pressão e vazão), ou seja, o multivariado. Hoje ele roda só em *shadow*, a fusão está restrita a PK7 e o grupo `ModelsML/Multivariate/PK2/CP300-B01-Piloto.json` tem ~2 h de treino (AUD §5a, §5d). **Não testado.**
 - **BACKLOG:** não há item específico; sugerido criar (seção 4). Relacionados: 7 e 3 (parte B, gabarito por evento).
 
@@ -163,6 +191,7 @@
 - **O que acontece.** A decisão é a média das notas dos detectores, ponderada pelos pesos. Para chegar a 60, detectores que somam ≥ 60 % do peso precisam reagir juntos. Sem Isolation Forest, que é o caso do PK2, Z + MAD + EWMA saturados dão **exatamente 60**. Uma reação forte de um ou dois detectores não basta.
 - **Evidência:** na TAG27 às 13:30, EWMA = 100 e taxa de variação = 100, mas Z = 53, MAD = 69 e persistência = mudança de patamar = 0. Nota final: **57,7**. O máximo possível nesse minuto era 73,3 (RES §2.2). Baixar o limiar não resolveria: a 57, alarmaria antes em minutos normais.
 - **Causa no código:** `Services/AnomalyDetection/EnsembleDetectionService.cs : EnsembleDetectionService.Detectar` (média ponderada; `EhAnomalia = score ≥ EnsembleThreshold`); pesos em `appsettings.json` → `AnomalyDetection:*Weight`. Com IF aplicável, a barra ficaria mais alta: o IF vale 50 no limiar (MAPA #9).
+- **[preset 6]** Na TAG29, o EWMA ficou em 100 **antes** da falha (perfil misturado), sem informação. Com Persistência e Mudança de patamar em 0 no início da rampa, a nota ficou abaixo de 60 em 15:29–15:31 (45,9–53,2) e passou só às 15:32. No minuto seguinte deu **60,9**, raspando o limiar (RES6 §2.2). Atraso estimado: ~2 min.
 - **Solução:** não testada. Mexer em pesos ou limiar sem corrigir P01–P05 trocaria falha não detectada por mais alarmes falsos.
 - **BACKLOG:** 7.
 
@@ -226,6 +255,7 @@
 
 - **O que acontece.** O perfil é treinado com as 24 h anteriores ao momento em que alguém chama o treino. Não dá para escolher um período limpo (por exemplo, o preset 5 sem falhas), e nada verifica se houve falha nesse período. O treino só acontece quando alguém chama a API.
 - **Evidência:** confirmado no código (AUD §5d, §5e-6). Mudar `Bridge:HorasHistorico` altera o treino **e** a detecção, que usam a mesma chave.
+- **[preset 6] Contaminação confirmada nos dados** (RES6 §1.2, §1.4): as 24 h antes do preset 6 incluem os 12 min da obstrução do preset 1 (TAG73 = 1, 13:28–13:39) e o reset do cenário. O IQR não removeu nenhum desses pontos em nenhuma tag (P01). O efeito nos números do perfil foi desprezível (média ±1,4), porque a obstrução ficou dentro da faixa normal; com uma falha forte, não seria.
 - **Causa no código:** `Services/PerfilTagService.cs : TreinarPerfil` → `IHistoricoService.BuscarHistorico`; `Controllers/PerfilTagController.cs` (`POST /api/tags/treinar-perfil`, só `ClienteId` e `TagName`).
 - **BACKLOG:** 8 (e 3, parte C, no replay).
 
@@ -273,12 +303,14 @@
   - Confirmado no código (AUD §5b; MAPA #8): `src/IAApi.Engine/Detection/Behavior/TagBehaviorProfileResolver.cs : Resolve` e `Services/AnomalyDetection/DetectorApplicabilityPolicy.cs : Evaluate`.
   - **No preset 1, as tags monitoradas foram classificadas como `Unknown` e nada foi bloqueado** (RES §2.2). Só a TAG44 (estado, não monitorada) foi bloqueada.
   - O caso da reserva que ficou parada 24 h segue como hipótese (AUD §5b).
+  - **[preset 6] Ocorreu no caminho do regime** (RES6 §2.2; seção 3.1a, linhas 17a/18a): com TAG43 como regime, o histórico do estado "B-02 parada" é quase todo 0, e TAG28/32 foram classificadas como `Discrete` em 85 min, com todos os detectores bloqueados. Revendo os CSVs, isso **já tinha ocorrido no replay com regime do preset 1** (73 min), sem ter sido relatado na RES. Aqui isso evitou alarmes falsos. O risco é uma falha que apareça com a bomba parada (por exemplo, sensor travado) passar sem análise [hipótese].
 - **BACKLOG:** 9.
 
 ### P21. Coincidências que parecem acertos
 
 - **O que acontece.** Alarmes causados por outra coisa (reserva parada, válvula fechada, B-01 sozinha) às vezes caem dentro do horário da falha. Uma comparação automática minuto a minuto com o gabarito os contaria como detecção.
 - **Evidência:** confirmado no replay. No preset 1 sem regime, 31 alarmes dentro da falha, nenhum causado por ela (RES §2.1). Com TAG42, 27 alarmes na B-01 dentro da falha, que começaram 26 min antes (RES §4.2).
+- **[preset 6]** (RES6 §2.1, §2.3): dentro de 15:28–17:17, sem regime, **122** alarmes sem relação com a falha (reserva parada, válvula fechada, carga alta). Mais **64 no failover** (110 com regime): B-01 parada e B-02 sozinha. Esses alarmes são efeito da troca de bomba, mas o mesmo sinal aparece em operação normal, então **não contam como detecção**. A detecção real foi só a TAG29 (86 min).
 - **Solução:** a parte B do replay deve medir por **evento** e comparar com o comportamento antes e depois da falha.
 - **BACKLOG:** 3 (parte B).
 
@@ -298,9 +330,20 @@
   - **Pendente:** os 5 arquivos `.patch` na raiz, que não estão rastreados: `IAApi_LiveMonitor_clareza_cenario1`, `IAApi_LiveMonitor_sessoes_de_teste`, `IAApi_monitoramento_bridge_em_lote`, `IAApi_observabilidade_temporal` e `IAApi_tempo_por_tag`. Falta decidir se já foram aplicados (e podem ser descartados) ou se devem ser guardados. Não verificamos o conteúdo deles.
 - **BACKLOG:** não há item.
 
+### P24. Falha encadeada mascarada pela saturação [preset 6]
+
+- **O que acontece.** Quando uma tag já está em alarme com nota próxima de 100, uma segunda falha que afete a mesma tag não muda nem a decisão nem a nota. A IA não indica que a situação piorou.
+- **Evidência** (confirmado no replay, RES6 §2.1, §2.2):
+  - A perda de lubrificação começou às ≈16:08 e chegou a 1000 ‰ às 16:48.
+  - A TAG29 já estava em alarme desde 15:32 (desbalanceamento), com notas de 90–100, e subiu de ≈700 para 1106 sem efeito visível.
+  - O efeito principal da lubrificação está em TAG36/37 (temperatura de mancal), que **não são monitoradas** (CENARIOS §2).
+- **Causa:** as notas são limitadas a 100 (`DetectorMath.NormalizarPorLimite`) e a decisão é binária (`EnsembleDetectionService.Detectar`, nota ≥ 60). O limite em 100 está confirmado no código (`Math.Clamp(…, 0, 100)` em `src/IAApi.Engine/Detection/Core/DetectorMath.cs`). Que nenhuma outra parte indique agravamento é hipótese: o pós-decisão não foi verificado para isso.
+- **Solução candidata** (não testada): monitorar TAG36/37 e/ou usar a tendência ou severidade do pós-decisão (`PredictionPostDecisionAnalysisService`) para indicar agravamento, sem alterar a decisão de anomalia.
+- **BACKLOG:** não há item.
+
 ---
 
-## 3. Fluxo exercitado no preset 1: arquivos e métodos
+## 3. Fluxo exercitado nos presets 1 e 6: arquivos e métodos
 
 ### 3.1 O que rodou no replay (do histórico até a decisão)
 
@@ -345,6 +388,24 @@ Colunas: **Verificação** = *executado no replay* (o método rodou no `tools/Cp
 | 31 | `Services/AnomalyDetection/Orchestration/PredictionPostDecisionAnalysisService.cs` | `AnalisarAsync` | Tendência, risco, relacionadas; não muda a decisão | P10 | Executado |
 | 32 | `Services/AnomalyDetection/Orchestration/PredictionFinalizationService.cs` → `Services/AnomaliaHistoricoService.cs` → `Presentation/PredictionResponseBuilder.cs` | `Finalizar` → `Registrar` → `Build` | Grava a decisão (com a hora do processamento) e monta a resposta | P18 | Executado em SQLite em memória |
 
+### 3.1a Caminhos que o preset 6 exercitou além da tabela 3.1 [preset 6]
+
+A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos de decisão** dentro desses métodos que não estavam descritos (ou não tinham efeito visível) no preset 1. Na coluna **Cenário**, "preset 1" sem mais detalhe é o replay com `--regime` (RES §4), e "preset 6" cobre as três configurações da RES6 §2. Todas as linhas foram **executadas no replay** e conferidas no código.
+
+| Ordem | Arquivo | Classe.método | Caminho / o que faz | Cenário | Problemas |
+|---|---|---|---|---|---|
+| 8a | `Services/AnomalyDetection/Orchestration/PredictionDetectionPreparationService.cs` | `PrepararAsync` (ramo `regimeBaseline.Applied`) | Com o regime aplicado, **troca o histórico** do `DetectorInput` pelo histórico do regime (`historicoRecebido = regimeBaseline.History`), além de média, desvio e deadband. Com isso, a classificação do tipo, o MAD (mediana) e o deadband também passam a olhar só o regime | Ambos (preset 1 §4; preset 6 configs. 2 e 3) | P03, P09, P20 |
+| 8b | idem | `PrepararAsync` (*fail-open* de regime) → `CriarBaselineEfetivo` → `CriarMotivoBaselineEfetivo` | **Troca para o perfil global** quando o regime não é aplicado: `origem_baseline = Global` e motivo "regime operacional não foi aplicado". Ocorreu com TAG43 = 3 (Parando): TAG28/30/32 às 13:41 (preset 1) e às 16:18 (preset 6); sem alarme nos dois casos | Ambos | P08 |
+| 10a | `Services/AnomalyDetection/OperationalRegimeBaselineService.cs` → `Services/TagProfileStatisticsCalculator.cs` → `Services/HistoricoLimpezaService.cs` | `OperationalRegimeBaselineService.Resolve` → `TagProfileStatisticsCalculator.Calculate` → `RemoverOutliersPorIqr` | **IQR dentro do regime corta a operação minoritária.** No regime "B-02 ligada" (TAG43 = 2), cortou a B-02 sozinha em carga alta (TAG28 > 234, TAG30 > 174,5) → média 168 ± 20 → 56 minutos-tag de alarme com a B-02 sozinha depois do failover | Ambos; efeito visível só no preset 6 | P01, P03 |
+| 17a | `src/IAApi.Engine/Detection/Behavior/TagBehaviorProfileResolver.cs` | `TagBehaviorProfileResolver.Resolve` (sobre o histórico do regime, ver 8a) | Com a bomba parada, o histórico do regime é quase todo 0 → tag classificada como `Discrete` com alta confiança. TAG28/32: 73 min no preset 1 (não relatado na RES) e 85 min no preset 6; TAG27/31: 20 min no preset 6, config. 3 (B-01 parada depois do failover) | Ambos | P09, P20 |
+| 18a | `Services/AnomalyDetection/DetectorApplicabilityPolicy.cs` | `DetectorApplicabilityPolicy.Evaluate` (ramo `Discrete` → `Block`) | **Bloqueia os 6 detectores** de uma tag **monitorada** (`BlockedByApplicabilityPolicy`, nota 0). Antes, só a TAG44 (estado) tinha sido bloqueada. Efeito: elimina o alarme de reserva parada (P02) e, na config. 3, o da B-01 parada no failover | Ambos (TAG28/32); preset 6 (TAG27/31) | P02, P20 |
+| 26a | `src/IAApi.Engine/Detection/Core/DetectorMath.cs` | `DetectorMath.NormalizarPorLimite` (`Math.Clamp(…, 0, 100)`) | **Saturação da nota:** Z, MAD, EWMA e Persistência ficam em 100 a partir de 15:39 nas três configurações; as notas ficam idênticas e o baseline deixa de importar. Também: o EWMA preso em 100 antes da falha, por causa do perfil misturado | Ambos (EWMA em 100 já no preset 1); mascaramento só no preset 6 | P07, P24 |
+| 27a | `Services/AnomalyDetection/EnsembleDetectionService.cs` | `EnsembleDetectionService.Detectar` (agregação e `EhAnomalia = score ≥ 60`) | Nota final de 90–100 durante toda a falha: a decisão binária não muda quando a segunda falha (lubrificação) começa. Também foi aqui a **primeira detecção real** de uma falha (TAG29, 15:32, nota 68,5) | Preset 6 | P07, P24 |
+
+**Linhas da tabela 3.1 com efeito novo no preset 6:**
+- **1 e 4** (`PerfilTagService.TreinarPerfil`, `RemoverOutliersPorIqr`): o treino continha 12 min de falha rotulada e o IQR não os removeu; o mesmo método removeu 1.531 pontos no preset 1 e 306 no preset 6 (P01, P13).
+- **21, 24 e 25** (`MadDetector`, `PersistenceDetector`, `LevelShiftDetector`): alarmes com a **B-01** parada depois do failover, o mesmo mecanismo da reserva B-02 parada (P02, P21).
+
 ### 3.2 Existe em produção, mas não foi exercitado no replay
 
 | Parte | Arquivo : método | Por que ficou de fora |
@@ -376,11 +437,11 @@ Colunas: **Verificação** = *executado no replay* (o método rodou no `tools/Cp
 ## 4. Próximos passos (em ordem)
 
 1. **Barato e só de proteção:** bloquear rótulos como tag de regime em produção (P14 → BACKLOG **11**). Junto, fazer o inventário do banco do PK2 (BACKLOG **2**) para confirmar que não há rótulo cadastrado, ver quais tags estão ativas (P15) e se já existe algum regime.
-2. **Ativar o regime recomendado no PK2, com aprovação:** TAG28/30/32 ← TAG43, TAG26 ← TAG45, TAG24 ← TAG46. Validado no replay: preset 1 245 → 41 alarmes; madrugada 1.282 → 660 (P02, P04, P05; RES §4). Só configuração no banco, reversível.
+2. **Ativar o regime recomendado no PK2, com aprovação:** TAG28/30/32 ← TAG43, TAG26 ← TAG45, TAG24 ← TAG46. Validado no replay: preset 1 245 → 41 alarmes; madrugada 1.282 → 660 (P02, P04, P05; RES §4). **[preset 6]** 325 → 223, e os alarmes falsos fora da falha caem de 175 para 27, mas surgem 56 minutos-tag com a B-02 sozinha depois do failover (P03; RES6 §2.3). A detecção da TAG29 não muda. Só configuração no banco, reversível.
 3. **Regime combinado para as bombas** (P03, P08 → BACKLOG **12**). É o que falta para a B-01, que ainda gera 566 alarmes de madrugada. Testar no replay antes de produção, com a mesma tabela da RES §4.
 4. **Medir a latência real** com o PERF_DIAG numa sessão autorizada (P10, P11 → BACKLOG **6**, **4**).
 5. **Treino por período e limpeza IQR** (P01, P09, P13 → BACKLOG **8**, **9**). Permitir treinar com um período limpo e proteger o IQR em séries quase constantes.
-6. **Replay dos outros presets e gabarito por evento** (P12, P21 → BACKLOG **3**, partes B e C). Rodar os presets 3, 5 e 6 e medir acerto por evento, para não contar coincidências.
+6. **Replay dos outros presets e gabarito por evento** (P12, P21 → BACKLOG **3**, partes B e C). Rodar os presets 3, 5 e 6 e medir acerto por evento, para não contar coincidências. **[preset 6] feito por análise manual** (RES6 §2); falta a medição automática por evento.
 7. **Detecção que use relação entre tags** (P06): criar um item no BACKLOG para avaliar o multivariado do PK2 com treino adequado (o grupo atual tem ~2 h) e, para a pressão, a análise TAG24 − TAG46 (BACKLOG **13**).
 8. **Detector de valor congelado ou falha de comunicação** (P12 → BACKLOG **10**), depois de medir os presets 3 e 4.
 9. **Só depois:** pesos e limiar do ensemble (P07 → BACKLOG **7**).
