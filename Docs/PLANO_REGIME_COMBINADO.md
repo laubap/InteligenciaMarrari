@@ -319,3 +319,219 @@ Limiar = 60.
 2. Explicar por que a nota final ficou abaixo de 60 com Z-Score e EWMA em 100. Abrir a contribuição de cada detector (Mediana e MAD, Taxa de variação, Persistência, Mudança de patamar) e comparar com `rec`. Hipótese a validar: o baseline do regime tem desvio e MAD menores, o que satura os detectores de nível. Assim, a nota passa a depender dos detectores de dinâmica, que caem quando o valor estabiliza.
 3. Verificar se a Persistência e a Mudança de patamar deveriam ter subido num desvio sustentado de ~+85 sobre a média do regime (~170).
 4. **Critério de aceite da Etapa 1:** a detecção confirmada da TAG29 no preset 6 não pode ficar depois de 15:34. Se ficar, documentar a causa antes de seguir. **Não** ajustar limiar, pesos ou gates sem aprovação.
+
+---
+
+## 6. Plano de implementação (Opção A com três componentes)
+
+**Data:** 12/11/2026. **Situação:** plano; **nada implementado e nada aprovado.** Cada tarefa exige aprovação explícita antes de começar (`CLAUDE.md`).
+**Escopo:** o regime de cada tag de bomba passa a ser uma tupla de **3 componentes** (estado da própria bomba, estado da outra bomba e TAG46), com mapa de estados opcional por componente (§5.5). Entram também a busca do resolver com dois ponteiros e a regressão byte a byte com a chave desligada.
+
+**Pontos conferidos nesta sessão (confirmado no código):**
+- `OperationalRegimeHistoryResolver.Resolve` chama `FindCausalRegimePoint` uma vez por ponto da tag analisada, e cada chamada percorre a série de regime desde o índice 0.
+- `OperationalRegimeBaselineProvider.Resolve` lê **uma** linha de `TagsRegimesOperacionaisIa` e faz **uma** consulta `BuscarHistoricoPorPeriodo`. Ainda **não** recusa TAG60–TAG81 (o item 11 do backlog não foi implementado).
+- `AddOperationalRegimeServices` registra resolver, service e provider como `Scoped`, sem opções próprias. As opções de detecção vêm da seção `AnomalyDetection`.
+- **Não há migration automática** no startup da API (`Database.Migrate` não é chamado em nenhum lugar). O replay usa `EnsureCreatedAsync` no SQLite em memória, então uma tabela nova aparece lá sem migration.
+- O replay grava as colunas fixas de `Cp300Replay.Colunas`, que terminam em `valor_regime` e `motivo_baseline`.
+- `ReplayDiagnosticJsonlExporter` serializa com `JsonIgnoreCondition.Never` (um campo novo nulo aparece no JSON).
+
+### 6.1 A chave
+
+- **Nome proposto:** `AnomalyDetection:RegimeCombinado:Habilitado`, padrão **`false`**, numa classe de opções nova. Não muda `AnomalyDetectionOptions` nem o `appsettings.json`: o padrão vem do código.
+- **Com a chave desligada:**
+  - o provider **não lê** a tabela de componentes e **ignora** `MapaEstados`;
+  - o resolver segue pelo caminho atual (um componente, tolerância numérica);
+  - `RegimeKey` fica nulo e **não aparece** em JSON, log nem CSV;
+  - a ferramenta de replay recusa `+` e mapa, e não grava a coluna `chave_regime`.
+  - **Exigência:** saídas do replay idênticas byte a byte às atuais (tarefa RC-2).
+- **Com a chave ligada**, só usa regime combinado a tag que tiver componentes cadastrados; as demais seguem iguais.
+- **Rollback:** desligar a chave (volta ao comportamento atual sem tocar no banco) ou `Ativo = false` por tag (volta ao baseline global daquela tag).
+
+### 6.2 Decisões de projeto (fechar na RC-4)
+
+| Decisão | Opções | Recomendação |
+|---|---|---|
+| Onde fica o componente 1 | (a) `TagRegime` atual + coluna nova `MapaEstados` (nula) na tabela atual; a tabela filha guarda só os componentes 2..N. (b) Tabela filha com os componentes 1..N, e `TagRegime` tem de bater com o componente 1 | **(a)**: a linha atual continua válida sozinha, sem duplicar o componente 1 |
+| Tupla pura × "parada domina" | Tupla pura: (0,0,·) e (0,2,·) são classes diferentes. Com dominância, "própria parada" ignora os outros componentes, como o `RB01` da etapa 0 | **Tupla pura** na primeira versão. Nos dados de 10–11/11 a B-01 parada sempre teve a B-02 em 2 (§1.2), então deve dar o mesmo resultado; **conferir na RC-0** |
+| Valor fora do mapa, sem `*` | (a) passa sem mudar; (b) ponto descartado | **(a)**, e o relatório de cobertura do replay lista esses valores |
+| Comparação com mapa | Mapear e comparar exato × comparar com `ToleranciaEstado` | Mapear (a entrada do mapa casa com `ToleranciaEstado`) e comparar exato |
+| Lag e tolerância de alinhamento | Por componente × da configuração | **Da configuração** (os mesmos para os 3 componentes); por componente só se a RC-0 mostrar necessidade |
+| Formato da chave | `TAG42=2\|TAG43=0\|TAG46=380`: valores **mapeados**, `InvariantCulture`, na ordem dos componentes | Esse; é a futura chave dos perfis por regime (PROP §4-A) |
+
+**Configuração alvo das bombas** (cadastrada só na RC-12):
+
+| TagName | Componente 1 (mapa) | Componente 2 (mapa) | Componente 3 (mapa) |
+|---|---|---|---|
+| TAG27, TAG29, TAG31 | TAG42 (`2→2; *→0`) | TAG43 (`2→2; *→0`) | TAG46 (`380→380; *→450`) |
+| TAG28, TAG30, TAG32 | TAG43 (`2→2; *→0`) | TAG42 (`2→2; *→0`) | TAG46 (`380→380; *→450`) |
+
+### 6.3 Tarefas, em ordem
+
+Coluna "muda comportamento":
+- **não**: só documento, análise, teste ou ferramenta offline;
+- **não (provado)**: código de runtime que tem de dar resultado idêntico, garantido por teste de equivalência e pela regressão da RC-2;
+- **só com a chave**: código novo que só age com `RegimeCombinado:Habilitado = true` (padrão `false`);
+- **sim**: ativação, só na última tarefa.
+
+| # | Tarefa | Depende de | Muda comportamento |
+|---|---|---|---|
+| RC-0 | CSV de 48 h e equivalência da tupla (dados) | — | não |
+| RC-1 | Análise do atraso da TAG29 com as saídas da etapa 0 | — | não |
+| RC-2 | Referência congelada e regressão byte a byte | — | não |
+| RC-3 | Resolver com dois ponteiros | RC-2 | não (provado) |
+| RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) | RC-0 | não |
+| RC-5 | Modelo `TagRegimeComponenteIa` + migration | RC-4 | não |
+| RC-6 | Resolver com N componentes | RC-3, RC-4 | não (provado) |
+| RC-7 | Bloqueio de rótulos por cliente (backlog 11) | — | não (lista vazia por padrão) |
+| RC-8 | Service e provider com componentes, atrás da chave | RC-5, RC-6, RC-7 | só com a chave |
+| RC-9 | `RegimeKey` no diagnóstico e no log | RC-8 | só com a chave (observabilidade) |
+| RC-10 | Replay com regime combinado | RC-8, RC-9 | não (ferramenta) |
+| RC-11 | Equivalência com a etapa 0, critério da TAG29 e custo | RC-0, RC-1, RC-10 | não |
+| RC-12 | Ativação no ambiente de teste do PK2 | RC-11 + aprovação | **sim** |
+
+RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo depois da RC-2.
+
+#### RC-0. CSV de 48 h e equivalência da tupla (dados, sem código)
+- **Objetivo:**
+  1. Exportar um CSV com **uma noite anterior** (≥ 48 h, cobrindo os presets 1 e 6) e repetir a etapa 0 (`rec` × `combs`), para eliminar o artefato do fallback da primeira noite (§5.4 item 3, §5.5).
+  2. No mesmo script fora do repositório, gerar a série da **tupla pura** (`10·map(TAG42) + map(TAG43) + 100·(TAG46 = 380)`, e o espelho para a B-02) e comparar minuto a minuto com `RB01S`/`RB02S`. Isso fecha a decisão "tupla pura × parada domina" (§6.2).
+- **Arquivos:** nenhum do repositório. Exportação com `tools/Cp300Export/Export-Cp300Historico.ps1`, feita pela equipe **com autorização** (acessa o Bridge). Script no scratchpad, saídas em `dados/`. Resultado registrado como §5.7 deste documento.
+- **Aceite:**
+  - B-01 de madrugada em `combs` ≤ 30 minutos-tag, **sem** `origem_baseline = Global` por falta de histórico noturno;
+  - a tupla pura classifica igual a `RB0xS` em todos os minutos, ou existe a lista dos minutos diferentes e a decisão tomada.
+- **Muda comportamento:** não.
+
+#### RC-1. Análise do atraso da detecção confirmada da TAG29 (sem código)
+- **Objetivo:** responder os itens 2 e 3 de §5.6 **antes** de mexer no código, com as saídas que já existem (`dados/e0_preset6_{rec,comb,combs}.csv`). O replay já grava, por detector, `nota_detector`, `peso`, `contribuicao`, `media`, `desvio` e `pontos_historico`.
+  - Abrir a contribuição de cada detector às 15:32–15:35 nos três casos.
+  - Verificar por que Persistência e Mudança de patamar não sobem num desvio sustentado de ~+85.
+  - Marcar a hipótese "o baseline do regime, mais estreito, satura os detectores de nível, e a nota passa a depender dos detectores de dinâmica" como confirmada ou descartada.
+- **Arquivos:** só leitura dos CSVs e dos detectores em `src/IAApi.Engine/Detection/`. Resultado no fim de §5.6.
+- **Aceite:** tabela por detector e minuto (nota, peso, contribuição) para `rec` × `combs`, com a conclusão marcada como **confirmado no replay** ou **hipótese**. Nenhum limiar, peso ou gate alterado.
+- **Muda comportamento:** não.
+
+#### RC-2. Referência congelada e regressão byte a byte
+- **Objetivo:** ter, antes de qualquer mudança de runtime, uma forma repetível de provar "idêntico ao atual".
+  1. **Referência com dados do simulador (fora do Git):** com o código atual, rodar os replays `sem` e `rec` do preset 1, da madrugada e do preset 6 (comandos de §5.2), mais os da RC-0. Guardar num manifesto os comandos e o SHA-256 de cada `.csv`.
+  2. **Script de comparação** (novo, `tools/Cp300OfflineReplay/Compare-Replay.ps1`): roda os mesmos comandos e compara os `.csv` **byte a byte** (hash) e os `.log` linha a linha, ignorando só linhas de tempo de execução, se existirem (verificar).
+  3. **Teste automatizado, sem dados industriais:** em `IAApi.Tests/Cp300Replay/Cp300OfflineReplayTests.cs`, um teste golden que roda o replay sobre um CSV sintético pequeno (bomba, outra bomba e set-point) **com uma configuração `--regime` simples** e compara a saída com um arquivo de referência versionado.
+- **Arquivos:** `tools/Cp300OfflineReplay/Compare-Replay.ps1` (novo), `IAApi.Tests/Cp300Replay/Cp300OfflineReplayTests.cs`, `IAApi.Tests/Cp300Replay/Golden/` (novo). O manifesto e as saídas reais ficam em `dados/` (não versionado).
+- **Aceite:** o script rodado duas vezes no código atual dá 0 diferenças; o teste golden passa; a suíte completa continua verde.
+- **Muda comportamento:** não.
+
+#### RC-3. Resolver com dois ponteiros
+- **Objetivo:** dentro do laço, trocar a busca linear de `FindCausalRegimePoint` por um ponteiro que só avança. O alinhamento cai de ≈ n²/2 para O(n + m) comparações, **com o mesmo resultado**.
+  - A lista da tag analisada já está ordenada e o `LagMinutos` é fixo, então os instantes esperados são crescentes e o ponteiro da série de regime nunca volta.
+  - Manter exatamente a regra atual: o candidato é o **último** ponto com `DataHora ≤ esperado` (com timestamps repetidos, o último na ordem do `OrderBy`, que é estável), seguido dos mesmos testes de idade (`< 0` e `> tolerância`).
+  - O ponto atual (`currentTimestamp − Lag`) continua com busca própria (linear, ou binária com a mesma regra), porque pode estar fora da ordem do laço.
+- **Arquivos:** `Services/AnomalyDetection/OperationalRegimeHistoryResolver.cs`; `IAApi.Tests/Services/AnomalyDetection/OperationalRegimeHistoryResolverTests.cs`.
+- **Aceite:**
+  - teste de equivalência com a implementação linear atual, copiada para o teste como oráculo. Séries aleatórias com semente fixa, timestamps repetidos, buracos maiores que a tolerância, tolerância 0, lag > 0, entrada fora de ordem e pontos inválidos. Mesmos `Applied`, `Reason` e contagens, e **mesma lista** de pontos selecionados;
+  - RC-2 com 0 diferenças;
+  - custo medido antes/depois: tempo do replay do preset 6 e, numa sessão autorizada, `PERF_DIAG` da etapa `Preparation.RegimeBaseline`. Só registrar o número; a meta é "não piora".
+- **Muda comportamento:** não (provado pelos aceites acima). Por isso fica sem chave. Se a equivalência falhar, a tarefa não é entregue.
+
+#### RC-4. Chave, mapa de estados e chave de regime (classes isoladas)
+- **Objetivo:**
+  1. Fechar as decisões de §6.2 com os resultados da RC-0.
+  2. Criar `RegimeCombinadoOptions` (`Habilitado = false`) e registrá-la em `AddAnomalyDetectionConfiguration` a partir de `AnomalyDetection:RegimeCombinado`, **sem** mexer no `appsettings.json`.
+  3. Criar `OperationalRegimeStateMap`: parse e aplicação do mapa, em sintaxe ASCII (`2:2;*:0`), com erro para sintaxe inválida, valores não finitos e entradas repetidas.
+  4. Criar `OperationalRegimeKey`: monta `TAG42=2|TAG43=0|TAG46=380` com `InvariantCulture`.
+- **Arquivos:** novos `Services/AnomalyDetection/RegimeCombinadoOptions.cs`, `OperationalRegimeStateMap.cs` e `OperationalRegimeKey.cs`; `Services/AnomalyDetection/DependencyInjection/AnomalyDetectionServiceCollectionExtensions.cs`; testes novos em `IAApi.Tests/Services/AnomalyDetection/`.
+- **Aceite:** testes do parse (válido, inválido, `*`, tolerância), da chave (cultura pt-BR × invariante, ordem) e das opções (padrão `false`, leitura da seção). Nada chama essas classes ainda; RC-2 com 0 diferenças.
+- **Muda comportamento:** não.
+
+#### RC-5. Modelo e migration
+- **Objetivo:** entidade `TagRegimeComponenteIa` (`Id`, `ConfiguracaoId`, `Ordem` ≥ 2, `TagRegime`, `MapaEstados` nulo, `ToleranciaEstado`), relação com `TagRegimeOperacionalIa`, índice único (`ConfiguracaoId`, `Ordem`) e, se a opção (a) de §6.2 for a escolhida, coluna nula `MapaEstados` na tabela atual. O índice único atual (`ClienteId`, `TagName`) não muda.
+- **Arquivos:** `Models/TagRegimeOperationalIa.cs` (ou um arquivo novo para a entidade filha), `Data/AppDbContext.cs : OnModelCreating`, migration nova em `Migrations/` e `AppDbContextModelSnapshot.cs`.
+- **Aceite:**
+  - migration aplicada (`Up`) e revertida (`Down`) num SQLite vazio de teste;
+  - testes atuais do provider, service e resolver passam sem mudança;
+  - RC-2 com 0 diferenças (o replay cria a tabela vazia via `EnsureCreated`);
+  - **não aplicar** no banco do PK2 (isso é a RC-12).
+- **Muda comportamento:** não (tabela vazia, nada lê).
+
+#### RC-6. Resolver com N componentes
+- **Objetivo:** nova sobrecarga `Resolve(configuração, componentes, histórico alvo, séries de regime, instante atual)`:
+  - um ponteiro por componente (técnica da RC-3);
+  - estado do ponto = tupla de valores **mapeados**; componente sem leitura na tolerância ⇒ ponto descartado (não conta como alinhado);
+  - estado atual: todos os componentes precisam existir, senão "não aplicado" com motivo;
+  - `OperationalRegimeHistoryResolution` ganha `CurrentRegimeKey` (nulo no caminho atual); `CurrentRegimeValue` continua sendo o componente 1;
+  - **a assinatura atual não muda.** Ela só pode delegar à sobrecarga (com 1 componente sem mapa) se o teste de equivalência provar resultado igual.
+- **Arquivos:** `Services/AnomalyDetection/OperationalRegimeHistoryResolver.cs`; `OperationalRegimeHistoryResolverTests.cs`.
+- **Aceite (unitários de §3.2):**
+  - tupla com 2 e com 3 componentes; mapa de estados;
+  - componente sem leitura na tolerância ⇒ ponto descartado;
+  - menos que `MinimoAmostrasPorRegime` ⇒ não aplicado;
+  - 1 componente sem mapa pela sobrecarga = caminho atual (mesmo oráculo da RC-3);
+  - num trecho sintético com a lógica das bombas, a tupla pura reproduz as classes esperadas;
+  - RC-2 com 0 diferenças.
+- **Muda comportamento:** não (provado). A sobrecarga só é chamada a partir da RC-8.
+
+#### RC-7. Bloqueio de rótulos por cliente (backlog 11)
+- **Objetivo:** implementar o item 11 do backlog já pensando em vários componentes: lista configurável, **por cliente**, de tags proibidas como regime, **vazia por padrão**. O provider recusa ("não aplicado", com motivo claro) uma `TagRegime` da lista. A mesma função vale para os componentes na RC-8.
+- **Arquivos:** `Services/AnomalyDetection/OperationalRegimeBaselineProvider.cs`; local da lista por cliente a definir na tarefa (seção de configuração ou tabela de configuração do cliente já existente); `OperationalRegimeBaselineProviderTests.cs`.
+- **Aceite:** com a lista TAG60–TAG81 e `TagRegime = TAG73`, não aplica e registra o motivo; com tag válida ou lista vazia, resultado idêntico ao atual; RC-2 com 0 diferenças.
+- **Muda comportamento:** não com a lista vazia (padrão). A lista do PK2 só é cadastrada na RC-12.
+
+#### RC-8. Service e provider com componentes, atrás da chave
+- **Objetivo:**
+  - `OperationalRegimeBaselineProvider.Resolve`: com `RegimeCombinado:Habilitado = false`, **nenhuma** linha nova é lida e o caminho atual fica intacto. Com `true` e componentes cadastrados: carregar os componentes em ordem, recusar componentes da lista da RC-7, fazer uma consulta `BuscarHistoricoPorPeriodo` por componente com a mesma janela; falha em qualquer consulta ⇒ "não aplicado" (fallback global, como hoje).
+  - `OperationalRegimeBaselineService.Resolve`: sobrecarga com a lista de séries; a assinatura atual não muda.
+  - `OperationalRegimeBaselineResolution` ganha `CurrentRegimeKey`.
+- **Arquivos:** `OperationalRegimeBaselineProvider.cs`, `OperationalRegimeBaselineService.cs`; `OperationalRegimeBaselineProviderTests.cs`, `OperationalRegimeBaselineServiceTests.cs`.
+- **Aceite:**
+  - chave desligada **com** componentes cadastrados = resultado idêntico a sem componentes, inclusive sem consulta extra ao histórico (conferir com um `IHistoricoService` falso que conta as chamadas);
+  - chave ligada: 3 consultas, tupla correta, componente proibido recusado, falha de consulta ⇒ fallback;
+  - RC-2 com 0 diferenças.
+- **Muda comportamento:** **só com a chave** ligada **e** componentes cadastrados.
+
+#### RC-9. `RegimeKey` no diagnóstico e no log
+- **Objetivo:** campo aditivo `RegimeKey` em `BaselineDiagnostic` (`src/IAApi.Engine/Observability/DiagnosticContracts.cs`), preenchido em `PredictionDetectionPreparationService.PrepararAsync` / `CriarBaselineEfetivo`, e a chave na linha de log do regime aplicado. É só instrumentação: não entra em nenhuma decisão.
+- **Cuidado com contrato e regressão:** `ReplayDiagnosticJsonlExporter` usa `JsonIgnoreCondition.Never`. Onde o diagnóstico for serializado (exportador, endpoint de diagnóstico), a propriedade nova precisa de `[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]` para o JSON ficar igual com a chave desligada. Levantar todos os pontos de serialização na tarefa.
+- **Arquivos:** `DiagnosticContracts.cs`, `Services/AnomalyDetection/Orchestration/PredictionDetectionPreparationService.cs`; testes do diagnóstico e da preparação.
+- **Aceite:** com a chave desligada, JSON do diagnóstico e log idênticos aos atuais (teste); com a chave ligada, `RegimeKey` presente; RC-2 com 0 diferenças.
+- **Muda comportamento:** não na decisão. A saída de diagnóstico só muda com a chave ligada.
+
+#### RC-10. Replay com regime combinado
+- **Objetivo:** em `tools/Cp300OfflineReplay`:
+  - opção `--regime-combinado`, que liga a chave no replay; sem ela, `+` e `--regime-mapa` são recusados com erro;
+  - sintaxe `--regime TAG27=TAG42+TAG43+TAG46` e `--regime-mapa "TAG42=2:2;*:0"` (o mapa vale para aquela tag de regime em todas as configurações);
+  - `ValidateRegimes`: recusar TAG60–TAG81 em **qualquer** componente; componente que não existe no CSV ⇒ erro;
+  - cadastrar os componentes no SQLite em memória;
+  - coluna `chave_regime` **só** com `--regime-combinado` (sem ela, `Colunas` não muda e a saída é byte a byte a atual);
+  - no `.log`, cobertura por chave na janela de treino (pontos por classe e valores fora do mapa).
+- **Arquivos:** `tools/Cp300OfflineReplay/Cp300Replay.cs` (`ParseRegimes`, `ValidateRegimes`, `Colunas`, montagem do banco), `Program.cs` (uso), `README.md`; `IAApi.Tests/Cp300Replay/Cp300OfflineReplayTests.cs`.
+- **Aceite:** testes de parse (válido, TAG73 em qualquer posição, `+` sem `--regime-combinado`); teste golden da RC-2 inalterado; um teste golden novo com `--regime-combinado` sobre o CSV sintético.
+- **Muda comportamento:** não (ferramenta offline).
+
+#### RC-11. Equivalência com a etapa 0, critério da TAG29 e custo
+- **Objetivo:** rodar a Opção A real no replay e conferir contra a etapa 0.
+  1. **Regressão:** RC-2 completa com o código final e a chave desligada: 0 diferenças, byte a byte.
+  2. **Equivalência:** preset 1, madrugada e preset 6 (e o CSV de 48 h da RC-0) com `--regime-combinado` e a configuração de §6.2, comparados com `e0_*_combs`. Todas as colunas iguais, exceto `valor_regime` (a etapa 0 grava o código `RB0xS`; a Opção A grava o componente 1), `motivo_baseline` e a coluna nova `chave_regime`. Qualquer diferença tem de estar só nos minutos listados na RC-0.
+  3. **Metas de §3.1** com os números da Opção A, incluindo a contagem de `origem_baseline = Global`.
+  4. **TAG29 (§5.6, itens 1 e 4):** chave de regime, média, desvio, pontos e `origem_baseline` às 15:33 e 15:34. A detecção confirmada **não pode ficar depois de 15:34**. Se ficar, documentar a causa (com o resultado da RC-1) e **parar** antes da RC-12. Não ajustar limiar, pesos nem gates.
+  5. **Custo:** tempo do replay do preset 6 com a chave desligada × ligada (3 componentes), já com a RC-3.
+- **Arquivos:** nenhum código. Resultado como §7 deste documento; saídas em `dados/`.
+- **Aceite:** itens 1 a 5, com nível de evidência **confirmado no replay** (sem IF, multivariado nem latência; não é validação em planta).
+- **Muda comportamento:** não.
+
+#### RC-12. Ativação no ambiente de teste do PK2 (última etapa; exige aprovação explícita)
+- **Objetivo:**
+  - aplicar a migration da RC-5 no banco do PK2, com backup antes;
+  - cadastrar a lista de rótulos TAG60–TAG81 do PK2 (RC-7);
+  - cadastrar os componentes e mapas de §6.2 para TAG27–TAG32;
+  - ligar `AnomalyDetection:RegimeCombinado:Habilitado = true` **só** nesse ambiente.
+- **Arquivos:** configuração do ambiente e dados do banco do PK2; nenhum código.
+- **Aceite:**
+  - num preset 1 e num preset 6 do simulador, o diagnóstico (`tools/IntelligenceLabDump/Dump-Diagnostics.ps1`) mostra `RegimeKey` e `origem_baseline = OperationalRegime` nas tags das bombas, sem erros;
+  - alarmes das bombas na mesma ordem de grandeza do replay (RC-11);
+  - registrar como **validação no simulador**, não em planta real.
+- **Rollback:** chave em `false` (imediato, sem tocar no banco); depois `Ativo = false` por tag; `Down` da migration só se necessário.
+- **Muda comportamento:** **sim**. É a única tarefa que muda a detecção.
+
+### 6.4 Fora deste plano
+- Referência treinada por período e por regime (PROP §4): vai usar a chave da RC-4, mas é outra entrega.
+- TAG41 como classe "estação em falha/emergência" (§2.4).
+- Correções da TAG26, TAG24 e TAG22 (§5.4, item 7) e o item 13 do backlog.
+- O sinal de 13:37–13:38 no preset 1 (§5.4, item 6): só repetir a observação na RC-11; não conta como detecção.
