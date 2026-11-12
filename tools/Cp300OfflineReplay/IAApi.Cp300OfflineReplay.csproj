@@ -9,4 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="../../IAApi.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Mapa falha -> tags do subcomando "placar" (editavel). -->
+    <None Include="placar_falhas_cp300.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -1,0 +1,72 @@
+// Mapa usado pelo subcomando "placar": quais tags cada falha do simulador CP300 deve afetar.
+// Um alarme so conta como deteccao se cair numa tag listada aqui (e se a tag nao alarmava
+// nos N minutos antes da falha; ver README, secao 6). Editavel: comentarios e virgula final sao aceitos.
+//
+// Tokens aceitos em "tags":
+//   TAGnn            tag literal
+//   ALVO.<campo>     tag da bomba atingida (campo de "bombas"). Alvo do slot (TAG62/66/70):
+//                    1 = B-01, 2 = B-02, 0 = bomba principal no instante da injecao
+//                    (valor de "tagBombaPrincipal" no ultimo minuto antes do inicio da falha).
+//   OUTRA.<campo>    tag da outra bomba (reserva/auxiliar).
+//   CANAL            falhas de sensor (20-27): canal k = alvo % 100 (+100 = sentido negativo).
+//   *                todas as tags do replay (falhas de comunicacao).
+// Rotulos (TAG60-TAG81) sao recusados como tag afetada.
+//
+// Fontes: Docs/CENARIOS_CP300.md (secoes 2 e 4) e o catalogo de falhas de
+// Docs/Simulador/SIM_ANOMALIAS_CP300.c (codigos 05 e 11, que nao estao no CENARIOS).
+{
+  "tagBombaPrincipal": "TAG44",
+  "tagAnomaliaAtiva": "TAG73",
+  "slots": [
+    { "nome": "A", "codigo": "TAG61", "alvo": "TAG62", "severidade": "TAG63", "fase": "TAG64" },
+    { "nome": "B", "codigo": "TAG65", "alvo": "TAG66", "severidade": "TAG67", "fase": "TAG68" },
+    { "nome": "C", "codigo": "TAG69", "alvo": "TAG70", "severidade": "TAG71", "fase": "TAG72" }
+  ],
+  "bombas": {
+    "1": { "nome": "B-01", "corrente": "TAG27", "vibracao": "TAG29", "frequencia": "TAG31", "temperaturaEnrolamento": "TAG34", "temperaturaMancal": "TAG36" },
+    "2": { "nome": "B-02", "corrente": "TAG28", "vibracao": "TAG30", "frequencia": "TAG32", "temperaturaEnrolamento": "TAG35", "temperaturaMancal": "TAG37" }
+  },
+  "canaisSensor": {
+    "1": "TAG22", "2": "TAG23", "3": "TAG24", "4": "TAG25", "5": "TAG26", "6": "TAG27",
+    "7": "TAG28", "8": "TAG29", "9": "TAG30", "10": "TAG31", "11": "TAG32", "12": "TAG33",
+    "13": "TAG34", "14": "TAG35", "15": "TAG36", "16": "TAG37", "17": "TAG38", "18": "TAG39"
+  },
+  "falhas": {
+    "1":  { "nome": "Parada inesperada (inversor)", "origem": "CENARIOS §4 preset 2",
+            "tags": [ "ALVO.corrente", "ALVO.frequencia", "TAG24", "OUTRA.corrente", "OUTRA.vibracao", "OUTRA.frequencia" ] },
+    "2":  { "nome": "Obstrução do recalque", "origem": "CENARIOS §4 preset 1",
+            "tags": [ "ALVO.corrente", "ALVO.frequencia", "TAG33", "OUTRA.corrente", "OUTRA.vibracao", "OUTRA.frequencia" ] },
+    "3":  { "nome": "Entupimento do filtro de sucção", "origem": "CENARIOS §4 preset 2",
+            "tags": [ "TAG23", "ALVO.vibracao", "ALVO.corrente", "TAG24" ] },
+    "4":  { "nome": "Desgaste do rotor", "origem": "CENARIOS §4 preset 2",
+            "tags": [ "ALVO.frequencia", "ALVO.corrente", "TAG33", "OUTRA.corrente", "OUTRA.vibracao", "OUTRA.frequencia" ] },
+    "5":  { "nome": "Sobrecarga mecânica do motor", "origem": "catalogo do simulador (fora do CENARIOS; a confirmar)",
+            "tags": [ "ALVO.corrente", "TAG33", "ALVO.temperaturaEnrolamento" ] },
+    "6":  { "nome": "Vazamento na linha de recalque", "origem": "CENARIOS §4 preset 2",
+            "tags": [ "TAG25", "TAG31", "TAG32", "TAG27", "TAG28", "TAG33", "TAG22" ] },
+    "7":  { "nome": "Vazamento no reservatório", "origem": "CENARIOS §4 preset 2",
+            "tags": [ "TAG22", "TAG26" ] },
+    "8":  { "nome": "Falha de refrigeração do motor", "origem": "CENARIOS §4 preset 2",
+            "tags": [ "ALVO.temperaturaEnrolamento" ] },
+    "9":  { "nome": "Perda de lubrificação", "origem": "CENARIOS §4 preset 6",
+            "tags": [ "ALVO.temperaturaMancal", "ALVO.vibracao" ] },
+    "10": { "nome": "Desbalanceamento", "origem": "CENARIOS §4 preset 6",
+            "tags": [ "ALVO.vibracao" ] },
+    "11": { "nome": "Válvula de entrada travada", "origem": "catalogo do simulador (fora do CENARIOS; a confirmar)",
+            "tags": [ "TAG26", "TAG22" ] },
+    "12": { "nome": "Oscilação da malha de pressão", "origem": "CENARIOS §4 preset 2",
+            "tags": [ "TAG24", "TAG25", "TAG31", "TAG32", "TAG27", "TAG28", "TAG33" ] },
+    "20": { "nome": "Sensor congelado", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "21": { "nome": "Drift", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "22": { "nome": "Ruído excessivo", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "23": { "nome": "Intermitente", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "24": { "nome": "Valor errado (ganho)", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "25": { "nome": "Sem atualização", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "26": { "nome": "Circuito aberto", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "27": { "nome": "Saturação", "origem": "CENARIOS §4 preset 3", "tags": [ "CANAL" ] },
+    "30": { "nome": "Interrupção de comunicação", "origem": "CENARIOS §4 preset 4", "tags": [ "*" ] },
+    "31": { "nome": "Atraso de comunicação", "origem": "CENARIOS §4 preset 4", "tags": [ "*" ] },
+    "32": { "nome": "Perda de amostras", "origem": "CENARIOS §4 preset 4", "tags": [ "*" ] },
+    "33": { "nome": "Dados velhos", "origem": "CENARIOS §4 preset 4", "tags": [ "*" ] }
+  }
+}

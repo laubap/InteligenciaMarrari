@@ -3,7 +3,87 @@ using IAApi.Cp300OfflineReplay;
 
 // Replay offline CP300: nao inicia a API, nao consulta o Bridge, nao abre o
 // banco operacional (ia_config.db) e nao altera configuracao.
+// Subcomando "placar": so le CSVs (replay + gabarito) e o mapa JSON.
+if (args.Length > 0 && string.Equals(args[0], "placar", StringComparison.OrdinalIgnoreCase))
+    return Cp300PlacarCli.Run(args[1..]);
 return await Cp300ReplayCli.RunAsync(args);
+
+internal static class Cp300PlacarCli
+{
+    private const string Usage =
+        "Uso: dotnet run --project tools/Cp300OfflineReplay -- placar " +
+        "--replay <replay.csv> --gabarito <dados.csv> --saida <prefixo> " +
+        "[--mapa placar_falhas_cp300.json] [--janela-antes 20] [--duracao-minima 3] [--tolerancia-buraco 2] [--cliente PK2]";
+
+    public static int Run(string[] args)
+    {
+        var parsed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string[] valued = ["replay", "gabarito", "saida", "mapa", "janela-antes", "duracao-minima", "tolerancia-buraco", "cliente"];
+        for (var i = 0; i < args.Length; i++)
+        {
+            var name = args[i].StartsWith("--", StringComparison.Ordinal) ? args[i][2..] : null;
+            if (name is null || !valued.Contains(name, StringComparer.OrdinalIgnoreCase) || i + 1 >= args.Length)
+            {
+                Console.Error.WriteLine(name is null ? $"Argumento inesperado: {args[i]}" : $"Opcao invalida ou sem valor: {args[i]}");
+                Console.Error.WriteLine(Usage);
+                return 2;
+            }
+
+            parsed[name] = args[++i];
+        }
+
+        if (!parsed.ContainsKey("replay") || !parsed.ContainsKey("gabarito") || !parsed.ContainsKey("saida"))
+        {
+            Console.Error.WriteLine(Usage);
+            return 2;
+        }
+
+        try
+        {
+            var options = new Cp300PlacarOptions
+            {
+                CsvReplay = parsed["replay"],
+                CsvGabarito = parsed["gabarito"],
+                MapaPath = parsed.GetValueOrDefault("mapa"),
+                JanelaAntesMinutos = parsed.TryGetValue("janela-antes", out var n)
+                    ? int.Parse(n, NumberStyles.Integer, CultureInfo.InvariantCulture) : 20,
+                DuracaoMinimaMinutos = parsed.TryGetValue("duracao-minima", out var dur)
+                    ? int.Parse(dur, NumberStyles.Integer, CultureInfo.InvariantCulture) : 3,
+                ToleranciaBuracoMinutos = parsed.TryGetValue("tolerancia-buraco", out var tol)
+                    ? int.Parse(tol, NumberStyles.Integer, CultureInfo.InvariantCulture) : 2,
+                ClienteId = parsed.GetValueOrDefault("cliente")
+            };
+            var resultado = Cp300Placar.Calcular(options);
+            foreach (var aviso in resultado.Avisos)
+                Console.WriteLine("AVISO " + aviso);
+            foreach (var e in resultado.Eventos)
+                Console.WriteLine(
+                    $"Evento {e.Slot} {e.Codigo:00} {e.Inicio:yyyy-MM-dd HH:mm}-{e.Fim:HH:mm}: " +
+                    (e.Detectado
+                        ? $"detectado {e.PrimeiroAlarme:HH:mm} em {string.Join("+", e.TagsDeteccao)} ({e.DuracaoDeteccao} min seguidos), atraso {e.AtrasoMinutos} min, {e.SeveridadeNaDeteccao} permil"
+                        : "nao detectado") +
+                    (e.SinalBreve is { } breve
+                        ? $" | sinal breve {breve:HH:mm} em {string.Join("+", e.TagsSinalBreve)} ({e.DuracaoSinalBreve} min), atraso {e.AtrasoSinalBreve} min, {e.SeveridadeSinalBreve} permil"
+                        : ""));
+            Console.WriteLine(
+                $"Alarmes: {resultado.TotalAlarmes} = atribuidos {resultado.AlarmesAtribuidos} + coincidencias {resultado.AlarmesCoincidencia} + falsos fora {resultado.AlarmesFalsosFora}");
+            foreach (var arquivo in Cp300PlacarRelatorio.Gravar(resultado, parsed["saida"]))
+                Console.WriteLine("Saida: " + arquivo);
+            return 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            Console.Error.WriteLine(ex.Message);
+            Console.Error.WriteLine(Usage);
+            return 2;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"PLACAR CP300 FALHOU: {ex.Message}");
+            return 1;
+        }
+    }
+}
 
 internal static class Cp300ReplayCli
 {

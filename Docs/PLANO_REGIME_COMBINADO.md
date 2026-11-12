@@ -281,7 +281,7 @@ Minutos-tag com alarme. ✅ = atende a meta; ❌ = não atende.
    - É o mesmo efeito da TAG24 em 00:01–00:30 (P05).
    - Com uma noite anterior no histórico, provavelmente não aconteceriam [**hipótese**; confirmar com um CSV de 48 h].
 4. **O failover deixa de gerar alarmes** em `combs`: a B-01 parada vira regime próprio (classificada `Discrete`, detectores bloqueados; P20), e a B-02 sozinha de dia tem baseline próprio.
-5. **A detecção não piora nem melhora:** TAG29 às 15:32, como antes. Em `comb`/`combs` há um intervalo em 15:33–15:34 sem alarme (84 contra 86 minutos de falha), e o alarme volta contínuo de 15:35 a 16:51.
+5. **A detecção não piora nem melhora:** TAG29 às 15:32, como antes. Em `comb`/`combs` há um intervalo em 15:33–15:34 sem alarme (84 contra 86 minutos de falha), e o alarme volta contínuo de 15:35 a 16:51. **Ressalva:** esse intervalo atrasa a detecção confirmada de 15:34 para 15:37 (ver §5.6).
 6. **Sinal novo no preset 1** [hipótese, P06/P21]. Em `comb` e `combs`, as 4 tags das bombas alarmam às **13:37–13:38**, dentro da obstrução (777 ‰), quando a B-02 parte e as duas ficam em paralelo.
    - A frequência foi 435 contra 396 ± 7 no regime "paralelo" (≈5σ), e a vibração da B-01 202 contra 142 ± 9.
    - Na partida normal das 13:59–14:01, as mesmas tags ficaram com nota ≤ 6.
@@ -295,3 +295,27 @@ Minutos-tag com alarme. ✅ = atende a meta; ❌ = não atende.
 - Em relação ao regime recomendado atual: menos 25 % de alarmes no preset 1, menos 70 % na madrugada e menos 53 % no preset 6. Os alarmes do failover zeram, e a detecção da TAG29 continua às 15:32.
 - **Decisão:** a Opção A deve suportar **3 componentes** (estado próprio, estado da outra bomba e TAG46), com mapa de estados.
 - **Antes de implementar:** confirmar com um CSV que tenha uma noite anterior, para eliminar o artefato do fallback.
+
+### 5.6 Ponto a investigar na implementação da Opção A: atraso da detecção confirmada da TAG29 (preset 6)
+
+**O fato:** o primeiro alarme continua às 15:32, mas a **detecção confirmada** da TAG29 passou de **15:34** (`rec`) para **15:37** (`comb`/`combs`). O atraso vem do intervalo de 15:33–15:34 sem alarme (§5.4, item 5). Em detecção confirmada, o regime combinado **piorou** o resultado em 3 minutos. O item 5 de §5.4 só vale para o primeiro alarme.
+
+**O que já se vê nas saídas da etapa 0** (`dados/e0_preset6_{rec,comb,combs}.csv`, TAG29; confirmado no replay, ainda sem explicação):
+
+| Minuto | Valor | `rec`: nota final / decisão | `comb` | `combs` |
+|---|---|---|---|---|
+| 15:32 | 253 | 68,5 / 1 | 65,0 / 1 | 64,3 / 1 |
+| 15:33 | 256 | 60,9 / 1 | 56,0 / 0 | 54,8 / 0 |
+| 15:34 | 249 | 64,4 / 1 | 55,1 / 0 | 53,5 / 0 |
+| 15:35 | 268 | 73,4 / 1 | 62,1 / 1 | 61,0 / 1 |
+
+Limiar = 60.
+- Em `rec`, o baseline é `Global` (1.434 pontos, sem regime para a TAG29).
+- Em `comb`/`combs`, o baseline é `OperationalRegime` com `valor_regime = 1` (B-01 sozinha) em todos esses minutos: 494–495 pontos em `comb` e 434–435 em `combs`. Não houve troca de regime nem fallback no intervalo.
+- Nos três casos, a "Taxa de variação" cai de ~79–89 em 15:32 para ~6–7 em 15:33. Em `comb`/`combs`, Z-Score e EWMA já estão saturados em ~100 e não compensam a queda. Em `rec`, a nota fica pouco acima do limiar (60,9).
+
+**A investigar:**
+1. Confirmar, no runtime da Opção A (não só no replay com séries derivadas), qual chave de regime e qual baseline estavam ativos às 15:33 e às 15:34. Conferir média, desvio, pontos e `origem_baseline`.
+2. Explicar por que a nota final ficou abaixo de 60 com Z-Score e EWMA em 100. Abrir a contribuição de cada detector (Mediana e MAD, Taxa de variação, Persistência, Mudança de patamar) e comparar com `rec`. Hipótese a validar: o baseline do regime tem desvio e MAD menores, o que satura os detectores de nível. Assim, a nota passa a depender dos detectores de dinâmica, que caem quando o valor estabiliza.
+3. Verificar se a Persistência e a Mudança de patamar deveriam ter subido num desvio sustentado de ~+85 sobre a média do regime (~170).
+4. **Critério de aceite da Etapa 1:** a detecção confirmada da TAG29 no preset 6 não pode ficar depois de 15:34. Se ficar, documentar a causa antes de seguir. **Não** ajustar limiar, pesos ou gates sem aprovação.

@@ -1,6 +1,6 @@
 # Replay offline CP300 (Parte A)
 
-Reproduz, minuto a minuto, a detecção univariada de produção sobre o histórico exportado do Bridge. Gera um CSV com o detalhamento de cada detector.
+Reproduz, minuto a minuto, a detecção univariada de produção sobre o histórico exportado do Bridge. Gera um CSV com o detalhamento de cada detector. O subcomando `placar` (seção 6) compara essa saída com o gabarito do simulador por evento de falha.
 
 **Isolamento:** SQLite em memória, histórico lido do CSV. Não acessa Bridge, PSi4, CLP nem `ia_config.db`, e não altera código de runtime.
 
@@ -119,4 +119,49 @@ Uma linha por leitura e detector (6 por leitura). Se a leitura falhar antes do e
 
 **Como o detalhamento é obtido.** A resposta de produção não expõe tipo, origem do deadband nem motivo de entrada inválida. Por isso, para cada leitura, a ferramenta pede o mesmo `DetectorInput` ao `PredictionDetectionPreparationService` real e roda nele uma **segunda instância** do mesmo `EnsembleDetectionService`. A coluna `conferencia` compara a decisão e a nota dessa execução com as do `PredictionService` e confere se as contribuições somam a nota final.
 
-Fora do escopo desta parte: gabarito (TAG73 e slots) na saída e resumo de métricas (Parte B). Da Parte C já existem o treino por período e a trava de TAG73 (seção 2); o modo experimental de referência estável por regime (`Docs/PROPOSTA_BASELINE_ESTAVEL.md`, F0) ainda não.
+O gabarito não entra na saída do replay; a comparação com ele é feita pelo subcomando `placar` (seção 6). Da Parte C já existem o treino por período e a trava de TAG73 (seção 2); o modo experimental de referência estável por regime (`Docs/PROPOSTA_BASELINE_ESTAVEL.md`, F0) ainda não.
+
+## 6. Placar por evento (`placar`)
+
+Compara a saída de um replay com o gabarito do simulador **por evento de falha**, sem contar coincidências como acerto (`Docs/PROBLEMAS_ENCONTRADOS.md`, P21). Só lê os dois CSVs e o mapa JSON: não roda o replay, não acessa Bridge, PSi4, CLP nem banco.
+
+```powershell
+dotnet run --project tools/Cp300OfflineReplay -- placar `
+    --replay .\dados\e0_preset6_sem.csv --gabarito .\dados\cp300_10a11nov.csv `
+    --saida .\dados\placar_preset6_sem
+```
+
+| Opção | Efeito |
+|---|---|
+| `--replay` | CSV gerado pelo replay (seção 5). Usa `data_hora`, `tag`, `decisao_final` e `erro`. |
+| `--gabarito` | CSV de dados (`ClienteId,TagName,DataHora,Valor`) com os slots TAG61–TAG72 e a TAG73. Normalmente o mesmo `--entrada` do replay. |
+| `--saida P` | Prefixo dos arquivos gerados: `P.md`, `P_eventos.csv`, `P_por_tag.csv` e `P_falsos_por_hora.csv`. |
+| `--mapa` | Mapa falha → tags. Padrão: `placar_falhas_cp300.json` (copiado para a pasta do executável). |
+| `--janela-antes N` | Minutos antes da falha em que a tag não pode ter alarmado (padrão 20). `0` desliga a verificação. |
+| `--duracao-minima D` | Minutos **seguidos** de alarme na mesma tag elegível para contar como detecção (padrão 3). Sequências mais curtas saem como "sinal breve". `1` = qualquer alarme (regra sem duração). |
+| `--tolerancia-buraco M` | Buraco máximo, em minutos, entre leituras do mesmo código de falha dentro de um evento (padrão 2). |
+| `--cliente` | Necessário se o gabarito não tiver `ClienteId` ou tiver mais de um. |
+
+Código de saída: 0 = ok; 1 = erro de leitura; 2 = uso incorreto.
+
+### 6.1 Regras
+
+- **Alarme** = minuto-tag com `decisao_final = 1` (as 6 linhas de detector de uma leitura contam uma vez). Leituras com `erro` não contam como avaliadas nem como alarme.
+- **Evento** = minutos seguidos com o mesmo código ≠ 0 num slot (TAG61, TAG65, TAG69). Início e fim são o primeiro e o último minuto com o código. Slot ausente no gabarito gera um aviso (o CSV atual do PK2 não tem o slot C). Só entram eventos que se sobrepõem ao período do replay.
+- **Tags afetadas** vêm do mapa (`placar_falhas_cp300.json`, editável). Tokens: `TAGnn`; `ALVO.<campo>` e `OUTRA.<campo>` (bomba atingida e a outra); `CANAL` (falhas de sensor: canal = alvo % 100); `*` (todas as tags do replay). Alvo 0 = bomba principal no último minuto antes da falha (TAG44). Rótulos TAG60–TAG81 são recusados no mapa.
+- **Detecção (P21):** a primeira sequência de **≥ D minutos seguidos** de alarme (padrão 3), dentro do evento, numa tag **afetada** e que **não alarmou** nos N minutos antes do início. Se várias tags começam a sequência no mesmo minuto, todas aparecem.
+  - **1º alarme** = minuto em que a sequência começa; **confirmada às** = início + D − 1 (o minuto em que já dá para saber que ela durou D). **Atraso** = início da sequência − início do evento.
+  - A sequência é cortada no fim do evento: alarmes depois do último minuto da falha não contam.
+  - **Severidade** e **fase** = valor do slot (TAG63/67/71 e TAG64/68/72) no início da sequência.
+- **Sinal breve:** a primeira sequência com **menos de D minutos** numa tag elegível, com tag, minuto, duração, atraso, severidade e fase. Só aparece se vier **antes** da detecção (ou se não houver detecção), ao lado dela no relatório, para não perder a informação. Com `--duracao-minima 1` não há sinal breve.
+  - Tags afetadas que não estão no replay (ex.: TAG36 na perda de lubrificação) aparecem como "fora do replay"; tags excluídas aparecem com o número de alarmes na janela anterior.
+- **Classificação de todos os alarmes** (a soma dá o total):
+  - **Atribuídos:** dentro de um evento, numa tag elegível desse evento (independente da duração mínima: um sinal breve também entra aqui).
+  - **Coincidências:** com falha ativa (evento ou TAG73 = 1), mas não atribuídos. Um alarme atribuído a uma falha não conta como coincidência de outra falha sobreposta.
+  - **Falsos fora:** minutos sem evento e sem TAG73 = 1. Saem por tag e por hora do dia, com a soma de madrugada (00h–05h) e dia.
+
+### 6.2 Limitações
+
+- A regra é mecânica. A duração mínima separa alarmes de 1–2 minutos (ex.: preset 1 com regime combinado, 13:37, 2 min → sinal breve), mas também empurra a detecção quando há um buraco curto no alarme (ex.: preset 6 com regime combinado: 15:32 vira sinal breve de 1 min e a detecção passa a 15:35). Por isso as duas leituras saem lado a lado.
+- Alarmes atribuídos incluem tudo o que a tag elegível alarmou durante o evento, inclusive efeitos indiretos (ex.: TAG29 com a B-01 parada depois do failover do preset 6).
+- Atraso e severidade têm resolução de 1 minuto (amostragem do histórico); o início exato da falha pode estar até 1 min antes.

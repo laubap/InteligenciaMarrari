@@ -896,7 +896,7 @@ internal static class Cp300Csv
             ? "\"" + value.Replace("\"", "\"\"") + "\""
             : value;
 
-    private static List<string> Split(string line)
+    internal static List<string> Split(string line)
     {
         var fields = new List<string>();
         var current = new StringBuilder();

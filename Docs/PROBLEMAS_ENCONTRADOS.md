@@ -331,6 +331,21 @@
 - **Evidência:** confirmado no replay. No preset 1 sem regime, 31 alarmes dentro da falha, nenhum causado por ela (RES §2.1). Com TAG42, 27 alarmes na B-01 dentro da falha, que começaram 26 min antes (RES §4.2).
 - **[preset 6]** (RES6 §2.1, §2.3): dentro de 15:28–17:17, sem regime, **122** alarmes sem relação com a falha (reserva parada, válvula fechada, carga alta). Mais **64 no failover** (110 com regime): B-01 parada e B-02 sozinha. Esses alarmes são efeito da troca de bomba, mas o mesmo sinal aparece em operação normal, então **não contam como detecção**. A detecção real foi só a TAG29 (86 min).
 - **Solução:** a parte B do replay deve medir por **evento** e comparar com o comportamento antes e depois da falha.
+- **Ferramenta (12/11/2026):** subcomando `placar` de `tools/Cp300OfflineReplay` (README §6). Um alarme só conta como detecção se for numa tag que a falha afeta (mapa editável `placar_falhas_cp300.json`, montado a partir do CENARIOS §4), se essa tag não alarmou nos N minutos antes da falha (padrão 20) e se ficar em alarme **D minutos seguidos** (padrão 3). Sequências mais curtas saem ao lado, como **sinal breve**. Os demais alarmes com falha ativa saem como **coincidências**; os de fora das falhas, por tag e por hora.
+- **Validação do placar** (confirmado no replay; mesmos CSVs `dados/e0_*`; N = 20, D = 3):
+
+  | Replay | Evento | Detecção (≥ 3 min) | Sinal breve (< 3 min) | Documento | Alarmes: total = atribuídos + coincidências + fora | Documento |
+  |---|---|---|---|---|---|---|
+  | Preset 1, sem regime | 02 obstrução | Não (TAG27/31/28/30/32 alarmavam antes) | — | Não detectada (RES §2.1) | 245 = 0 + 31 + 214 | 245; 31 na falha; 18 + 196 fora (RES §2.1, §2.3) |
+  | Preset 1, regime recomendado | 02 obstrução | Não | — | Não detectada (RES §4.2) | 41 = 0 + 1 + 40 | 41 = 1 + 6 + 34 (RES §4.2) |
+  | Preset 1, combinado + set-point | 02 obstrução | **Não** | **TAG31, TAG30, TAG32 às 13:37, 2 min, atraso 9 min, 777 ‰** | Hipótese, não conta como detecção (PLANO §5.4, item 6) | 31 = 5 + 2 + 24 | 31; B-01 fora da falha 4 (PLANO §5.3) |
+  | Preset 6, sem regime / recomendado | 10 desbalanceamento | TAG29 às 15:32 (confirmada 15:34), atraso 4 min, 94 ‰ | — | 15:32 (RES6 §2.1); "≥ 3 min seguidos: 15:34" (RES6 §2.6) | 325 = 105 + 167 + 53 / 223 = 105 + 105 + 13 | 325 e 223; TAG29 86 + 19 no failover (RES6 §2.1) |
+  | Preset 6, todos | 09 lubrificação | Não (TAG29 já alarmava; TAG36 fora do replay) | — | "Sem detecção separável" (RES6 §2.1) | — | — |
+  | Preset 6, combinado + set-point | 10 desbalanceamento | TAG29 às **15:35** (confirmada 15:37), atraso 7 min, 161 ‰ | TAG29 às 15:32, 1 min, atraso 4 min, 94 ‰ | 15:32, com buraco em 15:33–15:34 (PLANO §5.3, §5.4 item 5) | 104 = 84 + 7 + 13 | 104; TAG29 84; falsos 20 = 7 + 13 (PLANO §5.3, §5.4) |
+
+  - Todos os totais, horários, atrasos e severidades conferem com os documentos. Também conferem as madrugadas (`e0_madrugada_sem`: 1.282, TAG24 = 300 de 00:01 a 05:00; `e0_madrugada_combs`: 198, B-01 = 82, B-02 = 32). Com `--duracao-minima 1` (sem duração), o preset 1 combinado dá "detectada às 13:37" e o preset 6 combinado, 15:32.
+  - **Efeito da duração mínima:** o preset 1 combinado passa a concordar com o PLANO (13:37 é sinal breve, não detecção). No preset 6 com regime combinado, o buraco de 2 min na TAG29 (15:33–15:34) atrasa a detecção confirmada em 3 min (15:34 → 15:37) em relação ao sem regime. Antes, os documentos não diferenciavam essas duas configurações nesse ponto.
+  - Os documentos separam à mão o failover (B-01 parada); o placar conta os alarmes da TAG29 no failover como atribuídos (105 = 86 + 19) e os das outras tags como coincidências.
 - **BACKLOG:** 3 (parte B).
 
 ### P22. TAG23 (sucção) com alarmes de madrugada
@@ -462,6 +477,7 @@ A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos 
 |---|---|---|
 | Exportação do histórico | `tools/Cp300Export/Export-Cp300Historico.ps1` | Baixa do Bridge (`GET /historico`) o histórico de um período, em pedaços com retentativa, e grava o CSV e os tempos por pedaço (`*.pedacos.csv`). **Acessa o Bridge e exige autorização.** |
 | Replay offline | `tools/Cp300OfflineReplay/` (`Program.cs`, `Cp300Replay.cs`, `README.md`) | Roda o código de produção minuto a minuto sobre o CSV, com treino "como em produção", e gera uma linha por leitura e detector com conferência. Opção `--regime TAGx=TAGy` (recusa TAG60–81). Sem Bridge nem banco real. |
+| Placar por evento | `tools/Cp300OfflineReplay/Cp300Placar.cs`, `placar_falhas_cp300.json`; subcomando `placar` (README §6) | Compara a saída do replay com o gabarito (slots TAG61–72 e TAG73) por evento: detecção, tag, minuto, atraso e severidade, com a regra do P21; alarmes falsos fora das falhas por tag e por hora. Só lê CSVs. Testes: `IAApi.Tests/Cp300Replay/Cp300PlacarTests.cs` (12, dados sintéticos) |
 | Testes do replay | `IAApi.Tests/Cp300Replay/Cp300OfflineReplayTests.cs` | 9 testes offline: degrau, reserva em 0, valor congelado, pesos, rótulo recusado e regime |
 | Dados e saídas (não versionados) | `dados/cp300_10a11nov.csv` (com os estados TAG41–46), `dados/replay_*.csv` | Entrada e resultados dos replays do preset 1 e da madrugada (RES §2 e §4) |
 
@@ -474,7 +490,7 @@ A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos 
 3. **Regime combinado para as bombas** (P03, P08 → BACKLOG **12**). É o que falta para a B-01, que ainda gera 566 alarmes de madrugada. Testar no replay antes de produção, com a mesma tabela da RES §4.
 4. **Medir a latência real** com o PERF_DIAG numa sessão autorizada (P10, P11 → BACKLOG **6**, **4**).
 5. **Treino por período e limpeza IQR** (P01, P09, P13 → BACKLOG **8**, **9**). Permitir treinar com um período limpo e proteger o IQR em séries quase constantes.
-6. **Replay dos outros presets e gabarito por evento** (P12, P21 → BACKLOG **3**, partes B e C). Rodar os presets 3, 5 e 6 e medir acerto por evento, para não contar coincidências. **[preset 6] feito por análise manual** (RES6 §2); falta a medição automática por evento.
+6. **Replay dos outros presets e gabarito por evento** (P12, P21 → BACKLOG **3**, partes B e C). Rodar os presets 3, 5 e 6 e medir acerto por evento, para não contar coincidências. **[preset 6] feito por análise manual** (RES6 §2). A medição automática por evento existe desde 12/11 (`placar`, P21) e reproduz os números dos presets 1 e 6; falta rodar os presets 3 e 5.
 7. **Detecção que use relação entre tags** (P06): criar um item no BACKLOG para avaliar o multivariado do PK2 com treino adequado (o grupo atual tem ~2 h) e, para a pressão, a análise TAG24 − TAG46 (BACKLOG **13**).
 8. **Detector de valor congelado ou falha de comunicação** (P12 → BACKLOG **10**), depois de medir os presets 3 e 4.
 9. **Só depois:** pesos e limiar do ensemble (P07 → BACKLOG **7**).
