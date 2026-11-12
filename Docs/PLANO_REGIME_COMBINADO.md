@@ -479,7 +479,7 @@ Coluna "muda comportamento":
 |---|---|---|---|
 | RC-0 | CSV de 48 h e equivalência da tupla (dados) | — | não |
 | RC-1 | Análise do atraso da TAG29 com as saídas da etapa 0 — **concluída em 12/11/2026 (§5.6.1)** | — | não |
-| RC-2 | Referência congelada e regressão byte a byte | — | não |
+| RC-2 | Referência congelada e regressão byte a byte — **concluída em 12/11/2026** | — | não |
 | RC-3 | Resolver com dois ponteiros | RC-2 | não (provado) |
 | RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) | RC-0 | não |
 | RC-5 | Modelo `TagRegimeComponenteIa` + migration | RC-4 | não |
@@ -520,6 +520,14 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - **Arquivos:** `tools/Cp300OfflineReplay/Compare-Replay.ps1` (novo), `IAApi.Tests/Cp300Replay/Cp300OfflineReplayTests.cs`, `IAApi.Tests/Cp300Replay/Golden/` (novo). O manifesto e as saídas reais ficam em `dados/` (não versionado).
 - **Aceite:** o script rodado duas vezes no código atual dá 0 diferenças; o teste golden passa; a suíte completa continua verde.
 - **Muda comportamento:** não.
+- **Resultado (12/11/2026, commit `e617d71`, sem mudança de runtime):**
+  - **Referência:** `Compare-Replay.ps1 -Gerar` rodou as 6 execuções `sem`/`rec` de §5.2 sobre `dados/cp300_10a11nov_derivado.csv` e gravou `dados/rc2_referencia/manifesto.json` (comandos, SHA-256 da entrada, do `appsettings.json` e de cada `.csv`) com cópia dos `.csv`/`.log`. Os 6 `.csv` têm o mesmo SHA-256 dos `e0_*_{sem,rec}.csv` e os logs são iguais linha a linha (fora `Saida:`).
+  - **Linhas ignoradas no log:** só `Saida: <caminho absoluto>`. Conferido no código: o replay não grava hora de execução nem duração.
+  - **Duas rodadas** (`dados/rc2_rodadas/rodada1` e `rodada2`): **0 diferenças** nas 6 execuções (CSV e log).
+  - **Golden:** `Golden_BombasComRegime_SaidaIdenticaAReferencia` (B-01 TAG29/TAG42, B-02 TAG30/TAG43, set-point TAG46; `--regime TAG29=TAG42, TAG30=TAG43`; pico de +100 na TAG29 por 5 min → 5 alarmes) compara a saída inteira com `IAApi.Tests/Cp300Replay/Golden/replay_bombas_regime.csv`, normalizando só fim de linha e BOM. Regravar de propósito: `IAAPI_ATUALIZAR_GOLDEN=1` (o teste grava e falha).
+  - **Testes executados:** só os da ferramenta (`Cp300OfflineReplayTests` + `Cp300PlacarTests`): 32/32. **A suíte completa não foi rodada** nesta tarefa.
+  - **Pendente:** incluir as execuções da RC-0 no manifesto quando o CSV de 48 h existir (`-Gerar -Sobrescrever`, ou um manifesto à parte).
+  - **Uso nas tarefas seguintes:** `.\tools\Cp300OfflineReplay\Compare-Replay.ps1` (código 0 = 0 diferenças; ~4–5 min).
 
 #### RC-3. Resolver com dois ponteiros
 - **Objetivo:** dentro do laço, trocar a busca linear de `FindCausalRegimePoint` por um ponteiro que só avança. O alinhamento cai de ≈ n²/2 para O(n + m) comparações, **com o mesmo resultado**.

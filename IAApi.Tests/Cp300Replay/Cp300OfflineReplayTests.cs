@@ -389,6 +389,102 @@ public sealed class Cp300OfflineReplayTests : IDisposable
             Options(input, output) with { InstanteTreino = null }));
     }
 
+    // --- RC-2: regressao golden ----------------------------------------------
+
+    private const string GoldenArquivo = "replay_bombas_regime.csv";
+    private const string VariavelAtualizarGolden = "IAAPI_ATUALIZAR_GOLDEN";
+
+    /// <summary>
+    /// Saida completa do replay (bomba, outra bomba e set-point, com --regime
+    /// simples) comparada com a referencia versionada em Golden/. Qualquer
+    /// mudanca de decisao, nota, baseline ou formato quebra o teste.
+    /// Comparacao exata do texto; so o fim de linha (CRLF/LF, por causa do
+    /// core.autocrlf) e o BOM sao normalizados.
+    /// Para regravar a referencia de proposito: IAAPI_ATUALIZAR_GOLDEN=1
+    /// (o teste grava o arquivo e falha, para nao passar sem revisao).
+    /// </summary>
+    [Fact]
+    public async Task Golden_BombasComRegime_SaidaIdenticaAReferencia()
+    {
+        var input = WriteBombasCsv();
+        var output = Path.Combine(_root, $"golden-{Guid.NewGuid():N}.csv");
+        var regimes = Cp300Replay.ParseRegimes(["TAG29=TAG42", "TAG30=TAG43"]);
+
+        var summary = await Cp300Replay.RunAsync(
+            Options(input, output, tags: ["TAG29", "TAG30"], regimes: regimes) with { FimReplay = T.AddMinutes(29) });
+
+        Assert.Equal(2 * 30, summary.Leituras);
+        Assert.Equal(0, summary.LeiturasComErro);
+        Assert.Equal(0, summary.Divergencias);
+
+        var atual = Normalizar(File.ReadAllText(output, Encoding.UTF8));
+        var golden = GoldenPath();
+        if (Environment.GetEnvironmentVariable(VariavelAtualizarGolden) == "1")
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(golden)!);
+            File.WriteAllText(golden, atual, new UTF8Encoding(false));
+            Assert.Fail($"Golden regravado em {golden}. Revise o diff e rode de novo sem {VariavelAtualizarGolden}.");
+        }
+
+        Assert.True(File.Exists(golden), $"Golden ausente: {golden} (gerar com {VariavelAtualizarGolden}=1).");
+        var esperado = Normalizar(File.ReadAllText(golden, Encoding.UTF8));
+
+        // O cenario cobre os dois caminhos do baseline e decisoes nos dois sentidos.
+        var rows = ReadOutput(output);
+        Assert.Contains(rows, r => r["origem_baseline"] == "OperationalRegime");
+        Assert.Contains(rows, r => r["decisao_final"] == "1");
+        Assert.Contains(rows, r => r["decisao_final"] == "0");
+
+        if (atual != esperado)
+        {
+            var a = esperado.Split('\n');
+            var b = atual.Split('\n');
+            var i = 0;
+            while (i < a.Length && i < b.Length && a[i] == b[i])
+                i++;
+            Assert.Fail($"Saida difere do golden na linha {i + 1} ({a.Length} x {b.Length} linhas).\n" +
+                        $"esperado: {(i < a.Length ? a[i] : "<fim>")}\natual:    {(i < b.Length ? b[i] : "<fim>")}");
+        }
+    }
+
+    private static string Normalizar(string texto) => texto.Replace("\r\n", "\n");
+
+    private static string GoldenPath([CallerFilePath] string arquivoFonte = "") =>
+        Path.Combine(Path.GetDirectoryName(arquivoFonte)!, "Golden", GoldenArquivo);
+
+    /// <summary>
+    /// B-01 (TAG29, estado TAG42) e B-02 (TAG30, estado TAG43), set-point TAG46.
+    /// Ciclo de 60 min: B-01 sozinha (20), as duas (20), B-02 sozinha (20).
+    /// Set-point alterna 450/380 a cada 45 min. Corrente ~ set-point/4 sozinha,
+    /// metade disso em paralelo, 0 parada. TAG29 tem pico de +100 de T+15 a T+19.
+    /// </summary>
+    private string WriteBombasCsv()
+    {
+        var path = Path.Combine(_root, "historico-bombas.csv");
+        var sb = new StringBuilder("ClienteId,TagName,DataHora,Valor\n");
+        for (var i = 0; i < TotalMinutos; i++)
+        {
+            var t = Inicio.AddMinutes(i);
+            var ts = t.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+            var fase = i % 60 / 20; // 0 = B-01 sozinha, 1 = as duas, 2 = B-02 sozinha
+            var b01 = fase < 2 ? 2 : 0;
+            var b02 = fase > 0 ? 2 : 0;
+            var setPoint = i / 45 % 2 == 0 ? 450 : 380;
+            var porBomba = fase == 1 ? setPoint / 8.0 : setPoint / 4.0;
+            var falha = t >= T.AddMinutes(15) && t < T.AddMinutes(20) ? 100 : 0;
+
+            Append(sb, "TAG29", ts, b01 == 2 ? porBomba + falha + Ruido(i, 2) : 0);
+            Append(sb, "TAG30", ts, b02 == 2 ? porBomba + Ruido(i, 5) : 0);
+            Append(sb, "TAG42", ts, b01);
+            Append(sb, "TAG43", ts, b02);
+            Append(sb, "TAG46", ts, setPoint);
+            Append(sb, "TAG73", ts, 0);
+        }
+
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+        return path;
+    }
+
     // ---------------------------------------------------------------------
 
     private static double EstadoRegime(DateTime t) =>

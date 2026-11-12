@@ -82,6 +82,18 @@ Regime TAG28 <- TAG43, pontos por estado na primeira janela movel: ...
 - A contagem por estado usa um alinhamento simplificado: o último estado até 2 min antes, com lag 0 (os padrões do modelo). A seleção real é feita pelo `OperationalRegimeHistoryResolver`; a contagem serve para ver se o período cobre os regimes.
 - O resumo da API (`Cp300ReplaySummary`) traz os mesmos dados: `TreinoInicio`, `TreinoFim`, `InicioReplay`, `PontosTreino`, `MinutosFalhaNoTreino` e `MinutosFalhaNaJanelaDoRegime`.
 
+### 2.4 Regressão byte a byte (`Compare-Replay.ps1`, RC-2)
+
+```powershell
+.\tools\Cp300OfflineReplay\Compare-Replay.ps1 -Gerar   # uma vez: referência em dados\rc2_referencia\
+.\tools\Cp300OfflineReplay\Compare-Replay.ps1          # depois de cada mudança: 0 diferenças = código 0
+```
+
+- `-Gerar` roda `sem` e `rec` de preset 1, madrugada e preset 6 (`Docs/PLANO_REGIME_COMBINADO.md` §5.2) e grava o manifesto (comandos e SHA-256 da entrada, do `appsettings.json` e de cada `.csv`). Recusa sobrescrever sem `-Sobrescrever`.
+- O modo padrão roda os comandos do manifesto em `dados\rc2_rodadas\<data_hora>` e compara cada `.csv` por SHA-256 e cada `.log` linha a linha, ignorando só a linha `Saida:` (caminho). Para se a entrada mudou; avisa se o `appsettings.json` mudou.
+- Opções: `-Somente preset6_rec`, `-Pasta`, `-SemBuild`, `-Configuracao` (padrão `Debug`, a mesma da etapa 0).
+- Teste golden sem dados industriais: `Cp300OfflineReplayTests.Golden_BombasComRegime_SaidaIdenticaAReferencia`, referência em `IAApi.Tests/Cp300Replay/Golden/`. Regravar de propósito com `IAAPI_ATUALIZAR_GOLDEN=1`.
+
 ## 3. O que é igual à produção
 
 - `PredictionService.Detectar` real, com `PredictionContextLoader`, preparação, ensemble, decisão, pós-decisão e gravação em `AnomaliaDetectada` (no SQLite em memória).
