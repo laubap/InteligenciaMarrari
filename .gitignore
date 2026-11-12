@@ -22,16 +22,17 @@ Results/
 Artifacts/
 db-backups/
 
-# Ferramentas históricas de análise
-Tools/*
-!tools/IAApi.LiveMonitor/
-!tools/IAApi.LiveMonitor/**
-!Tools/IAApi.Benchmarks/
-Tools/IAApi.Benchmarks/*
-!Tools/IAApi.Benchmarks/IAApi.Benchmarks.csproj
-!Tools/IAApi.Benchmarks/Program.cs
-!Tools/IAApi.Benchmarks/Benchmark/
-!Tools/IAApi.Benchmarks/Benchmark/**
+# Ferramentas (tools/): o código é versionado.
+# bin/ e obj/ já são ignorados pelas regras do topo, em qualquer pasta.
+# node_modules/, dist/ e .env ficam no .gitignore de cada ferramenta (ex.: tools/IAApi.LiveMonitor/.gitignore).
+tools/**/node_modules/
+tools/**/dist/
+tools/**/TestResults/
+tools/**/*.log
+
+# Dados exportados do Bridge/PSi4 (industriais, sensíveis) e resultados de teste, em qualquer pasta
+dados/
+TestResults/
 
 # Checks/backups históricos
 B319Check/
