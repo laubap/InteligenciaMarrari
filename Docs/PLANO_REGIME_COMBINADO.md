@@ -318,7 +318,109 @@ Limiar = 60.
 1. Confirmar, no runtime da Opção A (não só no replay com séries derivadas), qual chave de regime e qual baseline estavam ativos às 15:33 e às 15:34. Conferir média, desvio, pontos e `origem_baseline`.
 2. Explicar por que a nota final ficou abaixo de 60 com Z-Score e EWMA em 100. Abrir a contribuição de cada detector (Mediana e MAD, Taxa de variação, Persistência, Mudança de patamar) e comparar com `rec`. Hipótese a validar: o baseline do regime tem desvio e MAD menores, o que satura os detectores de nível. Assim, a nota passa a depender dos detectores de dinâmica, que caem quando o valor estabiliza.
 3. Verificar se a Persistência e a Mudança de patamar deveriam ter subido num desvio sustentado de ~+85 sobre a média do regime (~170).
-4. **Critério de aceite da Etapa 1:** a detecção confirmada da TAG29 no preset 6 não pode ficar depois de 15:34. Se ficar, documentar a causa antes de seguir. **Não** ajustar limiar, pesos ou gates sem aprovação.
+4. **Critério de aceite da Etapa 1:** ~~a detecção confirmada da TAG29 no preset 6 não pode ficar depois de 15:34~~. **Substituído em 12/11/2026 por "TAG29 com detecção confirmada até 15:37 no preset 6"** (decisão (a), ver §5.6.2). **Não** ajustar limiar, pesos ou gates sem aprovação.
+
+### 5.6.1 Resultado da RC-1 (12/11/2026)
+
+**Nível de evidência:** **confirmado no replay** (saídas `dados/e0_preset6_{rec,comb,combs}.csv`) e **confirmado no código** (detectores). Mediana e MAD foram recalculados à parte, a partir de `dados/cp300_10a11nov_derivado.csv`, e reproduzem exatamente as notas do detector "Mediana e MAD" do replay (72,3 / 75,9 / 68,3 em `comb`; 68,7 / 69,7 / 62,6 em `combs`). Nenhum código foi alterado.
+
+**Regra de "detecção confirmada"** (`Cp300Placar`): alarme por ≥ 3 minutos seguidos, confirmado no 3º minuto. `rec`: 15:32–15:34 ⇒ **15:34**. `comb`/`combs`: 15:32 sozinho é *sinal breve*; a sequência começa em 15:35 ⇒ **15:37**. O gabarito (TAG73) marca o início da falha às **15:28**.
+
+**Pesos** (`appsettings.json`, IF desligado): Z-Score, Mediana e MAD e EWMA 0,15; Taxa de variação, Persistência e Mudança de patamar 0,10. A nota final é a média ponderada (soma dos pesos = 0,75), então cada ponto de nota vale 0,20 ponto da final nos três primeiros e 0,133 nos outros três. Limiar = 60.
+
+#### Minuto a minuto, TAG29, 15:28–15:40
+
+**`rec`** (regime recomendado; a TAG29 não tem regime): baseline `Global` em todos os minutos, `valor_regime` vazio, média 114,7, desvio 60,2, 1.434 pontos, deadband 25.
+
+| Min | Valor | Z | MAD | EWMA | Taxa | Persist. | Patamar | **Final** | Decisão |
+|---|---|---|---|---|---|---|---|---|---|
+| 15:28 | 172 | 31,7 | 34,5 | 100 | 49,6 | 0 | 0 | 39,9 | 0 |
+| 15:29 | 192 | 42,8 | 54,8 | 100 | 48,2 | 0 | 0 | 45,9 | 0 |
+| 15:30 | 199 | 46,7 | 63,0 | 100 | 16,9 | 0 | 0 | 44,2 | 0 |
+| 15:31 | 216 | 56,1 | 82,4 | 100 | 41,0 | 0 | 0 | 53,2 | 0 |
+| 15:32 | 253 | 76,6 | 100 | 100 | 89,1 | 10,0 | 0 | **68,5** | 1 |
+| 15:33 | 256 | 78,2 | 100 | 100 | 7,2 | 32,5 | 0 | **60,9** | 1 |
+| 15:34 | 249 | 74,3 | 100 | 100 | 16,9 | 55,0 | 0 | **64,4** | 1 |
+| 15:35 | 268 | 84,9 | 100 | 100 | 45,8 | 77,5 | 0 | 73,4 | 1 |
+| 15:36 | 274 | 88,2 | 100 | 100 | 14,5 | 100 | 63,0 | 81,3 | 1 |
+| 15:37 | 287 | 95,4 | 100 | 100 | 31,3 | 100 | 97,3 | 89,6 | 1 |
+| 15:38 | 283 | 93,2 | 100 | 100 | 9,6 | 100 | 97,3 | 86,2 | 1 |
+| 15:39 | 333 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 1 |
+| 15:40 | 338 | 100 | 100 | 100 | 12,0 | 100 | 100 | 88,3 | 1 |
+
+**`combs`** (regime combinado + set-point): baseline `OperationalRegime` em todos os minutos, `valor_regime = 1` (B-01 sozinha, set-point 450), sem troca de regime nem fallback. Deadband 29,5–30.
+
+| Min | Valor | Média / desvio (pontos) | Z | MAD | EWMA | Taxa | Persist. | Patamar | **Final** | Decisão |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 15:28 | 172 | 169,5 / 27,1 (429) | 0 | 0 | 0 | 38,5 | 0 | 0 | 5,1 | 0 |
+| 15:29 | 192 | 169,5 / 27,1 (430) | 0 | 0 | 0 | 42,8 | 0 | 0 | 5,7 | 0 |
+| 15:30 | 199 | 169,5 / 27,1 (431) | 0 | 0 | 0 | 15,0 | 0 | 0 | 2,0 | 0 |
+| 15:31 | 216 | 169,6 / 27,1 (432) | 57,1 | 37,3 | 0 | 36,4 | 0 | 0 | 23,7 | 0 |
+| 15:32 | 253 | 169,7 / 27,1 (433) | 100 | 68,7 | 100 | 79,2 | 0 | 0 | **64,3** | 1 |
+| 15:33 | 256 | 169,9 / 27,4 (434) | 100 | 69,7 | 100 | 6,4 | **0** | 0 | **54,8** | **0** |
+| 15:34 | 249 | 170,1 / 27,7 (435) | 95,1 | 62,6 | 100 | 15,0 | **0** | 0 | **53,5** | **0** |
+| 15:35 | 268 | 170,3 / 27,9 (436) | 100 | 77,9 | 100 | 40,7 | 0 | 0 | 61,0 | 1 |
+| 15:36 | 274 | 170,3 / 27,9 (437) | 100 | 82,7 | 100 | 12,8 | 0 | 63,0 | 66,7 | 1 |
+| 15:37 | 287 | 170,3 / 27,9 (438) | 100 | 93,1 | 100 | 27,8 | 0 | 97,3 | 75,3 | 1 |
+| 15:38 | 283 | 170,3 / 27,9 (439) | 100 | 89,9 | 100 | 8,6 | 0 | 97,3 | 72,1 | 1 |
+| 15:39 | 333 | 170,3 / 27,9 (440) | 100 | 100 | 100 | 100 | 10,0 | 100 | 88,0 | 1 |
+| 15:40 | 338 | 170,3 / 27,9 (441) | 100 | 100 | 100 | 10,7 | 32,5 | 100 | 79,1 | 1 |
+
+**`comb`** segue o mesmo padrão, com média 165,7 / desvio 28,3 às 15:33 (494 pontos, `valor_regime = 1`): MAD 75,9 e 68,3 e Persistência 0 às 15:33–15:34, finais 56,0 e 55,1; Persistência só sai de 0 às 15:39.
+
+#### Mediana e MAD por trás das notas (recalculados; reproduzem o replay)
+
+| Às 15:33 | Pontos | Mediana | MAD | Escala robusta (1,4826·MAD) | z modificado de 256 | Valor a partir do qual o ponto está "fora" (z ≥ 3,5) |
+|---|---|---|---|---|---|---|
+| `rec` (24 h, todos os estados) | 1.434 | 139,0 | 18,0 | 26,7 | **4,38** | 232 |
+| `comb` (B-01 sozinha) | 494 | 163,5 | 23,5 | 34,8 | **2,65** | 285 |
+| `combs` (B-01 sozinha, 450) | 434 | 171,0 | 23,5 | 34,8 | **2,44** | 293 |
+
+#### Causa
+
+1. **O que derruba a nota às 15:33–15:34 é a Persistência em 0, junto com o MAD abaixo da saturação.** Diferença de `comb` para `rec`, em pontos da nota final:
+
+   | Detector | 15:33 | 15:34 |
+   |---|---|---|
+   | Z-Score (satura com o regime) | +4,4 | +4,6 |
+   | Mediana e MAD | −4,8 | −6,3 |
+   | Persistência | −4,3 | −7,3 |
+   | Taxa de variação | −0,1 | −0,3 |
+   | EWMA e Mudança de patamar | 0 | 0 |
+   | **Total** | **−4,9** (60,9 → 56,0) | **−9,3** (64,4 → 55,1) |
+
+   Só com a Persistência de `rec`, `comb` ficaria em 60,4 e 62,4, acima do limiar, sem o buraco.
+2. **Por que a Persistência fica em 0** (confirmado no código, `PersistenceDetector.Detectar`): ela só começa a contar se o **valor atual** estiver "fora", e "fora" é o **mesmo critério do detector Mediana e MAD**: z modificado = 0,6745·|valor − mediana| / MAD ≥ `MadThreshold` (3,5), com mediana e MAD do histórico passado aos detectores. Com o regime, esse histórico é o do regime "B-01 sozinha": mediana mais alta (139 → 164–171) e MAD mais largo (18 → 23,5). O limite de "fora" sobe de 232 para 285–293. Os valores de 15:32–15:38 (249–287) ficam abaixo, e a Persistência só começa com 333, às 15:39.
+3. **A hipótese de §5.6 estava só meio certa.**
+   - Certo: o **desvio** do regime é bem menor (27–28 contra 60), por isso o Z-Score satura.
+   - Errado: o **MAD do regime é maior**, não menor (23,5 contra 18). O global tem mediana 139 e MAD estreito porque é dominado pelos pontos em paralelo (~140), onde 256 parece muito longe.
+   - A queda da Taxa de variação de 15:32 para 15:33 (~80–89 → ~6–7) acontece igual nas três configurações; **não** é a causa.
+4. **Contaminação do baseline pela falha: descartada como causa.** O histórico do regime às 15:33 contém 14 minutos com TAG73 ≠ 0 (13:28–13:36 do preset 1 e 15:28–15:32 do próprio preset 6). Sem eles, o z modificado de 256 vai de 2,65 para 2,76 (`comb`) e de 2,44 para 2,62 (`combs`): continua abaixo de 3,5. O gabarito foi usado só para essa conferência, nunca como entrada.
+5. **Em resumo:** a seleção do regime funcionou como projetado (regime 1, sem troca, sem fallback). O atraso é consequência de um baseline **mais correto**. Contra a operação normal da B-01 sozinha, 249–256 é um desvio moderado (z modificado 2,2–2,7) e não extremo. Em `rec`, a detecção às 15:34 foi ajudada pela mistura de estados no baseline global, que é exatamente o que o regime combinado corrige. A previsão de §3.1 ("a TAG29 não deve detectar mais cedo; o ganho está nos falsos alarmes") se confirma, agora com o custo de 3 minutos na confirmação.
+
+#### Isso muda o desenho da Opção A?
+
+- **Não muda a tupla, o mapa, a chave nem a ordem das tarefas.** O efeito vem dos detectores e do ensemble aplicados a um baseline correto. A Opção A real vai selecionar os mesmos pontos que `combs` e, portanto, **deve reproduzir 15:37** (a confirmar na RC-11).
+- **O critério de aceite original da RC-11 (item 4: "não depois de 15:34") falharia como estava escrito.** Pela regra do próprio plano, isso exigiria parar antes da RC-12. Opções apresentadas (a decisão está em §5.6.2):
+  - (a) aceitar o atraso de 3 min como custo conhecido, em troca de −53 % de alarmes no preset 6 e failover sem alarmes, e mudar o critério para "detecção confirmada ≤ a da etapa 0 `combs` (15:37)"; ou
+  - (b) manter o critério e tratar a sensibilidade dos detectores dentro do regime como tarefa separada (backlog 7). Isso muda a decisão e exige aprovação; **nenhum limiar, peso ou gate foi alterado**.
+- **Duas observações para o futuro, sem mudar a Opção A:**
+  - **Fontes diferentes de escala** (confirmado no código): Z-Score e EWMA usam média e desvio **depois** da limpeza IQR (`TagProfileStatisticsCalculator`). Mediana e MAD e Persistência usam o histórico do regime **antes** da limpeza (comentário em `OperationalRegimeBaselineService.Resolve`). Por isso o Z satura (escala 27) enquanto o MAD não (escala 35). Isso já acontece hoje com o regime de uma tag; mudar altera a decisão e fica fora deste plano.
+  - **"B-01 sozinha" não é homogêneo** [hipótese]: a TAG29 no regime 1 tem mediana ~197 em 11/11 12:55–14:25 e ~152 no resto das 24 h. Pode faltar uma dimensão (demanda ou válvula), o que a Opção A suportaria como 4º componente. Investigar só se a RC-0 ou a RC-11 mostrarem que importa.
+
+### 5.6.2 Decisão (12/11/2026): opção (a), atraso de 3 minutos aceito como custo conhecido
+
+**Novo critério da RC-11, item 4:** TAG29 com **detecção confirmada até 15:37** no preset 6 (antes: até 15:34). O primeiro alarme continua com meta ≤ 15:32 (§3.1).
+
+**Justificativa:**
+- **Baseline mais correto.** O atraso não é defeito da seleção de regime. Ele vem de comparar a TAG29 com a operação normal da B-01 sozinha, em vez de um baseline global que mistura parada, sozinha e paralelo (§5.6.1, causa 5).
+- **Menos alarmes no preset 6.** Em `combs`, contra o regime recomendado atual (`rec`), o total de alarmes cai 53 % (223 → 104 minutos-tag) e os falsos fora da falha caem de 27 para 20 (§5.3).
+- **Zero alarmes no failover** (B-01 parada, B-02 sozinha): 110 → 0 minutos-tag (§5.3).
+
+**O que não muda:**
+- Nenhum limiar, peso ou gate foi alterado.
+- A opção (b) (sensibilidade dos detectores dentro do regime) e a heterogeneidade do regime "B-01 sozinha" viraram itens futuros do backlog (14 e 15), fora deste plano.
+- Se a Opção A real ficar **depois de 15:37** na RC-11, vale a regra original: documentar a causa e parar antes da RC-12.
 
 ---
 
@@ -376,7 +478,7 @@ Coluna "muda comportamento":
 | # | Tarefa | Depende de | Muda comportamento |
 |---|---|---|---|
 | RC-0 | CSV de 48 h e equivalência da tupla (dados) | — | não |
-| RC-1 | Análise do atraso da TAG29 com as saídas da etapa 0 | — | não |
+| RC-1 | Análise do atraso da TAG29 com as saídas da etapa 0 — **concluída em 12/11/2026 (§5.6.1)** | — | não |
 | RC-2 | Referência congelada e regressão byte a byte | — | não |
 | RC-3 | Resolver com dois ponteiros | RC-2 | não (provado) |
 | RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) | RC-0 | não |
@@ -510,7 +612,8 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   1. **Regressão:** RC-2 completa com o código final e a chave desligada: 0 diferenças, byte a byte.
   2. **Equivalência:** preset 1, madrugada e preset 6 (e o CSV de 48 h da RC-0) com `--regime-combinado` e a configuração de §6.2, comparados com `e0_*_combs`. Todas as colunas iguais, exceto `valor_regime` (a etapa 0 grava o código `RB0xS`; a Opção A grava o componente 1), `motivo_baseline` e a coluna nova `chave_regime`. Qualquer diferença tem de estar só nos minutos listados na RC-0.
   3. **Metas de §3.1** com os números da Opção A, incluindo a contagem de `origem_baseline = Global`.
-  4. **TAG29 (§5.6, itens 1 e 4):** chave de regime, média, desvio, pontos e `origem_baseline` às 15:33 e 15:34. A detecção confirmada **não pode ficar depois de 15:34**. Se ficar, documentar a causa (com o resultado da RC-1) e **parar** antes da RC-12. Não ajustar limiar, pesos nem gates.
+  4. **TAG29 (§5.6, itens 1 e 4):** chave de regime, média, desvio, pontos e `origem_baseline` às 15:33 e 15:34. **Critério: TAG29 com detecção confirmada até 15:37 no preset 6.** Se ficar depois, documentar a causa e **parar** antes da RC-12. Não ajustar limiar, pesos nem gates.
+     - **Origem do critério:** decisão (a) de 12/11/2026 (§5.6.2). O critério anterior era 15:34; o atraso de 3 min, explicado na RC-1 (§5.6.1), foi aceito como custo conhecido.
   5. **Custo:** tempo do replay do preset 6 com a chave desligada × ligada (3 componentes), já com a RC-3.
 - **Arquivos:** nenhum código. Resultado como §7 deste documento; saídas em `dados/`.
 - **Aceite:** itens 1 a 5, com nível de evidência **confirmado no replay** (sem IF, multivariado nem latência; não é validação em planta).
@@ -535,3 +638,4 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - TAG41 como classe "estação em falha/emergência" (§2.4).
 - Correções da TAG26, TAG24 e TAG22 (§5.4, item 7) e o item 13 do backlog.
 - O sinal de 13:37–13:38 no preset 1 (§5.4, item 6): só repetir a observação na RC-11; não conta como detecção.
+- Sensibilidade dos detectores dentro do regime (backlog 14) e heterogeneidade do regime "B-01 sozinha" (backlog 15), ambas saídas da RC-1 (§5.6.2).
