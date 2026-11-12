@@ -9,10 +9,11 @@ internal static class Cp300ReplayCli
 {
     private const string Usage =
         "Uso: dotnet run --project tools/Cp300OfflineReplay -- " +
-        "--entrada <historico.csv> --saida <replay.csv> --treino-ate <yyyy-MM-ddTHH:mm:ss> " +
+        "--entrada <historico.csv> --saida <replay.csv> " +
+        "(--treino-ate <yyyy-MM-ddTHH:mm:ss> | --treino-inicio <data> --treino-fim <data> [--inicio <data>]) " +
         "[--fim <yyyy-MM-ddTHH:mm:ss>] [--cliente PK2] [--tags TAG22,TAG23,...] " +
         "[--appsettings appsettings.json] [--horas-historico N] [--historico-inclui-atual] " +
-        "[--regime TAGx=TAGy]... [--verbose]";
+        "[--regime TAGx=TAGy]... [--permitir-falha-no-treino] [--verbose]";
 
     public static async Task<int> RunAsync(string[] args)
     {
@@ -33,7 +34,7 @@ internal static class Cp300ReplayCli
 
         if (!parsed.TryGetValue("entrada", out var entrada) || entrada is null ||
             !parsed.TryGetValue("saida", out var saida) || saida is null ||
-            !parsed.TryGetValue("treino-ate", out var treinoAte) || treinoAte is null)
+            (!parsed.ContainsKey("treino-ate") && !parsed.ContainsKey("treino-inicio") && !parsed.ContainsKey("treino-fim")))
         {
             Console.Error.WriteLine(Usage);
             return 2;
@@ -47,7 +48,11 @@ internal static class Cp300ReplayCli
             {
                 CsvEntrada = entrada,
                 CsvSaida = saida,
-                InstanteTreino = ParseDate(treinoAte),
+                InstanteTreino = OptionalDate(parsed, "treino-ate"),
+                TreinoInicio = OptionalDate(parsed, "treino-inicio"),
+                TreinoFim = OptionalDate(parsed, "treino-fim"),
+                InicioReplay = OptionalDate(parsed, "inicio"),
+                PermitirFalhaNoTreino = parsed.ContainsKey("permitir-falha-no-treino"),
                 FimReplay = parsed.TryGetValue("fim", out var fim) && fim is not null ? ParseDate(fim) : null,
                 ClienteId = parsed.GetValueOrDefault("cliente"),
                 Tags = parsed.TryGetValue("tags", out var tags) && tags is not null
@@ -73,6 +78,13 @@ internal static class Cp300ReplayCli
             stdout.WriteLine($"Saida: {Path.GetFullPath(saida)}");
             return summary.Divergencias == 0 ? 0 : 1;
         }
+        catch (ArgumentException ex)
+        {
+            // Combinacao invalida de opcoes (ex.: --treino-ate com --treino-inicio).
+            Console.Error.WriteLine(ex.Message);
+            Console.Error.WriteLine(Usage);
+            return 2;
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"REPLAY CP300 FALHOU: {ex.Message}");
@@ -84,14 +96,17 @@ internal static class Cp300ReplayCli
         }
     }
 
+    private static DateTime? OptionalDate(Dictionary<string, string?> parsed, string name) =>
+        parsed.TryGetValue(name, out var text) && text is not null ? ParseDate(text) : null;
+
     private static DateTime ParseDate(string text) =>
         DateTime.ParseExact(text, ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm:ss"],
             CultureInfo.InvariantCulture, DateTimeStyles.None);
 
     private static Dictionary<string, string?> Parse(string[] args, List<string> regimeArgs)
     {
-        string[] flags = ["historico-inclui-atual", "verbose"];
-        string[] valued = ["entrada", "saida", "treino-ate", "fim", "cliente", "tags", "appsettings", "horas-historico"];
+        string[] flags = ["historico-inclui-atual", "verbose", "permitir-falha-no-treino"];
+        string[] valued = ["entrada", "saida", "treino-ate", "treino-inicio", "treino-fim", "inicio", "fim", "cliente", "tags", "appsettings", "horas-historico"];
         var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < args.Length; i++)
         {

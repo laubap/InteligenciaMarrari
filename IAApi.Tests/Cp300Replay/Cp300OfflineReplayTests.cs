@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using IAApi.Cp300OfflineReplay;
 
@@ -211,14 +212,193 @@ public sealed class Cp300OfflineReplayTests : IDisposable
         Assert.Equal(2, Cp300Replay.ParseRegimes(["TAG27=TAG42,TAG28=TAG43"]).Count);
     }
 
+    // --- Treino por periodo e trava de TAG73 --------------------------------
+
+    [Fact]
+    public async Task TreinoPorPeriodo_IgualAo24hAntesDeT_GeraSaidaIdentica()
+    {
+        var input = WriteCsv();
+        var ate = Path.Combine(_root, $"ate-{Guid.NewGuid():N}.csv");
+        var periodo = Path.Combine(_root, $"periodo-{Guid.NewGuid():N}.csv");
+
+        var sAte = await Cp300Replay.RunAsync(Options(input, ate));
+        var sPeriodo = await Cp300Replay.RunAsync(Options(input, periodo) with
+        {
+            InstanteTreino = null, TreinoInicio = Inicio, TreinoFim = T
+        });
+
+        // [T - 2 h, T) por periodo = --treino-ate T com janela de 2 h.
+        Assert.Equal(File.ReadAllText(ate), File.ReadAllText(periodo));
+        Assert.Equal(sAte.PontosTreino, sPeriodo.PontosTreino);
+        Assert.All(sPeriodo.PontosTreino.Values, n => Assert.Equal(120, n));
+        Assert.Equal(Inicio, sPeriodo.TreinoInicio);
+        Assert.Equal(T, sPeriodo.TreinoFim);
+        Assert.Equal(T, sPeriodo.InicioReplay);
+        Assert.Equal(0, sPeriodo.MinutosFalhaNoTreino);
+    }
+
+    [Fact]
+    public async Task TreinoPorPeriodo_UsaSoOIntervalo_ERelataPontosPorTag()
+    {
+        var input = WriteCsv();
+        var output = Path.Combine(_root, $"curto-{Guid.NewGuid():N}.csv");
+        var log = new StringWriter();
+        var curtoInicio = Inicio.AddMinutes(30);
+        var curtoFim = Inicio.AddMinutes(90);
+
+        var summary = await Cp300Replay.RunAsync(Options(input, output) with
+        {
+            InstanteTreino = null, TreinoInicio = curtoInicio, TreinoFim = curtoFim, InicioReplay = T, Log = log
+        });
+
+        Assert.All(summary.PontosTreino.Values, n => Assert.Equal(60, n));
+        Assert.Equal(60 * 3, summary.Leituras);
+        var texto = log.ToString();
+        Assert.Contains("periodo escolhido", texto);
+        Assert.Contains($"[{curtoInicio:O}, {curtoFim:O})", texto);
+        Assert.Contains("Perfil TAG22: pontos_treino=60", texto);
+
+        // O perfil muda com o periodo: a media global da TAG22 difere do treino de 2 h.
+        var (_, padrao) = await RunAsync();
+        var mediaPeriodo = D(ReadOutput(output).First(r => r["tag"] == "TAG22")["media"]);
+        var mediaPadrao = D(padrao.First(r => r["tag"] == "TAG22")["media"]);
+        Assert.NotEqual(mediaPadrao, mediaPeriodo);
+    }
+
+    [Fact]
+    public async Task TravaTag73_RecusaTreinoComFalha_EPermiteComOpcaoExplicita()
+    {
+        // Falha rotulada de 01:00 a 01:09 (10 min) dentro do treino.
+        var input = WriteCsv("falha-no-treino.csv", t => t >= Inicio.AddHours(1) && t < Inicio.AddMinutes(70));
+
+        var recusaAte = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Cp300Replay.RunAsync(Options(input, Path.Combine(_root, "x1.csv"))));
+        Assert.Contains("TAG73", recusaAte.Message);
+        Assert.Contains("--permitir-falha-no-treino", recusaAte.Message);
+        Assert.Contains("10 min", recusaAte.Message);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Cp300Replay.RunAsync(
+            Options(input, Path.Combine(_root, "x2.csv")) with
+            {
+                InstanteTreino = null, TreinoInicio = Inicio, TreinoFim = T
+            }));
+
+        var log = new StringWriter();
+        var forcado = await Cp300Replay.RunAsync(Options(input, Path.Combine(_root, "x3.csv")) with
+        {
+            PermitirFalhaNoTreino = true, Log = log
+        });
+        Assert.Equal(10, forcado.MinutosFalhaNoTreino);
+        Assert.Contains("AVISO Trava TAG73", log.ToString());
+
+        // Periodo que evita a falha: aceito sem a opcao.
+        var limpo = await Cp300Replay.RunAsync(Options(input, Path.Combine(_root, "x4.csv")) with
+        {
+            InstanteTreino = null, TreinoInicio = Inicio.AddMinutes(70), TreinoFim = T
+        });
+        Assert.Equal(0, limpo.MinutosFalhaNoTreino);
+        Assert.All(limpo.PontosTreino.Values, n => Assert.Equal(50, n));
+    }
+
+    [Fact]
+    public async Task TravaTag73_FalhaDentroDoReplay_NaoBloqueia()
+    {
+        // Falha so depois de T (e o cenario em teste): treino limpo, replay roda.
+        var input = WriteCsv("falha-no-replay.csv", t => t >= T.AddMinutes(10) && t < T.AddMinutes(20));
+        var summary = await Cp300Replay.RunAsync(Options(input, Path.Combine(_root, "x.csv")));
+        Assert.Equal(0, summary.MinutosFalhaNoTreino);
+        Assert.Equal(60 * 3, summary.Leituras);
+    }
+
+    [Fact]
+    public async Task TravaTag73_SemTag73NoCsv_AvisaENaoVerifica()
+    {
+        var input = WriteCsv("sem-rotulo.csv", _ => false, comRotulo: false);
+        var log = new StringWriter();
+        var summary = await Cp300Replay.RunAsync(Options(input, Path.Combine(_root, "x.csv")) with { Log = log });
+        Assert.Null(summary.MinutosFalhaNoTreino);
+        Assert.Contains("TAG73 ausente no CSV, nao verificada", log.ToString());
+    }
+
+    [Fact]
+    public async Task Regime_UsaJanelaMovelDeProducao_ComTravaNaParteAnteriorAoReplay()
+    {
+        // Treino por periodo [00:00, 00:50) limpo; falha rotulada em 01:20-01:24,
+        // fora do treino mas dentro da janela movel [T - 2 h, T) usada pelo regime.
+        var input = WriteRegimeCsv("regime-falha-janela.csv",
+            t => t >= Inicio.AddMinutes(80) && t < Inicio.AddMinutes(85));
+        var regimes = Cp300Replay.ParseRegimes(["TAG30=TAG43"]);
+        Cp300ReplayOptions Base(string nome) => Options(input, Path.Combine(_root, nome), tags: ["TAG30"]) with
+        {
+            InstanteTreino = null, TreinoInicio = Inicio, TreinoFim = Inicio.AddMinutes(50), InicioReplay = T
+        };
+
+        // Sem --regime: so o treino e verificado, e ele esta limpo.
+        var semRegime = await Cp300Replay.RunAsync(Base("sem.csv"));
+        Assert.Equal(0, semRegime.MinutosFalhaNoTreino);
+        Assert.Null(semRegime.MinutosFalhaNaJanelaDoRegime);
+
+        // Com --regime: a janela movel do regime contem a falha -> recusado.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Cp300Replay.RunAsync(Base("com.csv") with { Regimes = regimes }));
+        Assert.Contains("janela movel do regime", ex.Message);
+        Assert.Contains("5 min", ex.Message);
+
+        // Forcado: roda com o comportamento de producao e registra o periodo efetivo.
+        var log = new StringWriter();
+        var output = Path.Combine(_root, $"forcado-{Guid.NewGuid():N}.csv");
+        var forcado = await Cp300Replay.RunAsync(Base("y.csv") with
+        {
+            CsvSaida = output, Regimes = regimes, PermitirFalhaNoTreino = true, Log = log
+        });
+        Assert.Equal(5, forcado.MinutosFalhaNaJanelaDoRegime);
+        var texto = log.ToString();
+        Assert.Contains("baseline movel de 2 h (producao)", texto);
+        Assert.Contains($"dados anteriores ao replay usados: [{Inicio:O}, {T:O})", texto);
+        Assert.Contains("Regime TAG30 <- TAG43, pontos por estado no treino: 0=30 2=20", texto);
+        Assert.Contains("Regime TAG30 <- TAG43, pontos por estado na primeira janela movel: 0=60 2=60", texto);
+        Assert.Contains(ReadOutput(output), r => r["origem_baseline"] == "OperationalRegime");
+    }
+
+    [Fact]
+    public async Task TreinoPorPeriodo_RecusaCombinacoesInvalidas()
+    {
+        var input = WriteCsv();
+        var output = Path.Combine(_root, "x.csv");
+
+        // --treino-ate junto com periodo.
+        await Assert.ThrowsAsync<ArgumentException>(() => Cp300Replay.RunAsync(
+            Options(input, output) with { TreinoInicio = Inicio, TreinoFim = T }));
+        // Periodo incompleto.
+        await Assert.ThrowsAsync<ArgumentException>(() => Cp300Replay.RunAsync(
+            Options(input, output) with { InstanteTreino = null, TreinoInicio = Inicio }));
+        // Fim antes do inicio.
+        await Assert.ThrowsAsync<ArgumentException>(() => Cp300Replay.RunAsync(
+            Options(input, output) with { InstanteTreino = null, TreinoInicio = T, TreinoFim = Inicio }));
+        // Replay comecando dentro do treino.
+        await Assert.ThrowsAsync<ArgumentException>(() => Cp300Replay.RunAsync(
+            Options(input, output) with
+            {
+                InstanteTreino = null, TreinoInicio = Inicio, TreinoFim = T, InicioReplay = T.AddMinutes(-1)
+            }));
+        // --inicio so com periodo.
+        await Assert.ThrowsAsync<ArgumentException>(() => Cp300Replay.RunAsync(
+            Options(input, output) with { InicioReplay = T }));
+        // Nenhum modo.
+        await Assert.ThrowsAsync<ArgumentException>(() => Cp300Replay.RunAsync(
+            Options(input, output) with { InstanteTreino = null }));
+    }
+
     // ---------------------------------------------------------------------
 
     private static double EstadoRegime(DateTime t) =>
         (int)(t - Inicio).TotalMinutes / 15 % 2 == 0 ? 0 : 2;
 
-    private string WriteRegimeCsv()
+    private string WriteRegimeCsv() => WriteRegimeCsv("historico-regime.csv", _ => false);
+
+    private string WriteRegimeCsv(string nome, Func<DateTime, bool> falha)
     {
-        var path = Path.Combine(_root, "historico-regime.csv");
+        var path = Path.Combine(_root, nome);
         if (File.Exists(path))
             return path;
 
@@ -230,7 +410,7 @@ public sealed class Cp300OfflineReplayTests : IDisposable
             var estado = EstadoRegime(t);
             Append(sb, "TAG30", ts, estado == 0 ? 0 : 100 + 3 * Ruido(i, 1));
             Append(sb, "TAG43", ts, estado);
-            Append(sb, "TAG73", ts, 0);
+            Append(sb, "TAG73", ts, falha(t) ? 1 : 0);
         }
 
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
@@ -261,9 +441,12 @@ public sealed class Cp300OfflineReplayTests : IDisposable
         Tags = tags
     };
 
-    private string WriteCsv()
+    private string WriteCsv() => WriteCsv("historico.csv", _ => false);
+
+    /// <summary>Mesma serie de WriteCsv; TAG73 = 1 onde falha(t), ou sem TAG73.</summary>
+    private string WriteCsv(string nome, Func<DateTime, bool> falha, bool comRotulo = true)
     {
-        var path = Path.Combine(_root, "historico.csv");
+        var path = Path.Combine(_root, nome);
         if (File.Exists(path))
             return path;
 
@@ -282,7 +465,8 @@ public sealed class Cp300OfflineReplayTests : IDisposable
             Append(sb, "TAG22", ts, degrau);
             Append(sb, "TAG28", ts, reserva);
             Append(sb, "TAG24", ts, congelado);
-            Append(sb, "TAG73", ts, 0);
+            if (comRotulo)
+                Append(sb, "TAG73", ts, falha(t) ? 1 : 0);
         }
 
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
@@ -338,12 +522,20 @@ public sealed class Cp300OfflineReplayTests : IDisposable
 
     private static double D(string text) => double.Parse(text, CultureInfo.InvariantCulture);
 
-    private static string FindAppSettings()
+    private static string FindAppSettings([CallerFilePath] string arquivoFonte = "")
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "IAApi.csproj")))
-            dir = dir.Parent;
-        return Path.Combine(dir?.FullName ?? throw new InvalidOperationException("Raiz do repo nao encontrada."),
-            "appsettings.json");
+        // Procura a raiz a partir da saida do build e, se ela estiver fora do
+        // repositorio (ex.: dotnet test --artifacts-path), a partir deste arquivo.
+        static DirectoryInfo? Raiz(string? inicio)
+        {
+            var dir = string.IsNullOrEmpty(inicio) ? null : new DirectoryInfo(inicio);
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "IAApi.csproj")))
+                dir = dir.Parent;
+            return dir;
+        }
+
+        var raiz = Raiz(AppContext.BaseDirectory) ?? Raiz(Path.GetDirectoryName(arquivoFonte))
+            ?? throw new InvalidOperationException("Raiz do repo nao encontrada.");
+        return Path.Combine(raiz.FullName, "appsettings.json");
     }
 }

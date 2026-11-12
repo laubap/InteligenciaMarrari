@@ -51,6 +51,7 @@
 | P22 | TAG23 (sucção) teve 40 alarmes de madrugada; a causa não foi investigada | Confirmado no replay | Madrugada (RES §4.3) | Alarme falso | Baixa |
 | P23 | Código em execução fora de commit | **Parcialmente resolvido**: runtime e ferramentas commitados; faltam os 5 `.patch` da raiz | — (AUD §1; git em 12/11) | Risco | Baixa |
 | **P24** | **[preset 6]** Falha encadeada mascarada: com a nota já saturada, uma segunda falha na mesma tag não muda nada | Confirmado no replay | Preset 6 (RES6 §2.1, §2.2) | Falha não detectada (agravamento invisível) | Média |
+| **P25** | Absorção da falha pelo baseline móvel: uma deterioração longa entra nas 24 h móveis e passa a ser "normal"; com regime, nenhum detector fica ancorado em referência estável | **Hipótese** (mecanismo confirmado no código; efeito a medir com o teste de deriva sintética) | Indício pequeno no preset 6 (RES6 §2.6); proposta em `Docs/PROPOSTA_BASELINE_ESTAVEL.md` | Falha não detectada (deterioração lenta) | **Alta** (medir) |
 
 ---
 
@@ -340,6 +341,20 @@
 - **Causa:** as notas são limitadas a 100 (`DetectorMath.NormalizarPorLimite`) e a decisão é binária (`EnsembleDetectionService.Detectar`, nota ≥ 60). O limite em 100 está confirmado no código (`Math.Clamp(…, 0, 100)` em `src/IAApi.Engine/Detection/Core/DetectorMath.cs`). Que nenhuma outra parte indique agravamento é hipótese: o pós-decisão não foi verificado para isso.
 - **Solução candidata** (não testada): monitorar TAG36/37 e/ou usar a tendência ou severidade do pós-decisão (`PredictionPostDecisionAnalysisService`) para indicar agravamento, sem alterar a decisão de anomalia.
 - **BACKLOG:** não há item.
+
+### P25. Absorção da falha pelo baseline móvel
+
+- **O que acontece** [hipótese]. Parte da referência do "normal" vem das últimas 24 h móveis. Uma deterioração que dura horas entra nessa janela e, com o tempo, passa a ser o próprio normal; a IA deixa de alarmar sem que a falha tenha acabado.
+- **Mecanismo** (confirmado no código; detalhes em `Docs/PROPOSTA_BASELINE_ESTAVEL.md` §1–§3):
+  - **Sem regime:** MAD, Persistência e Taxa de variação usam a mediana das 24 h móveis; só Z-Score e EWMA usam o perfil treinado. Esse perfil também vem das 24 h anteriores a quem chamou o treino (P13).
+  - **Com regime:** `PredictionDetectionPreparationService.PrepararAsync` troca média, desvio, deadband **e o histórico** pelos do regime calculado sobre as 24 h móveis. O perfil treinado é ignorado, e nenhum detector fica ancorado em uma referência estável.
+  - O IQR não impede a absorção: remove minorias extremas, não valores anormais (P01).
+- **Evidência:**
+  - Indício no replay (RES6 §2.6): durante a rampa de 40 min do preset 6, o baseline de regime da TAG29 subiu de 149,6 ± 18,7 para 152,1 ± 21,7. O efeito é pequeno porque a falha ocupou só 40 min da janela.
+  - **Não medido** para deteriorações longas. Estimativa: MAD e Persistência perdem a referência quando a falha domina a janela (≈12 h dentro de 24 h). Nenhum preset do CP300 tem rampa de horas.
+- **Como medir:** teste de deriva sintética (rampa de ~30 h): em que hora cada configuração (sem regime, com regime) deixa de alarmar (`Docs/PROPOSTA_BASELINE_ESTAVEL.md` §5, item 3).
+- **Solução candidata** (não testada): referência estável treinada por período e por regime, com o histórico móvel só como contexto (proposta, fases F0–F4).
+- **BACKLOG:** não há item; relacionados: 8, 9 e 12.
 
 ---
 

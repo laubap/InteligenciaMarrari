@@ -24,11 +24,20 @@ Reproduz, minuto a minuto, a detecção univariada de produção sobre o histór
 dotnet run --project tools/Cp300OfflineReplay -- `
     --entrada .\dados\cp300.csv --saida .\dados\replay_preset3.csv `
     --treino-ate 2026-11-11T06:00:00 --fim 2026-11-11T13:30:00
+
+# Treino por período escolhido (ex.: preset 5), replay depois:
+dotnet run --project tools/Cp300OfflineReplay -- `
+    --entrada .\dados\cp300.csv --saida .\dados\replay_preset3.csv `
+    --treino-inicio 2026-11-10T06:00:00 --treino-fim 2026-11-10T11:30:00 `
+    --inicio 2026-11-11T06:00:00 --fim 2026-11-11T13:30:00
 ```
 
 | Opção | Efeito |
 |---|---|
-| `--treino-ate T` | Treina o perfil com `[T − HorasHistorico, T)` usando o `PerfilTagService` real. O replay começa em T. |
+| `--treino-ate T` | Treina o perfil com `[T − HorasHistorico, T)` usando o `PerfilTagService` real, como em produção. O replay começa em T. |
+| `--treino-inicio A --treino-fim B` | **Alternativa a `--treino-ate`** (não combinar os dois). Treina o perfil com `[A, B)`, também com o `PerfilTagService` real. Permite escolher um período limpo (por exemplo, o preset 5) em vez das 24 h anteriores. |
+| `--inicio R` | Só com `--treino-inicio/--treino-fim`: início do replay. Padrão: `--treino-fim`. Não pode ser anterior a `--treino-fim`. |
+| `--permitir-falha-no-treino` | Força a execução quando a trava de TAG73 encontra falha rotulada (seção 2.1). Sai um aviso no log. |
 | `--fim` | Fim do replay, inclusivo. Padrão: última leitura do CSV. |
 | `--tags` | Lista separada por vírgula. Padrão: todas do CSV, menos TAG60–TAG81. Rótulos são sempre recusados. |
 | `--cliente` | Necessário se o CSV não tiver `ClienteId` ou tiver mais de um. |
@@ -38,7 +47,40 @@ dotnet run --project tools/Cp300OfflineReplay -- `
 | `--regime TAGx=TAGy` | Baseline por regime: TAGy (tag de estado) vira a `TagRegime` de TAGx. Pode ser repetida, ou receber pares separados por vírgula. Cria a linha em `TagsRegimesOperacionaisIa` (SQLite em memória) com os padrões do modelo: lag 0, tolerância de 2 min, `ToleranciaEstado` 0,001 e mínimo de 30 amostras. **Recusa TAG60–TAG81** (rótulos), uma tag como regime de si mesma, TAGx fora das tags reproduzidas e TAGy ausente do CSV. TAGy precisa estar no CSV, mas não precisa ser reproduzida. |
 | `--verbose` | Mostra os `Console.WriteLine` do runtime. Por padrão ficam ocultos. |
 
-Código de saída: 0 = ok; 1 = erro ou divergência na conferência; 2 = uso incorreto.
+Código de saída: 0 = ok; 1 = erro, divergência na conferência ou treino recusado pela trava de TAG73; 2 = uso incorreto (inclusive combinação inválida de opções de treino).
+
+### 2.1 Trava de TAG73 (falha rotulada no treino)
+
+A TAG73 é o gabarito do simulador (1 = alguma falha ativa). Ela **nunca** é entrada da IA, mas a ferramenta a usa para não treinar sobre falha:
+
+| Onde verifica | Intervalo | Se houver TAG73 = 1 |
+|---|---|---|
+| Treino (os dois modos) | `[início, fim)` do treino | Recusa (`Treino recusado: N min com TAG73 = 1 ...`), salvo com `--permitir-falha-no-treino` |
+| Baseline por regime (só com `--regime`) | Parte anterior ao replay das janelas móveis: `[R − HorasHistorico, R)`, onde R é o início do replay | Idem |
+| Dentro do replay | `[R, fim]` | **Não bloqueia**: é o cenário em teste. O log informa quantos minutos vão entrar nas janelas móveis das leituras seguintes |
+
+- Se o CSV não tiver TAG73 (por exemplo, dados de planta real), a trava avisa `TAG73 ausente no CSV, nao verificada` e segue.
+- A trava também vale com `--treino-ate`. Um replay antigo cujo treino continha falha (por exemplo, o preset 6 com treino até 15:06, que inclui a obstrução do preset 1) agora precisa de `--permitir-falha-no-treino` para reproduzir o mesmo resultado.
+
+### 2.2 Baseline por regime e período de treino
+
+O `--regime` **mantém o comportamento de produção**: a cada leitura t, o `OperationalRegimeBaselineProvider` recalcula o baseline sobre o histórico móvel `[t − HorasHistorico, t)`. Ele **não** usa o período de treino: o provider recebe o histórico pronto de `PrepararAsync` e não aceita outra janela sem mudar o runtime (ver `Docs/PROPOSTA_BASELINE_ESTAVEL.md`). O perfil treinado só é usado quando o regime não se aplica (fallback global).
+
+### 2.3 Relatório no início da execução
+
+```
+Treino (periodo escolhido): [2026-11-10T15:06:00..., 2026-11-11T15:06:00...) | Replay: [...]
+Trava TAG73 (treino): 0 min com TAG73 = 1 em [...)
+Regime: baseline movel de 24 h (producao), independente do periodo de treino. Primeira janela [...), ultima [...); dados anteriores ao replay usados: [...)
+Trava TAG73 (janela movel do regime (antes do replay)): ...
+Perfil TAG22: pontos_treino=1434 media=... desvio=... deadband=... usados=... outliers=...
+Regime TAG28 <- TAG43, pontos por estado no treino: 0=... 2=... 3=...
+Regime TAG28 <- TAG43, pontos por estado na primeira janela movel: ...
+```
+
+- `pontos_treino` = pontos da tag no período de treino, **antes** da limpeza IQR (`usados` e `outliers` são depois).
+- A contagem por estado usa um alinhamento simplificado: o último estado até 2 min antes, com lag 0 (os padrões do modelo). A seleção real é feita pelo `OperationalRegimeHistoryResolver`; a contagem serve para ver se o período cobre os regimes.
+- O resumo da API (`Cp300ReplaySummary`) traz os mesmos dados: `TreinoInicio`, `TreinoFim`, `InicioReplay`, `PontosTreino`, `MinutosFalhaNoTreino` e `MinutosFalhaNaJanelaDoRegime`.
 
 ## 3. O que é igual à produção
 
@@ -77,4 +119,4 @@ Uma linha por leitura e detector (6 por leitura). Se a leitura falhar antes do e
 
 **Como o detalhamento é obtido.** A resposta de produção não expõe tipo, origem do deadband nem motivo de entrada inválida. Por isso, para cada leitura, a ferramenta pede o mesmo `DetectorInput` ao `PredictionDetectionPreparationService` real e roda nele uma **segunda instância** do mesmo `EnsembleDetectionService`. A coluna `conferencia` compara a decisão e a nota dessa execução com as do `PredictionService` e confere se as contribuições somam a nota final.
 
-Fora do escopo desta parte: gabarito (TAG73 e slots), resumo de métricas e modo de treino limpo (Partes B e C).
+Fora do escopo desta parte: gabarito (TAG73 e slots) na saída e resumo de métricas (Parte B). Da Parte C já existem o treino por período e a trava de TAG73 (seção 2); o modo experimental de referência estável por regime (`Docs/PROPOSTA_BASELINE_ESTAVEL.md`, F0) ainda não.

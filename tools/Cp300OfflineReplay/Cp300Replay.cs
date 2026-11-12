@@ -30,8 +30,31 @@ public sealed record Cp300ReplayOptions
     /// <summary>
     /// Instante T do treino "como em producao": o perfil e treinado com as
     /// leituras de [T - HorasHistorico, T). O replay comeca em T.
+    /// Alternativa: TreinoInicio + TreinoFim (nao combinar os dois modos).
     /// </summary>
-    public required DateTime InstanteTreino { get; init; }
+    public DateTime? InstanteTreino { get; init; }
+
+    /// <summary>
+    /// Treino por periodo: o perfil e treinado com as leituras de
+    /// [TreinoInicio, TreinoFim). Exige TreinoFim; nao combina com InstanteTreino.
+    /// </summary>
+    public DateTime? TreinoInicio { get; init; }
+
+    /// <summary>Fim (exclusivo) do treino por periodo.</summary>
+    public DateTime? TreinoFim { get; init; }
+
+    /// <summary>
+    /// Inicio do replay no modo por periodo. Null = TreinoFim. Nao pode ser
+    /// anterior a TreinoFim (o treino nunca ve o trecho reproduzido).
+    /// </summary>
+    public DateTime? InicioReplay { get; init; }
+
+    /// <summary>
+    /// Se false (padrao), o replay e recusado quando o rotulo TAG73 = 1 aparece
+    /// no periodo de treino ou na parte anterior ao replay das janelas moveis
+    /// usadas pelo baseline por regime. True forca a execucao (com aviso).
+    /// </summary>
+    public bool PermitirFalhaNoTreino { get; init; }
 
     /// <summary>appsettings.json de onde saem pesos, limiares e HorasHistorico.</summary>
     public required string AppSettingsPath { get; init; }
@@ -75,7 +98,30 @@ public sealed record Cp300ReplaySummary(
     int Divergencias,
     IReadOnlyList<string> TagsIgnoradas,
     int HorasHistorico,
-    int ValoresDescartados);
+    int ValoresDescartados)
+{
+    /// <summary>Periodo de treino efetivo: [TreinoInicio, TreinoFim).</summary>
+    public DateTime TreinoInicio { get; init; }
+
+    public DateTime TreinoFim { get; init; }
+
+    /// <summary>True so no modo --treino-ate com --historico-inclui-atual (o ponto T entra no treino).</summary>
+    public bool TreinoIncluiFim { get; init; }
+
+    public DateTime InicioReplay { get; init; }
+
+    /// <summary>Pontos de treino por tag (antes da limpeza IQR).</summary>
+    public IReadOnlyDictionary<string, int> PontosTreino { get; init; } = new Dictionary<string, int>();
+
+    /// <summary>Minutos com TAG73 = 1 no treino; null se o CSV nao tem TAG73.</summary>
+    public int? MinutosFalhaNoTreino { get; init; }
+
+    /// <summary>
+    /// Minutos com TAG73 = 1 na parte anterior ao replay das janelas moveis do
+    /// regime ([InicioReplay - HorasHistorico, InicioReplay)); null sem --regime ou sem TAG73.
+    /// </summary>
+    public int? MinutosFalhaNaJanelaDoRegime { get; init; }
+}
 
 public static class Cp300Replay
 {
@@ -155,13 +201,38 @@ public static class Cp300Replay
         ValidateRegimes(regimes, tags, dataset);
 
         var clienteId = dataset.ClienteId;
-        var t0 = options.InstanteTreino;
+        var periodo = ResolveTrainingPeriod(options, horasHistorico);
+        var t0 = periodo.InicioReplay;
         var fim = options.FimReplay ?? dataset.Readings.Values.Max(r => r[^1].DataHora);
         if (fim < t0)
-            throw new InvalidOperationException("O fim do replay e anterior ao instante de treino.");
+            throw new InvalidOperationException("O fim do replay e anterior ao inicio do replay.");
 
         log.WriteLine($"Cliente: {clienteId} | Tags: {tags.Count} | Janela: {horasHistorico} h");
-        log.WriteLine($"Treino: [{t0.AddHours(-horasHistorico):O}, {t0:O}) | Replay: [{t0:O}, {fim:O}]");
+        log.WriteLine($"Treino ({periodo.Modo}): [{periodo.Inicio:O}, {periodo.Fim:O}{(periodo.IncluiFim ? "]" : ")")} " +
+                      $"| Replay: [{t0:O}, {fim:O}]");
+
+        // Trava do gabarito: nunca treinar sobre falha rotulada sem pedir.
+        var minutosFalhaTreino = CountLabelMinutes(dataset, periodo.Inicio, periodo.Fim, periodo.IncluiFim);
+        CheckLabel(log, "treino", minutosFalhaTreino, periodo.Inicio, periodo.Fim, options.PermitirFalhaNoTreino);
+
+        int? minutosFalhaRegime = null;
+        if (regimes.Count > 0)
+        {
+            // Producao: o baseline por regime e recalculado a cada leitura sobre o
+            // historico movel [t - HorasHistorico, t). A parte anterior ao replay
+            // dessas janelas e [InicioReplay - HorasHistorico, InicioReplay).
+            var janelaInicio = t0.AddHours(-horasHistorico);
+            log.WriteLine($"Regime: baseline movel de {horasHistorico} h (producao), independente do periodo de treino. " +
+                          $"Primeira janela [{janelaInicio:O}, {t0:O}), ultima [{fim.AddHours(-horasHistorico):O}, {fim:O}); " +
+                          $"dados anteriores ao replay usados: [{janelaInicio:O}, {t0:O}).");
+            minutosFalhaRegime = CountLabelMinutes(dataset, janelaInicio, t0, inclusiveEnd: false);
+            CheckLabel(log, "janela movel do regime (antes do replay)", minutosFalhaRegime,
+                janelaInicio, t0, options.PermitirFalhaNoTreino);
+            var noReplay = CountLabelMinutes(dataset, t0, fim, inclusiveEnd: true);
+            if (noReplay is > 0)
+                log.WriteLine($"Regime: {noReplay} min com TAG73 = 1 dentro do replay entrarao nas janelas moveis " +
+                              "das leituras seguintes (comportamento de producao; e o cenario em teste).");
+        }
         log.WriteLine($"Pesos (appsettings): Z={detectionOptions.ZScoreWeight} MAD={detectionOptions.MadWeight} " +
                       $"EWMA={detectionOptions.EwmaWeight} RoC={detectionOptions.RateOfChangeWeight} " +
                       $"Persist={detectionOptions.PersistenceWeight} LevelShift={detectionOptions.LevelShiftWeight} " +
@@ -194,29 +265,57 @@ public static class Cp300Replay
 
         await db.SaveChangesAsync();
 
-        // Treino "como em producao": PerfilTagService real, historico = ultimas
-        // HorasHistorico horas antes de T.
+        // Treino com o PerfilTagService real. Modo --treino-ate: historico = ultimas
+        // HorasHistorico horas antes de T (como em producao). Modo por periodo:
+        // historico = [TreinoInicio, TreinoFim).
         var ignoradas = new List<string>();
         var treinadas = new List<string>();
-        history.Clock = t0;
-        var trainer = new PerfilTagService(history, db, new HistoricoLimpezaService());
+        var pontosTreino = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        IHistoricoService trainingHistory;
+        if (periodo.PorPeriodo)
+        {
+            trainingHistory = new FixedWindowHistorySource(dataset.Readings, periodo.Inicio, periodo.Fim);
+        }
+        else
+        {
+            history.Clock = t0;
+            trainingHistory = history;
+        }
+
+        var trainer = new PerfilTagService(trainingHistory, db, new HistoricoLimpezaService());
         foreach (var tag in tags)
         {
+            var pontos = trainingHistory.BuscarHistorico(clienteId, tag, TipoTagPadrao).Count;
+            pontosTreino[tag] = pontos;
             try
             {
                 var perfil = trainer.TreinarPerfil(clienteId, tag);
-                perfil.DataTreinamento = t0;
+                perfil.DataTreinamento = periodo.Fim;
                 await db.SaveChangesAsync();
                 treinadas.Add(tag);
-                log.WriteLine($"Perfil {tag}: media={Fmt(perfil.Media)} desvio={Fmt(perfil.DesvioPadrao)} " +
+                log.WriteLine($"Perfil {tag}: pontos_treino={pontos} media={Fmt(perfil.Media)} desvio={Fmt(perfil.DesvioPadrao)} " +
                               $"deadband={Fmt(perfil.VariacaoMinimaRelevante)} usados={perfil.TotalRegistrosUsados} " +
                               $"outliers={perfil.TotalOutliersRemovidos}");
             }
             catch (Exception ex)
             {
                 ignoradas.Add($"{tag}: treino falhou ({ex.Message})");
-                log.WriteLine($"Perfil {tag}: NAO treinado ({ex.Message})");
+                log.WriteLine($"Perfil {tag}: pontos_treino={pontos} NAO treinado ({ex.Message})");
             }
+        }
+
+        // Relatorio por regime: pontos da tag analisada em cada estado da tag de
+        // regime, no periodo de treino e na primeira janela movel do regime.
+        // Alinhamento simplificado (ultimo estado ate 2 min antes, lag 0, como os
+        // padroes do modelo); a selecao real e feita pelo OperationalRegimeHistoryResolver.
+        foreach (var (alvo, regime) in regimes)
+        {
+            var nomeAlvo = tags.First(t => string.Equals(t, alvo, StringComparison.OrdinalIgnoreCase));
+            var nomeRegime = dataset.Readings.Keys.First(t => string.Equals(t, regime, StringComparison.OrdinalIgnoreCase));
+            log.WriteLine($"Regime {nomeAlvo} <- {nomeRegime}, pontos por estado no treino: " +
+                          FormatStateCounts(dataset, nomeAlvo, nomeRegime, periodo.Inicio, periodo.Fim));
+            log.WriteLine($"Regime {nomeAlvo} <- {nomeRegime}, pontos por estado na primeira janela movel: " +
+                          FormatStateCounts(dataset, nomeAlvo, nomeRegime, t0.AddHours(-horasHistorico), t0));
         }
 
         var production = BuildPredictionService(db, history, detectionOptions, regimes.Count > 0);
@@ -298,7 +397,16 @@ public static class Cp300Replay
         }
 
         var summary = new Cp300ReplaySummary(treinadas.Count, leituras, anomalias, erros, divergencias,
-            ignoradas, horasHistorico, dataset.DiscardedValues);
+            ignoradas, horasHistorico, dataset.DiscardedValues)
+        {
+            TreinoInicio = periodo.Inicio,
+            TreinoFim = periodo.Fim,
+            TreinoIncluiFim = periodo.IncluiFim,
+            InicioReplay = t0,
+            PontosTreino = pontosTreino,
+            MinutosFalhaNoTreino = minutosFalhaTreino,
+            MinutosFalhaNaJanelaDoRegime = minutosFalhaRegime
+        };
         log.WriteLine($"Leituras: {leituras} | Anomalias: {anomalias} | Erros: {erros} | " +
                       $"Divergencias: {divergencias} | Valores descartados no CSV: {dataset.DiscardedValues}");
         return summary;
@@ -336,6 +444,103 @@ public static class Cp300Replay
         }
 
         return (detection, horas.Value);
+    }
+
+    /// <summary>Tag de gabarito "anomalia ativa" do simulador CP300.</summary>
+    public const string LabelActiveTag = "TAG73";
+
+    private sealed record TrainingPeriod(
+        DateTime Inicio, DateTime Fim, bool IncluiFim, DateTime InicioReplay, bool PorPeriodo)
+    {
+        public string Modo => PorPeriodo ? "periodo escolhido" : "ultimas horas antes de --treino-ate";
+    }
+
+    private static TrainingPeriod ResolveTrainingPeriod(Cp300ReplayOptions options, int horasHistorico)
+    {
+        var porPeriodo = options.TreinoInicio is not null || options.TreinoFim is not null;
+        if (porPeriodo)
+        {
+            if (options.InstanteTreino is not null)
+                throw new ArgumentException("Use --treino-ate OU --treino-inicio/--treino-fim, nao os dois.");
+            if (options.TreinoInicio is not DateTime inicio || options.TreinoFim is not DateTime fimTreino)
+                throw new ArgumentException("--treino-inicio e --treino-fim devem ser informados juntos.");
+            if (fimTreino <= inicio)
+                throw new ArgumentException("--treino-fim deve ser posterior a --treino-inicio.");
+            var inicioReplay = options.InicioReplay ?? fimTreino;
+            if (inicioReplay < fimTreino)
+                throw new ArgumentException("--inicio nao pode ser anterior a --treino-fim (o treino veria o replay).");
+            return new TrainingPeriod(inicio, fimTreino, false, inicioReplay, true);
+        }
+
+        if (options.InstanteTreino is not DateTime t0)
+            throw new ArgumentException("Informe --treino-ate ou --treino-inicio/--treino-fim.");
+        if (options.InicioReplay is not null)
+            throw new ArgumentException("--inicio so vale com --treino-inicio/--treino-fim; com --treino-ate o replay comeca em T.");
+        // Mesmo recorte de CsvHistorySource.BuscarHistorico com Clock = T.
+        return new TrainingPeriod(t0.AddHours(-horasHistorico), t0, options.HistoricoIncluiLeituraAtual, t0, false);
+    }
+
+    /// <summary>Minutos com TAG73 = 1 no intervalo; null se o CSV nao tem TAG73.</summary>
+    private static int? CountLabelMinutes(Cp300Dataset dataset, DateTime inicio, DateTime fim, bool inclusiveEnd)
+    {
+        var key = dataset.Readings.Keys.FirstOrDefault(
+            k => string.Equals(k, LabelActiveTag, StringComparison.OrdinalIgnoreCase));
+        if (key is null)
+            return null;
+
+        return dataset.Readings[key].Count(r =>
+            r.DataHora >= inicio && (inclusiveEnd ? r.DataHora <= fim : r.DataHora < fim) && r.Valor >= 0.5f);
+    }
+
+    private static void CheckLabel(TextWriter log, string onde, int? minutos, DateTime inicio, DateTime fim, bool permitir)
+    {
+        if (minutos is null)
+        {
+            log.WriteLine($"Trava TAG73 ({onde}): TAG73 ausente no CSV, nao verificada.");
+            return;
+        }
+
+        if (minutos == 0)
+        {
+            log.WriteLine($"Trava TAG73 ({onde}): 0 min com TAG73 = 1 em [{inicio:O}, {fim:O}).");
+            return;
+        }
+
+        var mensagem = $"{minutos} min com TAG73 = 1 (falha rotulada) em [{inicio:O}, {fim:O}) ({onde}).";
+        if (!permitir)
+            throw new InvalidOperationException(
+                $"Treino recusado: {mensagem} Escolha outro periodo ou use --permitir-falha-no-treino.");
+        log.WriteLine($"AVISO Trava TAG73 ({onde}): {mensagem} Forcado por --permitir-falha-no-treino.");
+    }
+
+    private static string FormatStateCounts(
+        Cp300Dataset dataset, string alvo, string regime, DateTime inicio, DateTime fim)
+    {
+        var estados = dataset.Readings[regime];
+        var contagem = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var semEstado = 0;
+        var j = 0;
+        foreach (var leitura in dataset.Readings[alvo])
+        {
+            if (leitura.DataHora < inicio || leitura.DataHora >= fim)
+                continue;
+            while (j + 1 < estados.Length && estados[j + 1].DataHora <= leitura.DataHora)
+                j++;
+            if (estados.Length == 0 || estados[j].DataHora > leitura.DataHora ||
+                (leitura.DataHora - estados[j].DataHora).TotalMinutes > 2)
+            {
+                semEstado++;
+                continue;
+            }
+
+            var chave = Fmt(estados[j].Valor);
+            contagem[chave] = contagem.GetValueOrDefault(chave) + 1;
+        }
+
+        var partes = contagem.Select(p => $"{p.Key}={p.Value}").ToList();
+        if (semEstado > 0)
+            partes.Add($"sem_estado={semEstado}");
+        return partes.Count == 0 ? "nenhum ponto" : string.Join(' ', partes);
     }
 
     private static List<string> SelectTags(Cp300Dataset dataset, IReadOnlyList<string>? requested)
@@ -756,7 +961,7 @@ internal sealed class CsvHistorySource(
         return result;
     }
 
-    private static int LowerBound(LeituraBruta[] series, DateTime value)
+    internal static int LowerBound(LeituraBruta[] series, DateTime value)
     {
         int lo = 0, hi = series.Length;
         while (lo < hi)
@@ -768,4 +973,30 @@ internal sealed class CsvHistorySource(
 
         return lo;
     }
+}
+
+/// <summary>
+/// IHistoricoService do treino por periodo: BuscarHistorico devolve sempre
+/// [inicio, fim) da tag, independente de relogio. Usado so pelo PerfilTagService
+/// no modo --treino-inicio/--treino-fim; a deteccao continua com CsvHistorySource.
+/// </summary>
+internal sealed class FixedWindowHistorySource(
+    IReadOnlyDictionary<string, LeituraBruta[]> readings,
+    DateTime inicio,
+    DateTime fim) : IHistoricoService
+{
+    public List<LeituraBruta> BuscarHistorico(string clienteId, string tagName, string tipoTag)
+    {
+        if (!readings.TryGetValue(tagName, out var series))
+            return [];
+
+        var result = new List<LeituraBruta>();
+        for (var i = CsvHistorySource.LowerBound(series, inicio); i < series.Length && series[i].DataHora < fim; i++)
+            result.Add(new LeituraBruta { DataHora = series[i].DataHora, Valor = series[i].Valor });
+        return result;
+    }
+
+    public List<LeituraBruta> BuscarHistoricoPorPeriodo(
+        string clienteId, string tagName, DateTime inicio, DateTime fim)
+        => throw new InvalidOperationException("O treino por periodo nao consulta historico por periodo.");
 }
