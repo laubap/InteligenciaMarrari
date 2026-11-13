@@ -1,11 +1,13 @@
 # Problemas encontrados na detecção univariada (IAApi × simulador CP300)
 
 **Data:** 12/11/2026. **Cliente:** PK2. **Branch:** `feat/intelligence-lab-e2e-validation`.
-**Fontes:** `Docs/AUDITORIA_STATUS.md` (AUD), `Docs/MAPA_DETECCAO.md` (MAPA), `Docs/RESULTADO_PRESET1.md` (RES), `Docs/RESULTADO_PRESET6.md` (RES6) e `Docs/BACKLOG.md`. Este documento **resume** essas fontes; os números completos estão nas seções indicadas.
+**Fontes:** `Docs/AUDITORIA_STATUS.md` (AUD), `Docs/MAPA_DETECCAO.md` (MAPA), `Docs/RESULTADO_PRESET1.md` (RES), `Docs/RESULTADO_PRESET6.md` (RES6), `Docs/RESULTADO_PRESET3.md` (RES3) e `Docs/BACKLOG.md`. Este documento **resume** essas fontes; os números completos estão nas seções indicadas.
 
 > **Atualização com o preset 6 (12/11/2026, RES6):** o univariado **detectou** o desbalanceamento na TAG29 (15:32, ≈4 min após o início, a 94 ‰). Confirmou P01, P02, P03, P04, P07, P13, P20 e P21, com novidades em P01, P02, P03 e P20. Ajustou o alcance do P06 e trouxe um problema novo (P24). Itens marcados com **[preset 6]**.
 
 > **Atualização com a IA real no preset 3 (13/11/2026):** a exportação das decisões gravadas pela IAApi (`tools/Cp300Export/Export-AnomaliasIaReal.ps1`, 12/11 14:00 → 13/11 02:05) trouxe só 50 decisões do PK2, todas entre 14:21 e 15:09. Dois problemas novos: P26 (cada tag avaliada a cada ~10 min) e P27 (o monitor parou de gravar às 15:09). P10 e P11 ganharam evidência da IA real, e a medição de latência subiu para o passo 1 da §4.
+
+> **Atualização com a análise do preset 3 (13/11/2026, RES3):** **o preset 3 não rodou.** Em 12/11 às 14:20, o cenário anterior foi parado (TAG76 3 → 0), mas o TAG74 nunca foi a 3, não houve reset da planta e nenhum slot nem medição mostra falha de sensor até 13/11 07:59 (problema novo **P29**). O "teste do preset 3" foi operação normal; P26 e P27 continuam válidos (falam de cadência e parada, não de detecção). O período virou um **teste de alarme falso de 17,7 h com treino limpo** (12/11 14:15 → 13/11 07:59): sem regime 2.525, regime recomendado 1.378, combinado + set-point **297** minutos-tag. Novidades em P01, P02, P03, P08 e P22. A comparação com a IA real trouxe a **idade da leitura na decisão (0,2 a 17,2 min)**, que faltava em P18 e P26. P12 continua sem teste. Itens marcados com **[preset 3]**.
 
 **Como ler o status**
 
@@ -29,34 +31,35 @@
 
 | ID | Problema | Status | Cenário que mostrou | Impacto | Prioridade |
 |---|---|---|---|---|---|
-| P01 | A limpeza de outliers (IQR) do treino joga fora estados normais (reserva parada, pressão noturna). **É instável:** com a janela deslocada 2 h, removeu 1.531 pontos (preset 1) e só 306 (preset 6). **Não removeu os 12 min de falha** presentes no treino | Confirmado nos dados e no código | Treino do preset 1 (RES §1.5); **[preset 6]** RES6 §1.4 | Alarme falso + falha não detectada | **Alta** |
-| P02 | Bomba reserva parada gera alarme falso contínuo (TAG28/30/32; **[preset 6]** também a B-01 depois do failover) | Confirmado no replay; solução validada no replay (TAG43 para a B-02; **regime combinado com set-point** para as duas bombas, inclusive no failover: etapa 0) | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.3, §2.4; PLANO_REGIME_COMBINADO §5 | Alarme falso | **Alta** |
-| P03 | A bomba alarma conforme o estado da outra bomba e o set-point; nenhuma configuração atual resolve. **[preset 6]** Também na B-02 com o regime TAG43 | Confirmado no replay; **regime combinado (própria × outra × set-point) validado no replay com séries derivadas** (etapa 0); falta suporte no código (Opção A) | Preset 1, madrugada (RES §4.2, §4.3); **[preset 6]** RES6 §2.3 | Alarme falso | **Alta** |
+| P01 | A limpeza de outliers (IQR) do treino joga fora estados normais (reserva parada, pressão noturna). **É instável:** com a janela deslocada 2 h, removeu 1.531 pontos (preset 1) e só 306 (preset 6). **Não removeu os 12 min de falha** presentes no treino. **[preset 3]** Com treino por período limpo, cortou de novo a madrugada inteira da TAG24 (304 pontos) | Confirmado nos dados e no código | Treino do preset 1 (RES §1.5); **[preset 6]** RES6 §1.4; **[preset 3]** RES3 §1.3 | Alarme falso + falha não detectada | **Alta** |
+| P02 | Bomba reserva parada gera alarme falso contínuo (TAG28/30/32; **[preset 6]** também a B-01 depois do failover; **[preset 3]** e a B-01 parada depois do rodízio: 570 minutos-tag no regime recomendado, 0 no combinado) | Confirmado no replay; solução validada no replay (TAG43 para a B-02; **regime combinado com set-point** para as duas bombas, inclusive no failover: etapa 0) | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.3, §2.4; PLANO_REGIME_COMBINADO §5; **[preset 3]** RES3 §2.3 | Alarme falso | **Alta** |
+| P03 | A bomba alarma conforme o estado da outra bomba e o set-point; nenhuma configuração atual resolve. **[preset 6]** Também na B-02 com o regime TAG43 | Confirmado no replay; **regime combinado (própria × outra × set-point) validado no replay com séries derivadas** (etapa 0); falta suporte no código (Opção A) | Preset 1, madrugada (RES §4.2, §4.3); **[preset 6]** RES6 §2.3; **[preset 3]** RES3 §2.2–§2.3 (17,7 h normais: 1.378 → 297 com o combinado; sobram picos de demanda em paralelo) | Alarme falso | **Alta** |
 | P04 | Válvula de entrada fechada (TAG26) gera alarme falso; com regime, surgem alarmes de vazão alta | Confirmado no replay (de novo no preset 6); solução parcial no replay | Preset 1, madrugada (RES §2.3, §4); **[preset 6]** RES6 §2.4 | Alarme falso | Média |
 | P05 | Pressão noturna (TAG24) alarma em 300 de 300 minutos de madrugada | Confirmado no replay; solução validada no replay | Madrugada (RES §4.3) | Alarme falso | **Alta** |
 | P06 | Obstrução do recalque (preset 1) não detectada: a falha não se destaca do normal. **[preset 6]** Quando a falha sai da faixa normal (vibração), o univariado detecta | Confirmado no replay | Preset 1 (RES §2.1, §2.2, §4.2); **[preset 6]** RES6 §2.1 | Falha não detectada | **Alta** (solução longa) |
 | P07 | A média ponderada dilui reações isoladas: sem IF, Z+MAD+EWMA saturados dão exatamente 60 | Confirmado no código e no replay | Preset 1 (RES §2.2; MAPA §4.1); **[preset 6]** atraso de ~2 min na TAG29 (RES6 §2.2) | Falha não detectada / atraso | Média |
-| P08 | O baseline por regime volta ao perfil global (ruim) em transições, set-point novo ou poucas amostras | Confirmado no replay | Madrugada, preset 1 (RES §4.2, §4.3) | Alarme falso | Média |
+| P08 | O baseline por regime volta ao perfil global (ruim) em transições, set-point novo ou poucas amostras | Confirmado no replay | Madrugada, preset 1 (RES §4.2, §4.3); **[preset 3]** 63 minutos-tag após o rodízio de 00:47 no combinado (RES3 §2.3) | Alarme falso | Média |
 | P09 | Regime quase constante (bomba parada) fica com desvio 0; a proteção existe só por acaso | Confirmado no código; efeito é hipótese | Estimativa (RES §3.6) | Risco de alarme falso | Média |
 | P10 | O Bridge fica ~8× mais lento com a IAApi e o simulador rodando, e a IAApi consulta 24 h de histórico por tag a cada ciclo | Lentidão do Bridge confirmada em log; **na IA real, 9 consultas de histórico estouraram o timeout de 60 s em 48 min, e essas leituras ficaram sem decisão (P26, confirmado em log)**; atraso da detecção ainda não medido | Exportação da TAG73 (`dados/preset1_parte2.csv.pedacos.csv`); **IA real no preset 3 (P26)** | Atraso + leituras sem decisão | **Alta** (medir) |
 | P11 | O ciclo é sequencial: 60 s + soma do tempo de todas as tags | Confirmado no código; **na IA real, o ciclo do PK2 se repetiu a cada 5 a 18 min (P26)** | — (MAPA #1, §3); **IA real no preset 3 (P26)** | Atraso | **Alta** (era Média; subiu com P26) |
-| P12 | Não há detector de valor congelado nem de falha de comunicação | Confirmado no código | Presets 3/4 (AUD §5c) | Falha não detectada | **Alta** |
-| P13 | O treino do perfil usa sempre as últimas 24 h, sem escolher período, e só roda sob demanda | Confirmado no código; **[preset 6]** contaminação confirmada nos dados | — (AUD §5d, §5e-6); **[preset 6]** RES6 §1.2 | Risco (treino contaminado) | **Alta** |
+| P12 | Não há detector de valor congelado nem de falha de comunicação | Confirmado no código; **[preset 3]** ainda sem teste (o preset 3 não rodou, P29) | Presets 3/4 (AUD §5c) | Falha não detectada | **Alta** |
+| P13 | O treino do perfil usa sempre as últimas 24 h, sem escolher período, e só roda sob demanda | Confirmado no código; **[preset 6]** contaminação confirmada nos dados; **[preset 3]** o treino por período limpo (replay) não resolve o P01 | — (AUD §5d, §5e-6); **[preset 6]** RES6 §1.2 | Risco (treino contaminado) | **Alta** |
 | P14 | O código aceita um rótulo (TAG60–TAG81) como tag de regime | Confirmado no código | — (AUD §5a) | Risco (vazamento do gabarito) | **Alta** (barato) |
 | P15 | `IaAtiva` é `true` por padrão ao cadastrar uma tag | Confirmado no código | — (AUD §5a) | Risco | Baixa |
 | P16 | Os pesos do `appsettings.json` diferem dos padrões do código | Confirmado no código | — (AUD §3, §5e-4) | Risco (ferramentas divergentes) | Baixa |
 | P17 | `MinHistoryPoints` (30) não tem efeito em produção | Confirmado no código | — (AUD §3) | Risco (configuração enganosa) | Baixa |
-| P18 | O registro grava a hora do processamento, não a hora da leitura | Confirmado no código | — (MAPA #14) | Atraso invisível | Média |
+| P18 | O registro grava a hora do processamento, não a hora da leitura | Confirmado no código; **[preset 3]** idade da leitura na IA real de **0,2 a 17,2 min**, confirmada nos dados (valores do lote do início do ciclo) | — (MAPA #14); **[preset 3]** RES3 §2.4 | Atraso invisível | **Alta** (era Média) |
 | P19 | Entrada inválida (leitura mais antiga que o histórico) vira "sem anomalia" em silêncio | Confirmado no código; não ocorreu no preset 1 | — (MAPA #7; RES §2.2) | Risco | Baixa |
 | P20 | Tag com poucos valores distintos pode ser classificada como "discreta" e ter todos os detectores bloqueados | Confirmado no código; ocorreu nos replays com regime do preset 1 (73 min, não relatado na RES) e **[preset 6]** (TAG28/32, B-02 parada; TAG27/31 na config. 3) | TAG44 (RES §2.1); **[preset 6]** RES6 §2.2 | Falha não detectada (hipótese) | Baixa |
 | P21 | Alarmes que caem por acaso no horário da falha parecem acertos | Confirmado no replay (de novo no preset 6, inclusive no failover) | Preset 1 (RES §2.1, §4.2); **[preset 6]** RES6 §2.1, §2.3 | Risco de avaliação errada | Média |
-| P22 | TAG23 (sucção) teve 40 alarmes de madrugada; a causa não foi investigada | Confirmado no replay | Madrugada (RES §4.3) | Alarme falso | Baixa |
+| P22 | TAG23 (sucção) teve 40 alarmes de madrugada. **[preset 3]** 45 alarmes iguais nas 3 configurações, sempre com o nível do reservatório num extremo; causa: hipótese | Confirmado no replay | Madrugada (RES §4.3); **[preset 3]** RES3 §2.3 | Alarme falso | Baixa |
 | P23 | Código em execução fora de commit | **Parcialmente resolvido**: runtime e ferramentas commitados; faltam os 5 `.patch` da raiz | — (AUD §1; git em 12/11) | Risco | Baixa |
 | **P24** | **[preset 6]** Falha encadeada mascarada: com a nota já saturada, uma segunda falha na mesma tag não muda nada | Confirmado no replay | Preset 6 (RES6 §2.1, §2.2) | Falha não detectada (agravamento invisível) | Média |
 | **P25** | Absorção da falha pelo baseline móvel: uma deterioração longa entra nas 24 h móveis e passa a ser "normal"; com regime, nenhum detector fica ancorado em referência estável | **Hipótese** (mecanismo confirmado no código; efeito a medir com o teste de deriva sintética) | Indício pequeno no preset 6 (RES6 §2.6); proposta em `Docs/PROPOSTA_BASELINE_ESTAVEL.md` | Falha não detectada (deterioração lenta) | **Alta** (medir) |
-| **P26** | A IA real avaliou cada tag do PK2 só 3 a 5 vezes em ~48 min (12/11 14:21–15:09): cerca de uma avaliação a cada ~10 min por tag, enquanto os dados chegam a 1 por minuto. Parte das tentativas estourou o timeout de 60 s do Bridge e ficou sem decisão | Confirmado em log (decisões da API + Event Viewer); efeito na detecção é inferência | IA real no preset 3 (`dados/ia_real_preset3.csv`) | Falha não detectada / atraso (~90% dos minutos sem avaliação) | **Alta** |
+| **P26** | A IA real avaliou cada tag do PK2 só 3 a 5 vezes em ~48 min (12/11 14:21–15:09): cerca de uma avaliação a cada ~10 min por tag, enquanto os dados chegam a 1 por minuto. Parte das tentativas estourou o timeout de 60 s do Bridge e ficou sem decisão | Confirmado em log (decisões da API + Event Viewer); efeito na detecção é inferência | IA real em 12/11 (`dados/ia_real_preset3.csv`; o preset 3 não rodou, P29); **[preset 3]** idade da leitura até 17,2 min (RES3 §2.4) | Falha não detectada / atraso (~90% dos minutos sem avaliação) | **Alta** |
 | **P27** | A IAApi parou de gravar decisões do PK2 (e do PK7) às 15:09 de 12/11, sem nenhum aviso ou erro no log, e só voltou depois de reiniciar em 13/11. Causa desconhecida | Parada confirmada nos dados e no Event Viewer; **causa: hipótese** | IA real no preset 3 | Monitoramento parado sem alerta: cerca de 11 h de teste perdidas | **Alta** |
 | **P28** | O endereço do Bridge está fixo no código (`http://localhost:5001`) em `BridgeValorAtualService` e `BridgeTagsService`, sem configuração nem ponto de substituição para teste. Só o histórico lê `Bridge:BaseUrl` | Confirmado no código (13/11) | — (levantamento da BACKLOG 19) | Risco: configuração enganosa; o laço do monitor não pode ser testado offline com tags | Média |
+| **P29** | **[preset 3]** O preset 3 de 12/11 **não iniciou** no simulador (TAG74 nunca foi a 3; TAG76 ficou em 0 desde 14:20; sem reset da planta nem falhas nos slots), e nada na rotina de teste conferiu o início. O período foi tratado como teste do preset 3 até a análise dos rótulos | Confirmado nos dados; **causa: hipótese** (comando de início não escrito ou não aceito) | Preset 3 (RES3 §1.2) | Teste perdido sem aviso; risco de avaliação errada | **Alta** (barato) |
 
 ---
 
@@ -93,6 +96,7 @@
   - **Não protege contra contaminação:** os 12 minutos da obstrução ficaram no perfil, porque os valores da falha estavam dentro da faixa normal. A limpeza remove regimes normais (noite, reserva parada) e deixa passar a falha. Ver P13.
 - **[preset 6] O resultado muda só por mover a janela** (RES6 §1.4). Com o treino até 15:06, apenas 2 h depois do preset 1, a B-02 ficou parada 32,5 % do tempo (contra 24,6 %). O Q1 caiu para ~0 e o IQR **não cortou nada** nas bombas: 306 pontos removidos no total (só a TAG24 noturna), contra 1.531. As duas bombas passam a ter perfil misturado (TAG32: 266,9 ± 188,1 contra 398,7 ± 40,5). A mesma regra dá resultados opostos conforme o tempo parado fique acima ou abaixo de 25 %.
 - **[preset 6] Dentro do regime, o IQR corta a operação minoritária:** no regime TAG43 = 2, corta a B-02 sozinha em carga alta (TAG28 > 234, TAG30 > 174,5; RES6 §2.3). Ver P03.
+- **[preset 3] O treino por período limpo não resolve** (RES3 §1.3). Com o treino escolhido em [11/11 18:00, 12/11 14:15) (1.215 min, TAG73 = 0 confirmado), o IQR removeu **304 pontos da TAG24**, a madrugada inteira, e nada nas bombas: a B-02 ficou parada ~31 % do tempo, acima do limiar de 25 % que faz o IQR deixar os zeros. Escolher o período tira a falha do treino (P13), mas a limpeza continua cortando um regime normal. Sem regime, a TAG24 alarmou **299 dos 300 minutos** da madrugada seguinte (P05).
 - **BACKLOG:** 9 (opção b: proteger o IQR para séries com maioria de zeros), 12 e 8.
 
 ### P02. Alarmes falsos da bomba reserva B-02 (TAG28/30/32)
@@ -117,6 +121,10 @@
   - A reserva parada vira regime próprio (`Discrete`, detectores bloqueados), para a B-02 e também para a **B-01 depois do failover**.
   - No preset 6, os alarmes do failover caíram de 110 (regime recomendado) para **0**.
   - Na madrugada, os alarmes das bombas com regime aplicado ficaram em 3 (B-01) e 2 (B-02). Os outros 79 + 30 vieram do fallback para o perfil global na primeira noite do arquivo, que não tem noite anterior (P08) [hipótese: some com histórico de 48 h].
+- **[preset 3] Rodízio de bombas em operação normal** (RES3 §2.3; replay de 17,7 h, treino limpo). O rodízio das 20:47 de 12/11 parou a B-01 por 4 h:
+  - sem regime e com o regime recomendado (a B-01 não tem regime nele): **570 minutos-tag** (TAG27 185, TAG29 149, TAG31 236);
+  - com o combinado + set-point: **1** (no minuto da troca). A B-01 parada vira `Discrete` e os detectores são bloqueados (P20).
+  - Sem regime, a B-02 parada também alarmou: 117 minutos na TAG32 à tarde e ≈ 700 minutos-tag na madrugada.
 - **BACKLOG:** 9 (opção a, agora testada) e 12.
 
 ### P03. Alarmes da bomba B-01 (TAG27/29/31)
@@ -160,6 +168,16 @@
   - Com o set-point, todas as metas são atendidas, exceto a madrugada da B-01, que depende de histórico noturno anterior [hipótese].
   - Sinal novo: às 13:37–13:38, dentro da obstrução do preset 1, as 4 tags das bombas alarmam na entrada em paralelo (frequência 435 contra 396 ± 7). A partida normal das 14:00 não alarma. Ainda é **hipótese** de detecção (P06/P21).
   - **Próximo passo:** Opção A do plano com 3 componentes (própria, outra e TAG46), depois de confirmar com um CSV de 48 h.
+- **[preset 3] Confirmação em 17,7 h de operação normal com treino limpo** (RES3 §2.2–§2.3; 3 rodízios, picos de demanda, madrugada):
+
+  | Configuração | Total | Dia | Madrugada (00h–05h) | B-01 (TAG27/29/31) |
+  |---|---|---|---|---|
+  | Sem regime | 2.525 | 1.027 | 1.498 | 907 |
+  | Recomendado | 1.378 | 990 | 388 | 907 |
+  | **Combinado + set-point** | **297** | **184** | **113** | **64** |
+
+  - Com o recomendado, a B-02 **sozinha** depois do rodízio das 20:47 alarmou ≈ 160 minutos-tag (TAG28/30/32); com o combinado, 17.
+  - **O que sobra no combinado:** ≈ 95 dos 184 alarmes de dia caem nos três **picos de demanda com as duas bombas em paralelo** (12/11 17:51–18:00 e 18:38–18:51; 13/11 07:08–07:16; vazão de até 991, frequência de 421–425). Isso é compatível com a hipótese de que o regime "paralelo" precisa de uma dimensão de demanda (PLANO §5.6.1; BACKLOG 15) [hipótese; notas por detector não abertas].
 - **Solução testada:** TAG42 sozinha (piora de dia, melhora de noite). A estimativa com regime combinado B-01 × B-02 (RES §3.3, com *proxies*, sem set-point) reduziu os alarmes da B-01 a 0–1 min por tag. **Só o regime combinado (bomba × outra bomba × set-point) deve resolver** [hipótese]. Ele não foi testado no replay porque o código não suporta.
 - **BACKLOG:** 12. Plano: `Docs/PLANO_REGIME_COMBINADO.md`.
 
@@ -228,6 +246,7 @@
 - **Evidência** (confirmado no replay): TAG24 em 00:01–00:30 (30 alarmes), TAG43 = 3 às 13:41 (sem alarme) e TAG45 = 1 às 01:28 (RES §4.2, §4.3).
 - **Causa no código:** `Services/AnomalyDetection/OperationalRegimeHistoryResolver.cs : Resolve` (`MinimoAmostrasPorRegime` = 30, igualdade de estado) e o *fail-open* em `Services/AnomalyDetection/Orchestration/PredictionDetectionPreparationService.cs : PrepararAsync`.
 - **Solução candidata** (não testada; RES §3.6, opções d/e): perfil de reserva calculado por regime, ou manter o regime anterior por alguns minutos durante transições.
+- **[preset 3] Fallback depois de rodízio noturno** (RES3 §2.3; confirmado nos dados e no replay). Às 00:47 de 13/11, a B-02 parou com o set-point 380 (classe `RB02S = 10`). Nas 24 h anteriores, essa classe tinha **14 pontos** às 00:52 e só chegou a 30 às **01:13**. De 00:52 a 01:12, TAG28/30/32 caíram no perfil global e alarmaram 21 min cada: **63 minutos-tag**, 21 % dos falsos do regime combinado no período. É o mesmo mecanismo dos 9 fallbacks da RC-0 (PLANO §5.7.3), agora maior. A referência treinada por período e por regime (PROP §4) deve eliminar esse caso [hipótese].
 - **BACKLOG:** 12, 8 e 9.
 
 ### P09. Regime quase constante (bomba parada) fica com desvio zero
@@ -273,6 +292,7 @@
 
 - **O que acontece.** Se um sensor trava num valor normal ou a comunicação para, nenhum detector reage. Todos procuram valores **diferentes** do normal, e um valor parado num ponto normal não é diferente.
 - **Evidência:** confirmado no código (AUD §5c, §5e-2): falhas 20, 30, 32 e 33 do CP300 não detectáveis por construção. Ainda não testado em replay (preset 3/4).
+- **[preset 3]** Continua **sem teste**: o preset 3 de 12/11 não rodou (P29). A previsão por falha está em RES3 §2.5 (hipótese).
 - **Causa no código:** o conjunto de detectores em `Services/AnomalyDetection/DependencyInjection/LegacyAnomalyDetectionServiceCollectionExtensions.cs` não tem esse tipo de detector.
 - **Solução candidata:** detector de "sem variação além do normal" e/ou uso do heartbeat (TAG40).
 - **BACKLOG:** 10.
@@ -314,6 +334,12 @@
 
 - **O que acontece.** O registro de cada decisão guarda a hora em que a IA processou (`DateTime.Now`), não a hora da leitura. Não dá para medir pela tela quanto tempo a IA demorou para reagir.
 - **Evidência:** confirmado no código (MAPA #14, #15): `Services/AnomalyDetection/Orchestration/PredictionFinalizationService.cs : Finalizar` → `Services/AnomaliaHistoricoService.cs : Registrar`.
+- **[preset 3] Idade da leitura na decisão, medida pela primeira vez** (RES3 §2.4; confirmado nos dados e no código):
+  - Em cada um dos 5 ciclos do PK2 de 12/11 (14:21–15:09), os valores gravados pela IA real batem com o CSV num **único minuto comum a todas as tags do ciclo**: 14:20, 14:32, 14:38, 14:41 e 14:52.
+  - Isso confirma o código de `Services/MonitoramentoTagsService.cs : ExecuteAsync`: **um lote de valores atuais por cliente no início do ciclo**, seguido das predições tag a tag sobre esses valores.
+  - **Idade na decisão:** de 0,2 min (ciclo rápido, primeira tag) a **17,2 min** (TAG33 no ciclo de 14:54, com 6 timeouts antes; P26). A resolução é de 1 min.
+  - A hora gravada esconde esse atraso. Um placar da IA real com `data_hora` = processamento conta como atraso de detecção o tempo em que o dado ficou parado na fila.
+  - **Prioridade:** subiu para Alta.
 - **BACKLOG:** 5.
 
 ### P19. Entrada inválida vira "sem anomalia" em silêncio
@@ -359,6 +385,11 @@
 
 - **O que acontece:** 40 alarmes noturnos (00:01–05:00) e 2 fora da noite, iguais com e sem regime (RES §4.3).
 - **Causa:** não investigada. Pode ser outro regime noturno (vazão e sucção dependem da demanda) [hipótese].
+- **[preset 3]** (RES3 §2.3). **45 alarmes**, iguais sem regime, com o recomendado e com o combinado (a TAG23 não tem regime). Caem sempre com o **nível do reservatório num extremo** (confirmado nos dados):
+  - 18:36–19:09 de 12/11, com TAG22 = 390–410 e TAG23 = 1175–1243, os menores valores do arquivo inteiro;
+  - madrugada de 13/11 (00:50, 02:02–02:09, 03:19–03:24, 04:36–04:40), com o nível em 766–796, perto do máximo.
+  
+  [Hipótese] A sucção acompanha a coluna d'água do reservatório, e o perfil não cobre os extremos de nível. Um regime ou uma relação com a TAG22 resolveria; não testado.
 - **BACKLOG:** não há item.
 
 ### P23. Código em execução fora de commit (parcialmente resolvido)
@@ -420,6 +451,10 @@
   - As leituras que deram timeout não aparecem na tabela de decisões (só no Event Viewer), e o LiveMonitor não as mostra.
   - A IA real avalia **o valor atual no momento da consulta**, não as leituras intermediárias: os minutos não avaliados não são recuperados depois.
 - **O que não foi medido:** a idade da leitura na hora da decisão (P18; precisa do PERF_DIAG) e o tempo de cada etapa dentro da tag.
+- **[preset 3] Contexto corrigido e idade da leitura** (RES3 §1.2, §2.4):
+  - O preset 3 **não rodou** (P29): as 50 decisões são de operação normal. As conclusões sobre cadência, timeouts e parada continuam válidas, porque não dependem do cenário.
+  - A idade da leitura, antes não medida, foi recuperada casando valores com o CSV: **0,2 a 17,2 min** (P18). Somada à cadência de ~10 min por tag, uma falha pode levar de ~10 a ~27 min para chegar a uma decisão, no pior caso [inferência].
+  - As notas da IA real ficaram **≤ 2,1 em todas as 50 decisões** (38 exatamente 0). O replay deu 20–35 de média nos mesmos minutos de leitura, inclusive em tags sem regime (TAG22, TAG23). A IA real não está com o mesmo perfil ou baseline do replay. Causa: hipótese (perfil treinado em outro período, P13; baseline comportamental ou contexto cadastrado no banco; BACKLOG 2).
 - **Solução candidata:** primeiro medir (PERF_DIAG, BACKLOG 6). Depois avaliar reuso ou cache incremental do histórico (P10) e processamento não sequencial (P11). Nada aprovado.
 - **BACKLOG:** 6 (prioridade elevada em 13/11) e 4.
 
@@ -480,6 +515,26 @@
 - **Status:** confirmado no código. Não é causa demonstrada de nenhuma falha de detecção.
 - **Impacto:** risco (testabilidade e configuração enganosa). **Prioridade:** Média, porque destrava os testes das tarefas 18 a 20.
 - **BACKLOG:** 22.
+
+### P29. O preset 3 não iniciou, e nada na rotina de teste avisou [preset 3]
+
+- **O que acontece.** Em 12/11, a equipe tratou o período a partir das ~14:20 como o teste do preset 3. Pelos rótulos do simulador, o cenário anterior foi parado às 14:20, mas o preset 3 **nunca começou**. Ninguém conferiu os rótulos de início, e o problema só apareceu na análise de 13/11. Nesse meio-tempo, a exportação da IA real (P26, P27) e o pedido de replay foram feitos como se fosse o preset 3.
+- **Evidência** (confirmado nos dados, `dados/cp300_09a13nov.csv`, 09/11 12:30 → 13/11 07:59; RES3 §1.2):
+  - TAG74 (preset) só vale 1 ou 6 no arquivo inteiro. **Nunca 3.**
+  - TAG76 (estado) vai de 3 para **0 (parado)** às 14:20 de 12/11 e fica em 0 até o fim. O relógio do cenário (TAG77/78) fica parado em 2 h 1800 s.
+  - **Comparação:** no início do preset 6 (11/11), TAG76 também foi 3 → 0 (15:07), mas no minuto seguinte veio TAG74 = 6, TAG76 = 1, o relógio voltou a contar e o nível foi resetado (TAG22 578 → 601). Em 12/11, só o primeiro passo aconteceu.
+  - Slots TAG61/65/69: só os 3 eventos de 11/11 (códigos 2, 10 e 9). TAG73 = 0 depois de 11/11 17:17.
+  - **Nenhuma assinatura** das falhas 20–27 nas medições: TAG22 nunca a 0/4095; nenhuma tag congelada por 8 min ou mais; TAG23 sem saturação; TAG29 nunca em 0 com a B-01 operando.
+  - O simulador seguia publicando: TAG40 (heartbeat) +60 por minuto, operação normal com rodízios e set-point noturno.
+- **Causa: hipótese.** O comando de início (`PSC = 3` e `CSC = 1`, CENARIOS §3) não foi escrito ou não foi aceito, ou foi enviado `CSC = 4` (parar). O CSV não guarda os comandos. Confirmar no log `BDE` do CLP ou com quem operou.
+- **Consequências:**
+  - Nenhum resultado de detecção do preset 3 existe. P12 e as previsões da AUD §5c continuam sem teste.
+  - As conclusões de P26 e P27 (cadência, timeouts, parada do monitor) **continuam válidas**, porque não dependem do cenário.
+  - O período virou um teste útil de alarme falso em operação normal, com treino limpo (RES3 §2.2–§2.3).
+- **Proteção que já existe:** o `placar` informa "0 eventos no período do replay" quando o gabarito não tem falha. Isso só aparece depois da exportação.
+- **Solução candidata (barata, sem código):** no roteiro de teste, conferir até 2 min depois do comando que TAG74 = preset escolhido, TAG76 = 1, TAG77/78 contando e TAG22 ≈ 600 (reset). Repetir a conferência a cada ~1 h (TAG75 avançando). Opcional: um aviso no LiveMonitor ou no script de exportação quando TAG76 ≠ 1 no período (só leitura dos rótulos; precisa de aprovação).
+- **Impacto:** teste perdido sem aviso; risco de avaliação errada ("a IA não detectou nada no preset 3").
+- **BACKLOG:** não há item; sugerido criar (roteiro de teste com conferência do início do cenário).
 
 ---
 
@@ -577,12 +632,12 @@ A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos 
 
 ## 4. Próximos passos (em ordem)
 
-1. **Medir a latência real e garantir que o monitor fique de pé** (P10, P11, P26, P27 → BACKLOG **6**, **4**). Subiu do passo 4 em 13/11: a IA real avaliou cada tag só a cada ~10 min e parou sem aviso às 15:09. Sem isso, nenhum teste da IA real mede a detecção. Fazer numa sessão autorizada: PERF_DIAG, console gravado em arquivo com data e hora e vigia da última decisão (P27, "Como confirmar").
+1. **Medir a latência real e garantir que o monitor fique de pé** (P10, P11, P26, P27 → BACKLOG **6**, **4**). Subiu do passo 4 em 13/11: a IA real avaliou cada tag só a cada ~10 min e parou sem aviso às 15:09. Sem isso, nenhum teste da IA real mede a detecção. Fazer numa sessão autorizada: PERF_DIAG, console gravado em arquivo com data e hora e vigia da última decisão (P27, "Como confirmar"). **[preset 3]** No mesmo teste, conferir o início do cenário pelos rótulos (P29), porque o "preset 3" de 12/11 não chegou a rodar. A idade da leitura já tem uma medida indireta: até 17,2 min (P18).
 2. **Barato e só de proteção:** bloquear rótulos como tag de regime em produção (P14 → BACKLOG **11**). Junto, fazer o inventário do banco do PK2 (BACKLOG **2**) para confirmar que não há rótulo cadastrado, ver quais tags estão ativas (P15) e se já existe algum regime.
 3. **Ativar o regime recomendado no PK2, com aprovação:** TAG28/30/32 ← TAG43, TAG26 ← TAG45, TAG24 ← TAG46. Validado no replay: preset 1 245 → 41 alarmes; madrugada 1.282 → 660 (P02, P04, P05; RES §4). **[preset 6]** 325 → 223, e os alarmes falsos fora da falha caem de 175 para 27, mas surgem 56 minutos-tag com a B-02 sozinha depois do failover (P03; RES6 §2.3). A detecção da TAG29 não muda. Só configuração no banco, reversível.
 4. **Regime combinado para as bombas** (P03, P08 → BACKLOG **12**). É o que falta para a B-01, que ainda gera 566 alarmes de madrugada. Testar no replay antes de produção, com a mesma tabela da RES §4.
 5. **Treino por período e limpeza IQR** (P01, P09, P13 → BACKLOG **8**, **9**). Permitir treinar com um período limpo e proteger o IQR em séries quase constantes.
-6. **Replay dos outros presets e gabarito por evento** (P12, P21 → BACKLOG **3**, partes B e C). Rodar os presets 3, 5 e 6 e medir acerto por evento, para não contar coincidências. **[preset 6] feito por análise manual** (RES6 §2). A medição automática por evento existe desde 12/11 (`placar`, P21) e reproduz os números dos presets 1 e 6; falta rodar os presets 3 e 5.
+6. **Replay dos outros presets e gabarito por evento** (P12, P21 → BACKLOG **3**, partes B e C). Rodar os presets 3, 5 e 6 e medir acerto por evento, para não contar coincidências. **[preset 6] feito por análise manual** (RES6 §2). A medição automática por evento existe desde 12/11 (`placar`, P21) e reproduz os números dos presets 1 e 6. **[preset 3] O preset 3 não rodou (P29).** O período de 12/11 14:15 → 13/11 07:59 foi usado como teste de alarme falso com treino limpo (RES3). Falta **repetir o preset 3** conferindo o início pelos rótulos (P29, RES3 §3), com o log da IAApi em arquivo (passo 1), e rodar o preset 5.
 7. **Detecção que use relação entre tags** (P06): criar um item no BACKLOG para avaliar o multivariado do PK2 com treino adequado (o grupo atual tem ~2 h) e, para a pressão, a análise TAG24 − TAG46 (BACKLOG **13**).
 8. **Detector de valor congelado ou falha de comunicação** (P12 → BACKLOG **10**), depois de medir os presets 3 e 4.
 9. **Só depois:** pesos e limiar do ensemble (P07 → BACKLOG **7**).
