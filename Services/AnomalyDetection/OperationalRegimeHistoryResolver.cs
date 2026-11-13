@@ -114,6 +114,23 @@ public sealed class OperationalRegimeHistoryResolver
 
         var alignedPoints = 0;
 
+        /*
+         * Busca com dois ponteiros (RC-3).
+         *
+         * targetOrdered está em ordem crescente e LagMinutos é fixo,
+         * então os instantes esperados também são crescentes. O ponteiro
+         * da série de regime, portanto, só avança.
+         *
+         * regimeCursor = quantidade de pontos de regime com
+         * DataHora <= instante esperado. O candidato é o último deles
+         * (regimeOrdered[regimeCursor - 1]), exatamente o mesmo ponto que a
+         * busca linear de FindCausalRegimePoint retorna, inclusive com
+         * timestamps repetidos (OrderBy é estável).
+         *
+         * Custo: O(n + m) em vez de O(n · m).
+         */
+        var regimeCursor = 0;
+
         foreach (var targetPoint in targetOrdered)
         {
             /*
@@ -132,11 +149,20 @@ public sealed class OperationalRegimeHistoryResolver
                 targetPoint.DataHora.AddMinutes(
                     -configuration.LagMinutos);
 
+            while (regimeCursor < regimeOrdered.Length &&
+                   regimeOrdered[regimeCursor].DataHora <=
+                   expectedRegimeTimestamp)
+            {
+                regimeCursor++;
+            }
+
             var regimePoint =
-                FindCausalRegimePoint(
-                    regimeOrdered,
-                    expectedRegimeTimestamp,
-                    configuration.ToleranciaAlinhamentoMinutos);
+                regimeCursor == 0
+                    ? null
+                    : AcceptWithinTolerance(
+                        regimeOrdered[regimeCursor - 1],
+                        expectedRegimeTimestamp,
+                        configuration.ToleranciaAlinhamentoMinutos);
 
             if (regimePoint is null)
             {
@@ -211,6 +237,21 @@ public sealed class OperationalRegimeHistoryResolver
             return null;
         }
 
+        return AcceptWithinTolerance(
+            candidate,
+            expectedTimestamp,
+            toleranceMinutes);
+    }
+
+    /// <summary>
+    /// Testes de idade do candidato causal, comuns à busca linear
+    /// (ponto atual) e à busca com ponteiro (laço do histórico).
+    /// </summary>
+    private static HistoricoDetectorPoint? AcceptWithinTolerance(
+        HistoricoDetectorPoint candidate,
+        DateTime expectedTimestamp,
+        int toleranceMinutes)
+    {
         var age =
             expectedTimestamp -
             candidate.DataHora;

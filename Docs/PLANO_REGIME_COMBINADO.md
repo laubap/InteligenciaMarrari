@@ -480,7 +480,7 @@ Coluna "muda comportamento":
 | RC-0 | CSV de 48 h e equivalência da tupla (dados) | — | não |
 | RC-1 | Análise do atraso da TAG29 com as saídas da etapa 0 — **concluída em 12/11/2026 (§5.6.1)** | — | não |
 | RC-2 | Referência congelada e regressão byte a byte — **concluída em 12/11/2026** | — | não |
-| RC-3 | Resolver com dois ponteiros | RC-2 | não (provado) |
+| RC-3 | Resolver com dois ponteiros — **concluída em 13/11/2026** | RC-2 | não (provado) |
 | RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) | RC-0 | não |
 | RC-5 | Modelo `TagRegimeComponenteIa` + migration | RC-4 | não |
 | RC-6 | Resolver com N componentes | RC-3, RC-4 | não (provado) |
@@ -540,6 +540,12 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   - RC-2 com 0 diferenças;
   - custo medido antes/depois: tempo do replay do preset 6 e, numa sessão autorizada, `PERF_DIAG` da etapa `Preparation.RegimeBaseline`. Só registrar o número; a meta é "não piora".
 - **Muda comportamento:** não (provado pelos aceites acima). Por isso fica sem chave. Se a equivalência falhar, a tarefa não é entregue.
+- **Resultado (13/11/2026, sem mudança de comportamento):**
+  - **Código:** em `OperationalRegimeHistoryResolver.Resolve`, o laço do histórico usa `regimeCursor` (quantidade de pontos de regime com `DataHora ≤ esperado`), que só avança; o candidato é `regimeOrdered[regimeCursor − 1]`, o mesmo da busca linear, inclusive com timestamps repetidos. Os testes de idade (`< 0` e `> tolerância`) foram para o helper `AcceptWithinTolerance`, usado pelos dois caminhos. O ponto atual (`currentTimestamp − Lag`) continua com a busca linear `FindCausalRegimePoint`. Assinatura, mensagens e contrato não mudaram.
+  - **Equivalência** (`OperationalRegimeHistoryResolverTests`): a implementação linear anterior (commit `b8f7eab`) foi copiada para o teste como oráculo (`LinearOracle`). `Resolve_TwoPointerSearch_MatchesLinearOracle_OnRandomSeries`: 3000 cenários com semente fixa (1–3000), com lag 0–5, tolerância 0–5, `ToleranciaEstado` 0/0,001/0,6, timestamps repetidos, buracos de 6–24 min, passos fora da grade de minutos, `DateTimeKind` misto, entrada embaralhada e pontos inválidos (NaN, infinito, `DataHora` padrão, nulo). Compara `Applied`, `Reason`, `CurrentRegimeValue`, as três contagens e a lista selecionada **por referência e na ordem**. O teste também exige cobertura mínima (> 300 casos aplicados, não aplicados, com pontos sem alinhamento e com timestamps repetidos). `..._WithRepeatedTimestamps` (5 combinações de lag/tolerância): valores diferentes no mesmo instante, alvo em ordem inversa, 16 instantes atuais.
+  - **Sensibilidade do teste:** trocar `<=` por `<` no ponteiro (mutação temporária, desfeita) fez 9 dos 11 testes do resolver falharem.
+  - **Executado:** `dotnet test -c Release`, filtro `OperationalRegime|Cp300|PredictionServiceDeadbandWiring|PredictionHistoryReuse|IntelligenceLabBehaviorBaselineEndToEnd`: **128/128** (122 da RC-7 + 6 novos). `Compare-Replay.ps1 -Configuracao Release`: **0 diferenças** em 6 execuções (`dados/rc2_rodadas/20261113_115220`). **A suíte completa não foi rodada.**
+  - **Custo** (replay pelo `Compare-Replay.ps1 -SemBuild -Somente`, Release, tempo total do processo, 2 rodadas): `preset6_rec` 17,7 / 17,7 s antes → 16,3 / 17,8 s depois; `preset6_sem` 32,8 (1ª rodada, aquecimento) / 15,3 s → 18,6 / 15,8 s. Diferença dentro do ruído: neste volume o resolver não domina o tempo do replay. Meta "não piora" atendida. `PERF_DIAG` de `Preparation.RegimeBaseline` **não medido** (exige sessão autorizada com a API).
 
 #### RC-4. Chave, mapa de estados e chave de regime (classes isoladas)
 - **Objetivo:**
