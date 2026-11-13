@@ -67,6 +67,13 @@ function Caminho([string]$p) {
     return Join-Path $raiz $p
 }
 
+# Erro de uso: escreve a mensagem sem encerrar o script (o $ErrorActionPreference
+# = 'Stop' faria o Write-Error sair com codigo 1) e sai com o codigo 2 documentado.
+function ErroDeUso([string]$mensagem) {
+    Write-Error $mensagem -ErrorAction Continue
+    exit 2
+}
+
 function Sha256([string]$p) { (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLowerInvariant() }
 
 # Execucoes padrao: sem e rec dos tres cenarios da etapa 0 (PLANO_REGIME_COMBINADO.md, 5.2),
@@ -141,20 +148,18 @@ try {
 
     if ($Gerar) {
         if ($HistoricoCausal) {
-            Write-Error 'A referencia e gerada sem -HistoricoCausal; use a opcao so na comparacao.'
-            exit 2
+            ErroDeUso 'A referencia e gerada sem -HistoricoCausal; use a opcao so na comparacao.'
         }
         if ((Test-Path -LiteralPath $manifestoPath) -and -not $Sobrescrever) {
-            Write-Error "Ja existe $manifestoPath. Use -Sobrescrever para gerar outra referencia."
-            exit 2
+            ErroDeUso "Ja existe $manifestoPath. Use -Sobrescrever para gerar outra referencia."
         }
         $execucoes = @(ExecucoesPadrao $Entrada)
         if ($Somente) { $execucoes = @($execucoes | Where-Object { $Somente -contains $_.nome }) }
         foreach ($ent in @($execucoes | ForEach-Object { $_.entrada } | Select-Object -Unique)) {
-            if (-not (Test-Path -LiteralPath (Caminho $ent))) { Write-Error "Entrada ausente: $(Caminho $ent)"; exit 2 }
+            if (-not (Test-Path -LiteralPath (Caminho $ent))) { ErroDeUso "Entrada ausente: $(Caminho $ent)" }
         }
         $entradaPath = Caminho $Entrada
-        if (-not (Test-Path -LiteralPath $entradaPath)) { Write-Error "Entrada ausente: $entradaPath"; exit 2 }
+        if (-not (Test-Path -LiteralPath $entradaPath)) { ErroDeUso "Entrada ausente: $entradaPath" }
         New-Item -ItemType Directory -Force -Path $pastaRef | Out-Null
 
         $commit = (& git -C $raiz rev-parse HEAD).Trim()
@@ -191,8 +196,7 @@ try {
 
     # --- Comparar ---------------------------------------------------------
     if (-not (Test-Path -LiteralPath $manifestoPath)) {
-        Write-Error "Manifesto ausente: $manifestoPath. Gere a referencia com -Gerar."
-        exit 2
+        ErroDeUso "Manifesto ausente: $manifestoPath. Gere a referencia com -Gerar."
     }
     $m = Get-Content -LiteralPath $manifestoPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $execucoes = @($m.execucoes)
@@ -204,10 +208,9 @@ try {
         $ent = EntradaDa $e $m
         if ($conferidas.ContainsKey($ent.entrada)) { continue }
         $p = Caminho $ent.entrada
-        if (-not (Test-Path -LiteralPath $p)) { Write-Error "Entrada ausente: $p"; exit 2 }
+        if (-not (Test-Path -LiteralPath $p)) { ErroDeUso "Entrada ausente: $p" }
         if ((Sha256 $p) -ne $ent.sha256) {
-            Write-Error "A entrada $($ent.entrada) mudou desde a referencia (SHA-256 diferente). A comparacao nao vale."
-            exit 2
+            ErroDeUso "A entrada $($ent.entrada) mudou desde a referencia (SHA-256 diferente). A comparacao nao vale."
         }
         $conferidas[$ent.entrada] = $true
     }

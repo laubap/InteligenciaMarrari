@@ -440,7 +440,10 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - **(e)** Na próxima sessão autorizada com o Bridge, as linhas `Bridge lote…` do log mostram tempos e contagens normais. Sem essa conferência, não afirmar que o comportamento no ambiente de teste ficou igual.
 - **Ordem:** antes do passo 2 da tarefa 19 e dos testes das tarefas 18 e 20. Não depende de nenhuma outra tarefa.
 
-### 23. (Ferramenta) Código de saída do `Compare-Replay.ps1` nos erros de uso
+### 23. (Ferramenta) Código de saída do `Compare-Replay.ps1` nos erros de uso — ✅ **CONCLUÍDA (2026-11-13)**
+- **Resultado:** função `ErroDeUso` no script (`Write-Error … -ErrorAction Continue` seguido de `exit 2`), usada nos **seis** caminhos de erro de uso. Os quatro listados abaixo e mais um: `-Gerar` com `-HistoricoCausal`, que tinha o mesmo problema. A entrada ausente conta em dois lugares, no `-Gerar` e na comparação. Só o script mudou.
+  - **Testado** com `-SemBuild` e cópias do manifesto no scratchpad. `dados/rc2_referencia/` não foi tocado. A entrada alterada foi simulada com `entrada_sha256` trocado na cópia. Comparação: entrada ausente, entrada alterada e manifesto ausente. `-Gerar`: manifesto existente, `-HistoricoCausal` e entrada ausente. Os seis davam código **1** no script do `HEAD` e agora dão **2**, com a mesma mensagem. Nenhum rodou o replay.
+  - **Comparação normal:** `Compare-Replay.ps1 -Configuracao Release`, **0 diferenças em 12 execuções**, código **0** (`dados/rc2_rodadas/t23_codigo_saida`).
 - **Problema** (confirmado em execução na RC-0, 2026-11-13; causa confirmada no código):
   - Com a entrada alterada (SHA-256 diferente do manifesto), o script para antes de rodar qualquer execução, como deve. Mas sai com código **1**, e não com o **2** documentado no cabeçalho ("2 = uso incorreto").
   - **Causa:** `$ErrorActionPreference = 'Stop'` faz o `Write-Error` encerrar o script antes do `exit 2`.
