@@ -484,7 +484,7 @@ Coluna "muda comportamento":
 | RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) | RC-0 | não |
 | RC-5 | Modelo `TagRegimeComponenteIa` + migration | RC-4 | não |
 | RC-6 | Resolver com N componentes | RC-3, RC-4 | não (provado) |
-| RC-7 | Bloqueio de rótulos por cliente (backlog 11) | — | não (lista vazia por padrão) |
+| RC-7 | Bloqueio de rótulos por cliente (backlog 11) — **concluída em 13/11/2026** | — | não (lista vazia por padrão) |
 | RC-8 | Service e provider com componentes, atrás da chave | RC-5, RC-6, RC-7 | só com a chave |
 | RC-9 | `RegimeKey` no diagnóstico e no log | RC-8 | só com a chave (observabilidade) |
 | RC-10 | Replay com regime combinado | RC-8, RC-9 | não (ferramenta) |
@@ -583,6 +583,11 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - **Arquivos:** `Services/AnomalyDetection/OperationalRegimeBaselineProvider.cs`; local da lista por cliente a definir na tarefa (seção de configuração ou tabela de configuração do cliente já existente); `OperationalRegimeBaselineProviderTests.cs`.
 - **Aceite:** com a lista TAG60–TAG81 e `TagRegime = TAG73`, não aplica e registra o motivo; com tag válida ou lista vazia, resultado idêntico ao atual; RC-2 com 0 diferenças.
 - **Muda comportamento:** não com a lista vazia (padrão). A lista do PK2 só é cadastrada na RC-12.
+- **Resultado (13/11/2026, sem mudança de comportamento com a configuração padrão):**
+  - **Local da lista:** seção de configuração `AnomalyDetection:RegimeOperacional:TagsProibidasPorCliente` (cliente → lista de tags), classe nova `Services/AnomalyDetection/OperationalRegimeForbiddenTagsOptions.cs`, registrada em `AddAnomalyDetectionConfiguration`. **Vazia por padrão**; o `appsettings.json` não mudou. Comparação de cliente e tag sem diferenciar maiúsculas/minúsculas e ignorando espaços nas pontas; a tag bate por inteiro (sem faixa nem prefixo: cadastrar TAG60…TAG81 uma a uma).
+  - **Provider:** `OperationalRegimeBaselineProvider` ganhou o parâmetro opcional `IOptions<OperationalRegimeForbiddenTagsOptions>?` (nulo = lista vazia; chamadores atuais, inclusive o replay, não mudaram). Logo depois da checagem de `TagRegime` vazia, `IsForbidden(clienteId, TagRegime)` ⇒ "não aplicado" com o motivo (tag, cliente e nome da seção) e a linha `BASELINE POR REGIME RECUSADO`, **sem** consulta ao histórico. A RC-8 deve usar o mesmo `IsForbidden` para cada componente.
+  - **Testes** (`OperationalRegimeBaselineProviderTests`): TAG73 com a lista TAG60–TAG81 do PK2 ⇒ não aplica, motivo registrado, 0 consultas; tag válida com lista, lista vazia e lista só de outro cliente ⇒ resultado idêntico ao provider sem lista (aplicação, motivo, amostras, estatísticas, histórico selecionado, janela consultada); `IsForbidden` (caixa, espaços, limites TAG59/60/81/82, outro cliente); leitura da seção e padrão vazio.
+  - **Executado:** `dotnet test -c Release` com filtro `OperationalRegime|Cp300|PredictionServiceDeadbandWiring|PredictionHistoryReuse|IntelligenceLabBehaviorBaselineEndToEnd`: **122/122**. `Compare-Replay.ps1 -Configuracao Release`: **0 diferenças** em 6 execuções (`dados/rc2_rodadas/20261113_114021`). Release porque um processo `IAApi` em execução travava `bin/Debug` (não foi parado). **A suíte completa não foi rodada.**
 
 #### RC-8. Service e provider com componentes, atrás da chave
 - **Objetivo:**

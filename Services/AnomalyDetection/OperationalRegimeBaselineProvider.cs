@@ -21,12 +21,23 @@ public sealed class OperationalRegimeBaselineProvider
     private readonly AppDbContext _context;
     private readonly IHistoricoService _historicoService;
     private readonly OperationalRegimeBaselineService _baselineService;
+    private readonly OperationalRegimeForbiddenTagsOptions _forbiddenTags;
 
+    /// <param name="forbiddenTagsOptions">
+    /// Tags proibidas como regime, por cliente (RC-7). Nulo ou vazio
+    /// (padrão) = nenhuma tag bloqueada, comportamento anterior.
+    /// </param>
     public OperationalRegimeBaselineProvider(
         AppDbContext context,
         IHistoricoService historicoService,
-        OperationalRegimeBaselineService baselineService)
+        OperationalRegimeBaselineService baselineService,
+        Microsoft.Extensions.Options.IOptions<OperationalRegimeForbiddenTagsOptions>?
+            forbiddenTagsOptions = null)
     {
+        _forbiddenTags =
+            forbiddenTagsOptions?.Value ??
+            new OperationalRegimeForbiddenTagsOptions();
+
         _context =
             context ??
             throw new ArgumentNullException(
@@ -118,6 +129,32 @@ public sealed class OperationalRegimeBaselineProvider
         {
             return OperationalRegimeBaselineResolution.CreateNotApplied(
                 "A configuração não possui uma TagRegime válida.");
+        }
+
+        /*
+         * RC-7 (backlog 11): rótulos/gabarito do cliente nunca podem
+         * escolher o baseline. Com a lista vazia (padrão), nada muda.
+         * Recusa antes de qualquer consulta ao histórico.
+         */
+        if (_forbiddenTags.IsForbidden(
+                clienteId,
+                configuration.TagRegime))
+        {
+            var reason =
+                $"TagRegime {configuration.TagRegime} está na lista de tags " +
+                $"proibidas como regime do cliente {clienteId} " +
+                "(AnomalyDetection:RegimeOperacional:TagsProibidasPorCliente). " +
+                "Fallback para baseline global.";
+
+            Console.WriteLine(
+                $"BASELINE POR REGIME RECUSADO " +
+                $"Cliente={clienteId} " +
+                $"Tag={tagName} " +
+                $"TagRegime={configuration.TagRegime} " +
+                "Motivo=tag proibida como regime");
+
+            return OperationalRegimeBaselineResolution.CreateNotApplied(
+                reason);
         }
 
         if (configuration.LagMinutos < 0)

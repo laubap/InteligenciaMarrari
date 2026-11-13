@@ -14,6 +14,11 @@ public static class AnomalyDetectionServiceCollectionExtensions
         services.Configure<AnomalyDetectionOptions>(
             configuration.GetSection("AnomalyDetection"));
 
+        // RC-7: lista vazia se a seção não existir (padrão).
+        services.Configure<OperationalRegimeForbiddenTagsOptions>(
+            configuration.GetSection(
+                OperationalRegimeForbiddenTagsOptions.SectionName));
+
         return services;
     }
 
