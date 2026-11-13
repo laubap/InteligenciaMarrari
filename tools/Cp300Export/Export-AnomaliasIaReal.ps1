@@ -124,8 +124,15 @@ function Converter-DataApi($valor) {
 # Campo pelo nome camelCase (padrao do ASP.NET Core) ou PascalCase.
 function Campo($obj, [string]$nome) {
     $pascal = $nome.Substring(0, 1).ToUpperInvariant() + $nome.Substring(1)
+    # No 5.1 o JavaScriptSerializer devolve Dictionary[string,object], que nao
+    # expoe Contains(chave) publicamente (implementacao explicita de
+    # IDictionary); o PowerShell nao acha a sobrecarga. Usa ContainsKey.
+    if ($obj -is [System.Collections.Generic.IDictionary[string, object]]) {
+        foreach ($n in @($nome, $pascal)) { if ($obj.ContainsKey($n)) { return $obj[$n] } }
+        return $null
+    }
     if ($obj -is [System.Collections.IDictionary]) {
-        foreach ($n in @($nome, $pascal)) { if ($obj.Contains($n)) { return $obj[$n] } }
+        foreach ($n in @($nome, $pascal)) { if (([System.Collections.IDictionary]$obj).Contains($n)) { return $obj[$n] } }
         return $null
     }
     foreach ($n in @($nome, $pascal)) {

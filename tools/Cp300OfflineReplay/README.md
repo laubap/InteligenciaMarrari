@@ -18,6 +18,42 @@ Reproduz, minuto a minuto, a detecção univariada de produção sobre o histór
 - Consulta em pedaços de 2 h (`-PedacoHoras`), timeout de 180 s (`-TimeoutSeg`) e até 3 tentativas por pedaço. Cada tag é gravada assim que termina. Depois de timeouts ou Ctrl+C, repita o mesmo comando com `-Completar`: busca só os pedaços incompletos e acrescenta sem duplicar. Se o arquivo já existir, o script exige `-Completar` ou `-Sobrescrever`. Os tempos de cada pedaço ficam em `<saída>.pedacos.csv`.
 - No Bridge as tags têm o prefixo do cliente (`PK2.TAG22`). O script consulta com prefixo e grava `TagName` **sem** ele (`TAG22`); o cliente fica em `ClienteId`. Antes de exportar, rode com `-Teste -BridgeUrl … -Cliente PK2`: busca `PK2.TAG22` das últimas 2 h e mostra a URL e os 3 primeiros pontos.
 
+### 1.1 Exportar as decisões reais da IAApi (para o placar)
+
+`tools/Cp300Export/Export-AnomaliasIaReal.ps1` lê as decisões que a **IAApi local** gravou em `AnomaliaDetectada` e grava um CSV que o `placar` (seção 6) lê no lugar da saída do replay. Assim dá para comparar a IA real com o gabarito do simulador.
+
+```powershell
+.\tools\Cp300Export\Export-AnomaliasIaReal.ps1 -Inicio '2026-11-11 15:06' -Fim '2026-11-11 17:40'
+# -> dados\anomalias_ia_PK2_20261111_1506_20261111_1740.csv
+dotnet run --project tools/Cp300OfflineReplay -- placar `
+    --replay .\dados\anomalias_ia_PK2_20261111_1506_20261111_1740.csv `
+    --gabarito .\dados\cp300_10a11nov.csv --saida .\dados\placar_preset6_ia_real
+```
+
+- **Fonte:** `GET {ApiUrl}/api/anomalias` (`AnomaliaController.Listar`), o mesmo endpoint que o LiveMonitor usa para as decisões. Faz um único GET, só de leitura. O endpoint devolve **todas** as linhas, de todos os clientes, sem paginação; o script filtra cliente (`-Cliente`, padrão `PK2`) e período **antes** de gravar.
+- A tabela tem **uma linha por decisão** (anomalia ou não): `PredictionFinalizationService.Finalizar` → `AnomaliaHistoricoService.Registrar` em toda leitura processada.
+- `-ApiUrl` padrão `http://localhost:5145`. Por padrão recusa endereço fora do loopback (`-PermitirRemoto` só com autorização). `-TimeoutSeg` padrão 300. Se a saída existir, exige `-Sobrescrever`.
+
+> **Atenção: a hora gravada é a do PROCESSAMENTO, não a da leitura (P18).** `AnomaliaDetectada.DataDeteccao` recebe `DateTime.Now` quando a IA termina de processar, e `/api/anomalias` não informa a hora da leitura. Por isso:
+> - `data_processamento` = `DataDeteccao` exatamente como veio da API (com segundos);
+> - `data_hora` = minuto de `DataDeteccao − DefasagemMinutos` (padrão 0, ou seja, o **minuto do processamento**). É a coluna que o placar usa;
+> - `base_data_hora` registra como `data_hora` foi obtida (`processamento` ou `processamento-menos-N-min`);
+> - `-Inicio`/`-Fim` (inclusivos) também filtram pela hora do processamento.
+>
+> Consequências no placar: **o atraso medido inclui a latência leitura → decisão**; uma leitura processada com atraso cai num minuto posterior; um ciclo acima de 1 min deixa minutos sem decisão e pode juntar duas decisões no mesmo minuto. Só use `-DefasagemMinutos` com uma defasagem **medida** (BACKLOG 6). A correção de fundo é a tarefa 5 do BACKLOG (gravar a hora da leitura).
+
+| Coluna | Origem |
+|---|---|
+| `data_hora` | minuto de `DataDeteccao − DefasagemMinutos` (processamento) |
+| `cliente`, `tag`, `valor` | `clienteId`, `tagName`, `valor` (`ValorRecebido`) |
+| `decisao_final` | `ehAnomalia` (decisão operacional), 1/0 |
+| `nota_final` | `score` |
+| `erro` | sempre vazio (a tabela só tem decisões concluídas) |
+| `data_processamento` | `dataDeteccao`, texto original |
+| `base_data_hora`, `id`, `tipo_tag`, `criticidade`, `classificacao_risco` | método da hora; campos de `AnomaliaDetectada` |
+
+O endpoint não expõe as notas por detector, o baseline nem os campos de auditoria do runtime (`LegacyEhAnomalia` etc.); para isso seria preciso outro endpoint (os diagnósticos do Intelligence Lab, que exigem chave).
+
 ## 2. Rodar o replay
 
 ```powershell
@@ -145,7 +181,7 @@ dotnet run --project tools/Cp300OfflineReplay -- placar `
 
 | Opção | Efeito |
 |---|---|
-| `--replay` | CSV gerado pelo replay (seção 5). Usa `data_hora`, `tag`, `decisao_final` e `erro`. |
+| `--replay` | CSV gerado pelo replay (seção 5) ou pelo `Export-AnomaliasIaReal.ps1` (seção 1.1; aí `data_hora` é a hora do processamento, P18). Usa `data_hora`, `tag`, `decisao_final` e `erro`. |
 | `--gabarito` | CSV de dados (`ClienteId,TagName,DataHora,Valor`) com os slots TAG61–TAG72 e a TAG73. Normalmente o mesmo `--entrada` do replay. |
 | `--saida P` | Prefixo dos arquivos gerados: `P.md`, `P_eventos.csv`, `P_por_tag.csv` e `P_falsos_por_hora.csv`. |
 | `--mapa` | Mapa falha → tags. Padrão: `placar_falhas_cp300.json` (copiado para a pasta do executável). |
