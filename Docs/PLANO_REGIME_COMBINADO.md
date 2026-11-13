@@ -280,6 +280,7 @@ Minutos-tag com alarme. ✅ = atende a meta; ❌ = não atende.
    - Os estados noturnos (`RB0xS` = 10/11) tinham menos de 30 amostras e caíram no perfil global (P08): B-01 00:47–01:12 e B-02 00:01–00:30, todos com `origem_baseline = Global`.
    - É o mesmo efeito da TAG24 em 00:01–00:30 (P05).
    - Com uma noite anterior no histórico, provavelmente não aconteceriam [**hipótese**; confirmar com um CSV de 48 h].
+   - **Resultado da RC-0 (§5.7.3):** confirmado em parte. Com a noite anterior, o fallback cai de 79 para 9 minutos-tag na B-01 e de 30 para 0 na B-02. Os 9 restantes vêm da alternância das bombas entre as noites, não do início do arquivo.
 4. **O failover deixa de gerar alarmes** em `combs`: a B-01 parada vira regime próprio (classificada `Discrete`, detectores bloqueados; P20), e a B-02 sozinha de dia tem baseline próprio.
 5. **A detecção não piora nem melhora:** TAG29 às 15:32, como antes. Em `comb`/`combs` há um intervalo em 15:33–15:34 sem alarme (84 contra 86 minutos de falha), e o alarme volta contínuo de 15:35 a 16:51. **Ressalva:** esse intervalo atrasa a detecção confirmada de 15:34 para 15:37 (ver §5.6).
 6. **Sinal novo no preset 1** [hipótese, P06/P21]. Em `comb` e `combs`, as 4 tags das bombas alarmam às **13:37–13:38**, dentro da obstrução (777 ‰), quando a B-02 parte e as duas ficam em paralelo.
@@ -422,6 +423,102 @@ Limiar = 60.
 - A opção (b) (sensibilidade dos detectores dentro do regime) e a heterogeneidade do regime "B-01 sozinha" viraram itens futuros do backlog (14 e 15), fora deste plano.
 - Se a Opção A real ficar **depois de 15:37** na RC-11, vale a regra original: documentar a causa e parar antes da RC-12.
 
+### 5.7 Resultado da RC-0 (13/11/2026): CSV com a noite anterior e equivalência da tupla pura
+
+**Nível de evidência:** **confirmado no replay** (código de produção sobre dados do simulador, sem IF, multivariado nem latência; não é validação em planta). Nenhum código de runtime, configuração ou limiar foi alterado. Único arquivo versionado alterado: `tools/Cp300OfflineReplay/Compare-Replay.ps1` (execuções da RC-0 na referência, com aprovação; §6.3, RC-2).
+
+**Entrada:** `dados/cp300_09a13nov.csv`, exportado pela equipe: 09/11 12:30 → 13/11 07:59, 43 tags, 5.474 minutos por tag. O arquivo de pedaços tem 1.978 pedaços, todos `ok`. Faltam 16 minutos por tag, sempre buracos de 1 minuto, que já existiam no CSV antigo.
+- **Trecho comum com `cp300_10a11nov.csv`** (10/11 12:30 → 11/11 17:39): **idêntico** nas 27 tags em comum (confirmado por `diff` das linhas ordenadas).
+- O CSV novo traz também TAG34–TAG40 e TAG69–TAG78. O gabarito (TAG60–TAG81) não entrou em nenhuma série nem em `--tags`/`--regime`.
+
+**Séries derivadas:** `dados/cp300_09a13nov_derivado.csv` = entrada + 6 séries por minuto (5.474 minutos, nenhum incompleto), geradas por `rc0_derivar.py` (scratchpad da sessão, fora do repositório).
+- `RB01`/`RB02`/`RB01S`/`RB02S` seguem as **mesmas regras** de §5.1. Rodado sobre o CSV antigo, o script reproduz **byte a byte** o `cp300_10a11nov_derivado.csv` da etapa 0 (descontadas as séries novas).
+- `RT01S` = `10·map(TAG42) + map(TAG43) + 100·(TAG46 = 380)`, com `map` = `2→2; *→0` (a configuração alvo de §6.2). `RT02S` é o espelho, com TAG43 primeiro.
+
+| Série | Valores e minutos |
+|---|---|
+| `RB01S` | 0: 1.128, 1: 1.094, 2: 2.053, 10: 600, 11: 599 |
+| `RT01S` | 2: 1.128, 20: 1.094, 22: 2.053, 102: 600, 120: 599 |
+| `RB02S` | 0: 1.094, 1: 1.128, 2: 2.053, 10: 599, 11: 600 |
+| `RT02S` | 2: 1.094, 20: 1.128, 22: 2.053, 102: 599, 120: 600 |
+
+Estados no arquivo: TAG42 ∈ {0: 1.724, 2: 3.746, 3: 4}; TAG43 ∈ {0: 1.688, 1: 1, 2: 3.781, 3: 4}; TAG46 ∈ {380: 1.199, 450: 4.275}.
+
+#### 5.7.1 Tupla pura × `RB0xS`
+
+- **Resultado (confirmado nos dados):** a tupla pura e `RB0xS` formam **a mesma partição** nos 5.474 minutos, para as duas bombas. A correspondência é uma bijeção: `RB 0 ↔ RT 2`, `1 ↔ 20`, `2 ↔ 22`, `10 ↔ 102` e `11 ↔ 120`.
+- **Minutos diferentes:** **0**.
+- **Ambas as bombas fora de 2:** não ocorre em nenhum minuto. A classe (0,0,·), que é onde a tupla pura e a "parada domina" se separariam, não aparece nos dados.
+- **Transições:** os 9 minutos com um estado fora de {0, 2} (TAG42 ou TAG43 = 3, e uma vez TAG43 = 1) caem na mesma classe nos dois esquemas, por causa do `*→0`. São eles: 10/11 08:46, 15:24 e 17:21; 11/11 13:41 e 16:18; 12/11 07:32 e 20:47; 13/11 00:47 e 04:47.
+- **Decisão de §6.2 confirmada:** tupla pura na primeira versão, com o mapa da configuração alvo. Nenhum ajuste de mapa é necessário.
+- **Na RC-11:** como as classes são as mesmas, a lista de "minutos diferentes" pedida no item 2 é vazia.
+
+#### 5.7.2 Execuções
+
+12 execuções, uma para cada cenário de §5.2 (preset 1, madrugada e preset 6) com cada configuração (`sem`, `rec`, `comb` e `combs`). Os argumentos são os mesmos de §5.2, trocando só a entrada por `--entrada dados/cp300_09a13nov_derivado.csv`. Saídas em `dados/rc0_<cenário>_<config>.csv` e `.log`.
+
+**Conferência:** 12 de 12 execuções com código 0, 0 erros e 0 divergências.
+
+**Referência da RC-2:** `rec` e `combs` dos três cenários entraram em `dados/rc2_referencia/` (§6.3, RC-2). Eles se chamam `rc0_<cenário>_<config>` e têm o mesmo SHA-256 das saídas desta seção.
+
+- **Preset 1:** as 4 saídas são **idênticas byte a byte** às `e0_preset1_*` (CSV por SHA-256; log linha a linha, fora `Saida:`). Era o esperado: o treino e as janelas começam em 10/11 12:55, e esse trecho é igual nos dois CSVs.
+- **Preset 6:** as saídas são iguais às `e0_preset6_*`, **mais o minuto 17:40**. O CSV antigo terminava em 17:39, e o replay vai até 17:40 inclusive. São 13 leituras a mais e nenhuma linha removida ou alterada. Às 17:40 não há alarme, e as anomalias são as mesmas: 325 / 223 / 144 / 104.
+  - Por isso, as metas de §5.3 do preset 1 e do preset 6 **não mudam**, inclusive a TAG29 às 15:32.
+- **Madrugada:** muda. O treino [10/11 00:00, 11/11 00:00) e as janelas móveis agora contêm a noite de 10/11.
+
+Madrugada (11/11 00:00 → 05:30), em minutos-tag com alarme. A contagem é a mesma de §5.3 e reproduz exatamente os números da etapa 0. Entre parênteses, os minutos com `origem_baseline = Global`.
+
+| Config | B-01 (TAG27/29/31): etapa 0 → RC-0 | B-02 (TAG28/30/32): etapa 0 → RC-0 | Total: etapa 0 → RC-0 |
+|---|---|---|---|
+| `sem` | 566 (566) → 716 (716) | 152 → 172 | 1.282 → 1.437 |
+| `rec` (hoje) | 566 (566) → 716 (716) | 10 → 184 | 660 → 944 |
+| `comb` | 6 → **0** | 130 → 14 | 220 → 58 |
+| `combs` | 82 (79) → **30 (9)** | 32 (30) → **0** | 198 → **74** |
+
+#### 5.7.3 Aceite
+
+| Critério | Resultado |
+|---|---|
+| B-01 de madrugada em `combs` ≤ 30 minutos-tag | ✅ **30**, exatamente no limite |
+| … **sem** `origem_baseline = Global` por falta de histórico noturno | ⚠️ **Parcial.** O fallback cai de 79 para **9** na B-01 e de 30 para **0** na B-02, mas não some |
+| Tupla pura = `RB0xS` em todos os minutos, ou lista de diferenças + decisão | ✅ 0 minutos diferentes (§5.7.1) |
+
+**Os 9 fallbacks** (TAG27, TAG29 e TAG31 às 00:43, 00:44 e 00:45; os três minutos com alarme):
+- **Causa (confirmado no replay, no código e na contagem):** às 00:43 a B-01 para, e o estado passa a `RB01S = 10` (B-01 parada com set-point 380). Nas janelas [t − 24 h, t) dessa classe havia 27, 28 e 29 pontos às 00:43, 00:44 e 00:45. O mínimo é `MinimoAmostrasPorRegime = 30` (padrão em `Models/TagRegimeOperationalIa.cs`, verificado em `OperationalRegimeHistoryResolver`). Às 00:46 a classe chega a 30 pontos, e o regime volta a ser aplicado.
+- **Por que há poucos pontos mesmo com a noite anterior:** as bombas se alternam de uma noite para outra.
+  - Na noite de 10/11, a B-01 ficou parada com 380 só em 00:01–00:33 (33 min) e em 04:34–05:00 (27 min); no resto da noite operou sozinha (00:34–04:33, 240 min).
+  - Na noite de 11/11, ela opera sozinha até 00:42 e fica parada de 00:43 a 04:42.
+  - Às 00:43 de 11/11, o bloco de 00:01–00:33 do dia anterior já saiu da janela de 24 h, e sobram os 27 minutos de 04:34–05:00.
+- **Leitura:** é o mesmo mecanismo de §5.4 item 3 (classe rara abaixo do mínimo, P08). A causa agora é a alternância das bombas com a janela móvel de 24 h, não o início do arquivo. **Não depende** de tupla pura × `RB0xS`, que dão as mesmas classes.
+- **Na B-02**, os mesmos 3 minutos também caem no global (classe `RB02S = 11` com 27–29 pontos), mas sem alarme.
+
+**Os outros 21 alarmes da B-01 em `combs`** (TAG27 9, TAG29 1 e TAG31 11, entre 00:01 e 00:19) têm **regime aplicado**, na classe 11 (B-01 sozinha com 380):
+- **Fatos (confirmado no replay):**
+  - Às 00:01 o set-point cai de 450 para 380, com a B-01 já operando sozinha.
+  - A TAG31 fica em 349–355 de 00:02 a 00:20 e acomoda até ~341 em 00:35.
+  - O baseline da classe 11 é 341,1 ± 3,8. Ele vem quase todo de 10/11 00:34–04:33, quando a B-01 partiu **de parada** já no patamar baixo (339–346).
+  - A TAG27 mostra o mesmo padrão: 150–161 contra 143 ± 5.
+- **[Hipótese] Causa:** a acomodação depois da troca de set-point não está representada no histórico da classe, e o desvio do regime é estreito, como em §5.6.1.
+- **Em `comb`** (sem o set-point), a B-01 tem 0 alarmes na madrugada.
+- **Não investigado além disso.**
+
+**Decisão (13/11/2026, responsável): RC-0 concluída com ressalva.**
+- Os 9 fallbacks ficam registrados como efeito conhecido da janela móvel de 24 h com alternância das bombas.
+- Contar de novo na RC-11 (item 3, `origem_baseline = Global`).
+- Nenhum limiar foi alterado, inclusive `MinimoAmostrasPorRegime`.
+- [Hipótese] A referência treinada por período e por regime (PROP §4) não dependeria da janela de 24 h e deve eliminar esse caso. Fica fora deste plano (§6.4).
+
+#### 5.7.4 Observações (não mudam o desenho da Opção A)
+
+- **`comb` × `combs` com a noite anterior.** Na madrugada, `comb` passa a ter menos alarmes que `combs` (58 contra 74; B-01 0 contra 30; B-02 14 contra 0).
+  - O set-point continua necessário para a B-02 (failover do preset 6: 40 → 0; madrugada: 14 → 0).
+  - Mas ele cria classes noturnas menores e baselines mais estreitos para a B-01.
+  - A decisão dos 3 componentes (§5.5) fica como está; a RC-11 mede de novo.
+- **TAG24 ← TAG46:** o fallback de 00:01–00:30 da primeira noite (§5.4 item 3, P05) também some com a noite anterior. Em `rec`, `comb` e `combs`, a TAG24 cai de 30 para 1 alarme.
+- **`rec` (o regime de hoje) piora com 48 h:** B-01 566 → 716 e B-02 10 → 184 (TAG32 00:44–04:35, regime aplicado). **Não investigado.**
+  - Contra esse `rec`, o `combs` reduz os alarmes da madrugada em 92 % (944 → 74).
+  - Os números da madrugada de §5.3 valem para o CSV de 10–11/11; com a noite anterior, valem os desta seção.
+
 ---
 
 ## 6. Plano de implementação (Opção A com três componentes)
@@ -454,14 +551,14 @@ Limiar = 60.
 | Decisão | Opções | Recomendação |
 |---|---|---|
 | Onde fica o componente 1 | (a) `TagRegime` atual + coluna nova `MapaEstados` (nula) na tabela atual; a tabela filha guarda só os componentes 2..N. (b) Tabela filha com os componentes 1..N, e `TagRegime` tem de bater com o componente 1 | **(a)**: a linha atual continua válida sozinha, sem duplicar o componente 1 |
-| Tupla pura × "parada domina" | Tupla pura: (0,0,·) e (0,2,·) são classes diferentes. Com dominância, "própria parada" ignora os outros componentes, como o `RB01` da etapa 0 | **Tupla pura** na primeira versão. Nos dados de 10–11/11 a B-01 parada sempre teve a B-02 em 2 (§1.2), então deve dar o mesmo resultado; **conferir na RC-0** |
+| Tupla pura × "parada domina" | Tupla pura: (0,0,·) e (0,2,·) são classes diferentes. Com dominância, "própria parada" ignora os outros componentes, como o `RB01` da etapa 0 | **Tupla pura** na primeira versão. Nos dados de 10–11/11 a B-01 parada sempre teve a B-02 em 2 (§1.2), então deve dar o mesmo resultado; **conferir na RC-0**. **Conferido na RC-0 (13/11/2026):** mesma partição que `RB0xS` nos 5.474 minutos de 09–13/11, 0 minutos diferentes (§5.7.1) |
 | Valor fora do mapa, sem `*` | (a) passa sem mudar; (b) ponto descartado | **(a)**, e o relatório de cobertura do replay lista esses valores |
 | Comparação com mapa | Mapear e comparar exato × comparar com `ToleranciaEstado` | Mapear (a entrada do mapa casa com `ToleranciaEstado`) e comparar exato. **Ajustada na RC-6 (13/11/2026):** exato só com os dois lados mapeados; com algum lado fora do mapa, `ToleranciaEstado` (decisão 2 abaixo) |
 | Lag e tolerância de alinhamento | Por componente × da configuração | **Da configuração** (os mesmos para os 3 componentes); por componente só se a RC-0 mostrar necessidade. **Aprovada na RC-6 (13/11/2026)** (decisão 1 abaixo) |
 | Formato da chave | `TAG42=2\|TAG43=0\|TAG46=380`: valores **mapeados**, `InvariantCulture`, na ordem dos componentes | Esse; é a futura chave dos perfis por regime (PROP §4-A) |
 
 **Fechamento (13/11/2026, RC-4):**
-- **Aprovadas pela responsável:** componente 1 = opção (a) (`TagRegime` atual + coluna nula `MapaEstados`; tabela filha só com os componentes 2..N, entra na RC-5); **tupla pura** na primeira versão, com o mapa configurável por componente para corrigir se a RC-0 mostrar diferença (a RC-0 ainda não foi feita); valor fora do mapa e sem `*` **passa sem mudança** e entra no relatório de cobertura (RC-10).
+- **Aprovadas pela responsável:** componente 1 = opção (a) (`TagRegime` atual + coluna nula `MapaEstados`; tabela filha só com os componentes 2..N, entra na RC-5); **tupla pura** na primeira versão, com o mapa configurável por componente para corrigir se a RC-0 mostrar diferença (a RC-0, feita em 13/11/2026, não mostrou diferença: §5.7.1); valor fora do mapa e sem `*` **passa sem mudança** e entra no relatório de cobertura (RC-10).
 - **Adotadas conforme a recomendação na implementação da RC-4 e aprovadas pela responsável em 13/11/2026, depois da entrega:** comparação = mapear com `ToleranciaEstado` e comparar exato; formato da chave `TAG42=2|TAG43=0|TAG46=380`.
 - **Decisões da RC-6 (13/11/2026, responsável):**
   1. **Aprovado:** `LagMinutos` e `ToleranciaAlinhamentoMinutos` da configuração valem para **todos** os componentes (recomendação da tabela acima). É também o que o modelo da RC-5 permite (a tabela de componentes não tem lag nem tolerância de alinhamento).
@@ -484,7 +581,7 @@ Coluna "muda comportamento":
 
 | # | Tarefa | Depende de | Muda comportamento |
 |---|---|---|---|
-| RC-0 | CSV de 48 h e equivalência da tupla (dados) | — | não |
+| RC-0 | CSV de 48 h e equivalência da tupla (dados) — **concluída com ressalva em 13/11/2026 (§5.7)** | — | não |
 | RC-1 | Análise do atraso da TAG29 com as saídas da etapa 0 — **concluída em 12/11/2026 (§5.6.1)** | — | não |
 | RC-2 | Referência congelada e regressão byte a byte — **concluída em 12/11/2026** | — | não |
 | RC-3 | Resolver com dois ponteiros — **concluída em 13/11/2026** | RC-2 | não (provado) |
@@ -505,6 +602,11 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   1. Exportar um CSV com **uma noite anterior** (≥ 48 h, cobrindo os presets 1 e 6) e repetir a etapa 0 (`rec` × `combs`), para eliminar o artefato do fallback da primeira noite (§5.4 item 3, §5.5).
   2. No mesmo script fora do repositório, gerar a série da **tupla pura** (`10·map(TAG42) + map(TAG43) + 100·(TAG46 = 380)`, e o espelho para a B-02) e comparar minuto a minuto com `RB01S`/`RB02S`. Isso fecha a decisão "tupla pura × parada domina" (§6.2).
 - **Arquivos:** nenhum do repositório. Exportação com `tools/Cp300Export/Export-Cp300Historico.ps1`, feita pela equipe **com autorização** (acessa o Bridge). Script no scratchpad, saídas em `dados/`. Resultado registrado como §5.7 deste documento.
+- **Resultado (13/11/2026): concluída com ressalva** (§5.7).
+  - CSV `dados/cp300_09a13nov.csv` (09/11 12:30 → 13/11 07:59).
+  - Tupla pura = `RB0xS` em todos os minutos.
+  - B-01 de madrugada em `combs` = 30 (meta ≤ 30). Restam 9 minutos-tag em fallback para o global (00:43–00:45), por causa da alternância das bombas entre as noites; aceitos como ressalva pela responsável.
+  - Execuções incluídas na referência da RC-2.
 - **Aceite:**
   - B-01 de madrugada em `combs` ≤ 30 minutos-tag, **sem** `origem_baseline = Global` por falta de histórico noturno;
   - a tupla pura classifica igual a `RB0xS` em todos os minutos, ou existe a lista dos minutos diferentes e a decisão tomada.
@@ -533,8 +635,15 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   - **Duas rodadas** (`dados/rc2_rodadas/rodada1` e `rodada2`): **0 diferenças** nas 6 execuções (CSV e log).
   - **Golden:** `Golden_BombasComRegime_SaidaIdenticaAReferencia` (B-01 TAG29/TAG42, B-02 TAG30/TAG43, set-point TAG46; `--regime TAG29=TAG42, TAG30=TAG43`; pico de +100 na TAG29 por 5 min → 5 alarmes) compara a saída inteira com `IAApi.Tests/Cp300Replay/Golden/replay_bombas_regime.csv`, normalizando só fim de linha e BOM. Regravar de propósito: `IAAPI_ATUALIZAR_GOLDEN=1` (o teste grava e falha).
   - **Testes executados:** só os da ferramenta (`Cp300OfflineReplayTests` + `Cp300PlacarTests`): 32/32. **A suíte completa não foi rodada** nesta tarefa.
-  - **Pendente:** incluir as execuções da RC-0 no manifesto quando o CSV de 48 h existir (`-Gerar -Sobrescrever`, ou um manifesto à parte).
-  - **Uso nas tarefas seguintes:** `.\tools\Cp300OfflineReplay\Compare-Replay.ps1` (código 0 = 0 diferenças; ~4–5 min).
+  - ~~**Pendente:** incluir as execuções da RC-0 no manifesto quando o CSV de 48 h existir (`-Gerar -Sobrescrever`, ou um manifesto à parte).~~ Feito na RC-0 (abaixo).
+  - **Uso nas tarefas seguintes:** `.\tools\Cp300OfflineReplay\Compare-Replay.ps1` (código 0 = 0 diferenças; ~6 min com as 12 execuções).
+- **Execuções da RC-0 na referência (13/11/2026, com aprovação da responsável):**
+  - **Mudança no script `Compare-Replay.ps1`:** o script agora aceita **uma entrada por execução**. O manifesto grava `entrada` e `entrada_sha256` em cada execução, e a comparação confere o SHA-256 de todas as entradas antes de rodar. Manifestos antigos, com uma entrada única no topo, continuam aceitos: testado com uma cópia no formato antigo, 0 diferenças.
+  - **Execuções novas:** 6, `rc0_{preset1,madrugada,preset6}_{rec,combs}`, sobre `dados/cp300_09a13nov_derivado.csv` (§5.7).
+  - **Pré-checagem:** antes de regenerar, uma comparação com a referência antiga no código atual (commit `d89eb0c`; única mudança local: o script) deu **0 diferenças** nas 6 execuções. A nova referência não grava nenhuma regressão.
+  - **`-Gerar -Sobrescrever`:** `dados/rc2_referencia/manifesto.json` agora tem **12 execuções** (`tarefa = "RC-2 + RC-0"`). Os 6 `.csv` antigos têm o mesmo SHA-256 dos `e0_*_{sem,rec}`, e os 6 novos, o dos `rc0_*` avulsos.
+  - **Comparação depois de regenerar** (`dados/rc2_rodadas/rc0_pos_gerar`): **0 diferenças em 12 execuções**, CSV e log.
+  - **Achado no script, sem correção, fora da RC-0:** com entrada ausente ou alterada, a comparação para antes de rodar, mas sai com código **1**, não com o 2 documentado. Com `$ErrorActionPreference = 'Stop'`, o `Write-Error` encerra o script antes do `exit 2`. O comportamento já existia antes desta mudança.
 
 #### RC-3. Resolver com dois ponteiros
 - **Objetivo:** dentro do laço, trocar a busca linear de `FindCausalRegimePoint` por um ponteiro que só avança. O alinhamento cai de ≈ n²/2 para O(n + m) comparações, **com o mesmo resultado**.
@@ -564,7 +673,7 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - **Aceite:** testes do parse (válido, inválido, `*`, tolerância), da chave (cultura pt-BR × invariante, ordem) e das opções (padrão `false`, leitura da seção). Nada chama essas classes ainda; RC-2 com 0 diferenças.
 - **Muda comportamento:** não.
 - **Resultado (13/11/2026, sem mudança de comportamento):**
-  - **Decisões de §6.2:** fechadas (ver "Fechamento" em §6.2); comparação e formato da chave aprovados em 13/11/2026, depois da entrega. Feita antes da RC-0, por decisão da responsável; a tupla pura fica sujeita à conferência da RC-0, com o mapa como ajuste.
+  - **Decisões de §6.2:** fechadas (ver "Fechamento" em §6.2); comparação e formato da chave aprovados em 13/11/2026, depois da entrega. Feita antes da RC-0, por decisão da responsável; a tupla pura fica sujeita à conferência da RC-0, com o mapa como ajuste. **Conferida na RC-0 (13/11/2026): sem diferença, sem ajuste de mapa (§5.7.1).**
   - **`RegimeCombinadoOptions`** (novo): seção `AnomalyDetection:RegimeCombinado`, `Habilitado = false` por padrão no código; registrada em `AddAnomalyDetectionConfiguration`. O `appsettings.json` não mudou (há teste que confere que ele não tem a seção). Nada lê a opção ainda (RC-8).
   - **`OperationalRegimeStateMap`** (novo): `Parse`/`TryParse` da sintaxe `chave:valor;…;*:valor`, `InvariantCulture`, sem separador de milhar (`2,5` é erro). Erro para texto vazio, entrada vazia (inclusive `;` no fim), forma inválida, número inválido ou não finito (`NaN`, `Infinity`, `1e400`), valor `*`, chave repetida (numericamente: `2` e `2.0`) e `*` repetido. `Apply(valor, ToleranciaEstado)`: casa com a **primeira** entrada numérica, na ordem escrita, com `|valor − chave| ≤ tolerância`; senão o `*`; senão `OutOfMap` com o valor sem mudança (status exposto para o relatório da RC-10). Leitura não finita = `OutOfMap`; tolerância negativa ou não finita = exceção. `ToString()` dá a forma canônica.
   - **`OperationalRegimeKey`** (novo): `Build(componentes)` ⇒ `TAG42=2|TAG43=0|TAG46=380`, na ordem dos componentes, valores com `"R"` e `InvariantCulture`, `-0` ⇒ `0`, tag sem espaços nas pontas. Erro para lista vazia, tag vazia, tag com `|` ou `=`, tag repetida (sem diferenciar caixa) e valor não finito.
