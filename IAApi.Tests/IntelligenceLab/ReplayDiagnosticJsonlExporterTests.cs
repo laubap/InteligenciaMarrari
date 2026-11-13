@@ -186,6 +186,75 @@ public sealed class ReplayDiagnosticJsonlExporterTests
         }
     }
 
+    // ===== RC-9: RegimeKey no baseline do JSONL =====
+
+    private static BaselineDiagnostic RegimeBaseline(string? regimeKey) =>
+        new(
+            BaselineDiagnosticKind.OperationalRegime,
+            applied: true,
+            reason: "Baseline de regime operacional aplicado.",
+            mean: 100,
+            standardDeviation: 1.5,
+            deadband: 5,
+            deadbandConfidence: 0.9,
+            sampleCount: 30,
+            regimeValue: 2,
+            behaviorCode: null,
+            behaviorSnapshotVersion: null,
+            regimeKey: regimeKey);
+
+    private static async Task<string> ExportBaselineAsync(BaselineDiagnostic baseline)
+    {
+        var id = Guid.NewGuid();
+        var reading = new AiReadingEvaluationResult(
+            IndustrialEvaluationSchemas.ReadingV1, "run", "scenario", Client,
+            "reading-00", Tag, Start, 40, false, id, "Legacy");
+        var path = Path.Combine(Path.GetTempPath(), $"diagnostics-rc9-{Guid.NewGuid():N}.jsonl");
+
+        try
+        {
+            await ReplayDiagnosticJsonlExporter.WriteAsync(path,
+                ReplayDiagnosticJsonlExporter.CreateEntries(
+                    "run", "scenario", [reading], [Diagnostic(id, Start, baseline: baseline)]));
+
+            using var json = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+            return json.RootElement.GetProperty("diagnostic").GetProperty("baseline").GetRawText();
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Jsonl_BaselineSemChaveDeRegime_IgualAoContratoAnterior()
+    {
+        // Exportador com JsonIgnoreCondition.Never: os nulos antigos continuam
+        // gravados; a RegimeKey nula não aparece (WhenWritingNull na propriedade).
+        var baseline = await ExportBaselineAsync(RegimeBaseline(regimeKey: null));
+
+        Assert.Equal(
+            "{\"kind\":\"OperationalRegime\",\"applied\":true," +
+            "\"reason\":\"Baseline de regime operacional aplicado.\"," +
+            "\"mean\":100,\"standardDeviation\":1.5,\"deadband\":5,\"deadbandConfidence\":0.9," +
+            "\"sampleCount\":30,\"regimeValue\":2,\"behaviorCode\":null,\"behaviorSnapshotVersion\":null}",
+            baseline);
+    }
+
+    [Fact]
+    public async Task Jsonl_BaselineComChaveDeRegime_GravaRegimeKey()
+    {
+        var baseline = await ExportBaselineAsync(RegimeBaseline("TAG42=2|TAG43=0|TAG46=380"));
+
+        using var json = JsonDocument.Parse(baseline);
+        var properties = json.RootElement.EnumerateObject().ToArray();
+
+        Assert.Equal("regimeKey", properties[^1].Name);
+        Assert.Equal("TAG42=2|TAG43=0|TAG46=380", properties[^1].Value.GetString());
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("behaviorCode").ValueKind);
+    }
+
     [Fact]
     public async Task FalhaDeFinalizacao_NaoSubstituiArquivoExistenteNemMutaDecisao()
     {
@@ -240,7 +309,8 @@ Assert.True(
         DateTimeOffset timestamp,
         string? client = null,
         string? tag = null,
-        EnsembleDiagnostic? ensemble = null)
+        EnsembleDiagnostic? ensemble = null,
+        BaselineDiagnostic? baseline = null)
         => new(
             DiagnosticContext.Create("test-correlation", "run", timestamp, id),
             new DiagnosticVersionMetadata("test-api", "test-build", "test-commit", "test-config"),
@@ -251,6 +321,7 @@ Assert.True(
             new DiagnosticCompleteness(DiagnosticCompletenessStatus.Partial,
                 ["Baseline", "Ensemble"], "Fixture parcial."),
             new DiagnosticTiming(TimeSpan.Zero),
+            baseline: baseline,
             ensemble: ensemble,
             runtimeDecision: new RuntimeDecisionDiagnostic(
                 legacyAnomaly: true, finalAnomaly: true, emitNewEvidence: false,

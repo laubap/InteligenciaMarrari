@@ -590,7 +590,7 @@ Coluna "muda comportamento":
 | RC-6 | Resolver com N componentes — **concluída em 13/11/2026** | RC-3, RC-4 | não (provado) |
 | RC-7 | Bloqueio de rótulos por cliente (backlog 11) — **concluída em 13/11/2026** | — | não (lista vazia por padrão) |
 | RC-8 | Service e provider com componentes, atrás da chave — **concluída em 13/11/2026** | RC-5, RC-6, RC-7 | só com a chave |
-| RC-9 | `RegimeKey` no diagnóstico e no log | RC-8 | só com a chave (observabilidade) |
+| RC-9 | `RegimeKey` no diagnóstico e no log — **concluída em 13/11/2026** | RC-8 | só com a chave (observabilidade) |
 | RC-10 | Replay com regime combinado | RC-8, RC-9 | não (ferramenta) |
 | RC-11 | Equivalência com a etapa 0, critério da TAG29 e custo | RC-0, RC-1, RC-10 | não |
 | RC-12 | Ativação no ambiente de teste do PK2 | RC-11 + aprovação | **sim** |
@@ -789,6 +789,32 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - **Arquivos:** `DiagnosticContracts.cs`, `Services/AnomalyDetection/Orchestration/PredictionDetectionPreparationService.cs`; testes do diagnóstico e da preparação.
 - **Aceite:** com a chave desligada, JSON do diagnóstico e log idênticos aos atuais (teste); com a chave ligada, `RegimeKey` presente; RC-2 com 0 diferenças.
 - **Muda comportamento:** não na decisão. A saída de diagnóstico só muda com a chave ligada.
+- **Resultado (13/11/2026, sem mudança na decisão; com a chave desligada, diagnóstico, JSON e log iguais aos anteriores):**
+  - **Contrato** (`src/IAApi.Engine/Observability/DiagnosticContracts.cs`):
+    - `BaselineDiagnostic` ganhou o parâmetro opcional `regimeKey` no **fim** do construtor (chamadores atuais sem mudança; vazio ou só espaços ⇒ nula; o valor é aparado) e a propriedade `RegimeKey`, declarada por último;
+    - a propriedade tem `[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]`. O atributo vale para qualquer serializador, então não foi preciso mexer nas opções de nenhum deles.
+  - **Pontos de serialização levantados:**
+    1. `ReplayDiagnosticJsonlExporter` (`JsonIgnoreCondition.Never`, enum como texto): os nulos antigos continuam gravados; a `regimeKey` nula não aparece.
+    2. `IntelligenceLabDiagnosticsController.GetById` (`GET /intelligence-lab/diagnostics/{id}`), com as opções padrão do `AddControllers` (web, enum numérico, nulos gravados): idem.
+    3. `InMemoryDiagnosticCollector`: só repassa o `BaselineDiagnostic` na cópia revisada, sem serializar.
+    - A listagem do controller usa o resumo, que não tem baseline. Nenhum outro serializador grava `IntelligenceLabReadingDiagnostic`; o `Dump-Diagnostics.ps1` só lê o JSON do endpoint.
+  - **Preparação** (`PredictionDetectionPreparationService`):
+    - guarda `CurrentRegimeKey` da resolução do regime (RC-8) quando o regime é aplicado e passa a chave a `CriarBaselineEfetivo` (parâmetro opcional), que só a preenche com o regime aplicado (como `RegimeValue`);
+    - a linha `BASELINE POR REGIME APLICADO` ganha `Chave=<chave> ` entre `Regime=` e `Amostras=` **só** quando a chave existe; sem chave, o texto é o mesmo de antes;
+    - nada disso entra no `DetectorInput` nem em decisão.
+  - **Testes** (12 novos):
+    - `DiagnosticContractsTests` (7): chave opcional e normalizada; construtor antigo ⇒ nula; JSON web sem chave **igual ao literal do contrato anterior**; com chave, `regimeKey` como última propriedade.
+    - `ReplayDiagnosticJsonlExporterTests` (2): baseline sem chave no JSONL igual ao literal anterior (com os nulos de `behaviorCode` e `behaviorSnapshotVersion`); com chave, `regimeKey` presente.
+    - `OperationalRegimeBaselineProviderTests` (3), preparação real com o provider da RC-8:
+      - chave desligada ⇒ `RegimeKey` nula, JSON sem a propriedade e linha de log sem `Chave=`;
+      - ligada ⇒ `TAG42=2|TAG43=0|TAG46=450` no diagnóstico, no JSON e no log;
+      - regime não aplicado (componente sem leitura) ⇒ baseline global sem chave.
+    - O auxiliar `Diagnostic(...)` do teste do exportador e o `FakeHistoricoService` (histórico da tag analisada) foram estendidos.
+  - **Sensibilidade:** sem o `JsonIgnore` (mutação temporária, restaurada e conferida com `cmp`), 3 testes falham: os dois literais e o da chave desligada.
+  - **Executado:**
+    - relacionados (`OperationalRegime|RegimeCombinado|Cp300|PredictionServiceDeadbandWiring|PredictionHistoryReuse|IntelligenceLab|AnomalyDetectionOptions|DependencyInjection|HistoricoCausal|PerformanceDiagnostics|Diagnostic`): **505/505**;
+    - `Compare-Replay.ps1`: **0 diferenças em 12 execuções** (`dados/rc2_rodadas/rc9_sem_hc`) e também com `-HistoricoCausal` (`rc9_com_hc`);
+    - **suíte completa: 999/999**.
 
 #### RC-10. Replay com regime combinado
 - **Objetivo:** em `tools/Cp300OfflineReplay`:

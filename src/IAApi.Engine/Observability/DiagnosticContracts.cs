@@ -460,7 +460,8 @@ public sealed record BaselineDiagnostic
         int sampleCount,
         double? regimeValue,
         string? behaviorCode,
-        int? behaviorSnapshotVersion)
+        int? behaviorSnapshotVersion,
+        string? regimeKey = null)
     {
         Reason = DiagnosticContractGuard.Required(reason, nameof(reason));
         DiagnosticContractGuard.Finite(mean, nameof(mean));
@@ -486,6 +487,7 @@ public sealed record BaselineDiagnostic
         RegimeValue = regimeValue;
         BehaviorCode = string.IsNullOrWhiteSpace(behaviorCode) ? null : behaviorCode.Trim();
         BehaviorSnapshotVersion = behaviorSnapshotVersion;
+        RegimeKey = string.IsNullOrWhiteSpace(regimeKey) ? null : regimeKey.Trim();
     }
 
     public BaselineDiagnosticKind Kind { get; }
@@ -499,6 +501,19 @@ public sealed record BaselineDiagnostic
     public double? RegimeValue { get; }
     public string? BehaviorCode { get; }
     public int? BehaviorSnapshotVersion { get; }
+
+    /// <summary>
+    /// RC-9 (PLANO_REGIME_COMBINADO.md §6.3): chave do regime combinado
+    /// (ex.: <c>TAG42=2|TAG43=0|TAG46=380</c>), só quando o baseline de regime
+    /// foi aplicado com componentes (chave <c>AnomalyDetection:RegimeCombinado</c>
+    /// ligada). Só instrumentação; não entra em nenhuma decisão.
+    /// Nula = omitida do JSON em qualquer serializador (exportador JSONL com
+    /// <c>JsonIgnoreCondition.Never</c> e endpoint de diagnóstico), para o
+    /// JSON ficar igual ao anterior com a chave desligada.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? RegimeKey { get; }
 }
 
 public sealed record HistoryQualityDiagnostic

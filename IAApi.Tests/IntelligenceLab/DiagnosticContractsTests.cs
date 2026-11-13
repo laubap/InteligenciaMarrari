@@ -448,4 +448,71 @@ public sealed class DiagnosticContractsTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             Create(20, (DetectorThresholdScale)99));
     }
+
+    // ===== RC-9: RegimeKey no BaselineDiagnostic =====
+
+    private static BaselineDiagnostic RegimeBaseline(string? regimeKey = null) =>
+        new(
+            BaselineDiagnosticKind.OperationalRegime,
+            applied: true,
+            reason: "Baseline de regime operacional aplicado.",
+            mean: 100,
+            standardDeviation: 1.5,
+            deadband: 5,
+            deadbandConfidence: 0.9,
+            sampleCount: 30,
+            regimeValue: 2,
+            behaviorCode: null,
+            behaviorSnapshotVersion: null,
+            regimeKey: regimeKey);
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData(" TAG42=2|TAG43=0|TAG46=380 ", "TAG42=2|TAG43=0|TAG46=380")]
+    public void BaselineDiagnostic_RegimeKey_OpcionalENormalizada(string? entrada, string? esperada)
+    {
+        Assert.Equal(esperada, RegimeBaseline(entrada).RegimeKey);
+    }
+
+    [Fact]
+    public void BaselineDiagnostic_ConstrutorAntigo_RegimeKeyNula()
+    {
+        var baseline = new BaselineDiagnostic(
+            BaselineDiagnosticKind.Global, true, "Baseline global.",
+            100, 1, 5, 1, 30, null, null, null);
+
+        Assert.Null(baseline.RegimeKey);
+    }
+
+    [Fact]
+    public void BaselineDiagnostic_JsonWeb_SemChave_IgualAoContratoAnterior()
+    {
+        // Opções do endpoint GET /intelligence-lab/diagnostics/{id}
+        // (AddControllers: padrão web, enum numérico).
+        var json = JsonSerializer.Serialize(
+            RegimeBaseline(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Equal(
+            "{\"kind\":2,\"applied\":true,\"reason\":\"Baseline de regime operacional aplicado.\"," +
+            "\"mean\":100,\"standardDeviation\":1.5,\"deadband\":5,\"deadbandConfidence\":0.9," +
+            "\"sampleCount\":30,\"regimeValue\":2,\"behaviorCode\":null,\"behaviorSnapshotVersion\":null}",
+            json);
+    }
+
+    [Fact]
+    public void BaselineDiagnostic_JsonWeb_ComChave_AcrescentaRegimeKeyNoFim()
+    {
+        var json = JsonSerializer.Serialize(
+            RegimeBaseline("TAG42=2|TAG43=0|TAG46=380"),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        using var document = JsonDocument.Parse(json);
+        var properties = document.RootElement.EnumerateObject().ToArray();
+
+        Assert.Equal("regimeKey", properties[^1].Name);
+        Assert.Equal("TAG42=2|TAG43=0|TAG46=380", properties[^1].Value.GetString());
+        Assert.Equal(12, properties.Length);
+    }
 }

@@ -160,6 +160,10 @@ public sealed class PredictionDetectionPreparationService
         double? valorRegimeOperacional =
             null;
 
+        // RC-9: chave do regime combinado; nula no caminho atual.
+        string? chaveRegimeOperacional =
+            null;
+
         if (_operationalRegimeBaselineProvider is not null)
         {
             try
@@ -198,11 +202,19 @@ public sealed class PredictionDetectionPreparationService
                     valorRegimeOperacional =
                         regimeBaseline.CurrentRegimeValue;
 
+                    chaveRegimeOperacional =
+                        regimeBaseline.CurrentRegimeKey;
+
+                    // RC-9: "Chave=" só aparece com regime combinado; sem
+                    // chave, a linha é a mesma de antes.
                     Console.WriteLine(
                         $"BASELINE POR REGIME APLICADO " +
                         $"Cliente={request.ClienteId} " +
                         $"Tag={request.TagName} " +
                         $"Regime={valorRegimeOperacional?.ToString("G6") ?? "-"} " +
+                        (chaveRegimeOperacional is null
+                            ? ""
+                            : $"Chave={chaveRegimeOperacional} ") +
                         $"Amostras={regimeBaseline.SelectedSamples} " +
                         $"Media={mediaHistoricaDetector:G6} " +
                         $"Desvio={desvioPadraoHistoricoDetector:G6} " +
@@ -493,7 +505,8 @@ public sealed class PredictionDetectionPreparationService
                 baselineRegimeNaoAplicado,
                 baselineRegimeFalhou,
                 baselineComportamentalNaoAplicado,
-                baselineComportamentalFalhou));
+                baselineComportamentalFalhou,
+                chaveRegimeOperacional));
 
         return new PredictionDetectionPreparationResult(
             entradaDetector,
@@ -604,7 +617,8 @@ public sealed class PredictionDetectionPreparationService
         bool baselineRegimeNaoAplicado,
         bool baselineRegimeFalhou,
         bool baselineComportamentalNaoAplicado,
-        bool baselineComportamentalFalhou)
+        bool baselineComportamentalFalhou,
+        string? chaveRegimeOperacional = null)
     {
         var kind =
             baselineRegimeAplicado
@@ -640,6 +654,9 @@ public sealed class PredictionDetectionPreparationService
                     : null,
                 baselineComportamentalAplicado
                     ? snapshotComportamentalAplicado
+                    : null,
+                baselineRegimeAplicado
+                    ? chaveRegimeOperacional
                     : null);
         }
         catch (ArgumentException)

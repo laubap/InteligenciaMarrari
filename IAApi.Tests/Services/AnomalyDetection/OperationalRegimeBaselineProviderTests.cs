@@ -1145,6 +1145,147 @@ public class OperationalRegimeBaselineProviderTests
         Assert.Equal(consultasEsperadas == 3 ? 15 : 30, result.SelectedSamples);
     }
 
+    // ===== RC-9: RegimeKey no diagnóstico e no log da preparação =====
+
+    private static async Task<(IAApi.IntelligenceLab.Observability.BaselineDiagnostic? Baseline, string Log)>
+        PrepararRc9Async(bool habilitado)
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+        historico.TargetHistory = TargetRc8();
+
+        var preparation =
+            new IAApi.Services.AnomalyDetection.Orchestration.PredictionDetectionPreparationService(
+                historico,
+                CreateProviderRc8(context, historico, Chave(habilitado)));
+
+        var request = new AnomaliaRequest
+        {
+            ClienteId = "PK2",
+            TagName = "TAG29",
+            Valor = 50,
+            DataHora = Utc(0, 31)
+        };
+
+        var perfil = new TagPerfilIa
+        {
+            ClienteId = "PK2",
+            TagName = "TAG29",
+            Media = 75,
+            DesvioPadrao = 25,
+            VariacaoMinimaRelevante = 1,
+            ConfiancaDeadband = 75
+        };
+
+        var original = Console.Out;
+        using var writer = new StringWriter();
+        Console.SetOut(writer);
+
+        IAApi.Services.AnomalyDetection.Orchestration.PredictionDetectionPreparationResult result;
+
+        try
+        {
+            result = await preparation.PrepararAsync(
+                request, perfil, "perfil-comportamental", Utc(0, 31));
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        // Só as linhas desta preparação (outros testes podem escrever no console).
+        var log =
+            string.Join(
+                "\n",
+                writer.ToString()
+                    .Split('\n')
+                    .Where(line =>
+                        line.Contains("BASELINE POR REGIME APLICADO") &&
+                        line.Contains("Cliente=PK2 Tag=TAG29 ")));
+
+        return (result.BaselineEfetivo, log.TrimEnd('\r'));
+    }
+
+    [Fact]
+    public async Task RC9_ChaveDesligada_DiagnosticoELogSemChave()
+    {
+        var (baseline, log) = await PrepararRc9Async(habilitado: false);
+
+        Assert.NotNull(baseline);
+        Assert.Equal(
+            IAApi.IntelligenceLab.Observability.BaselineDiagnosticKind.OperationalRegime,
+            baseline!.Kind);
+        Assert.Equal(30, baseline.SampleCount);
+        Assert.Null(baseline.RegimeKey);
+
+        // Mesma linha de antes da RC-9: "Regime=… Amostras=…", sem "Chave=".
+        Assert.DoesNotContain("Chave=", log);
+        Assert.Contains("BASELINE POR REGIME APLICADO Cliente=PK2 Tag=TAG29 Regime=2 Amostras=30 Media=", log);
+
+        // JSON (padrão web do endpoint) sem a propriedade.
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            baseline,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.DoesNotContain("regimeKey", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RC9_ChaveLigada_DiagnosticoELogComChave()
+    {
+        var (baseline, log) = await PrepararRc9Async(habilitado: true);
+
+        Assert.NotNull(baseline);
+        Assert.Equal(
+            IAApi.IntelligenceLab.Observability.BaselineDiagnosticKind.OperationalRegime,
+            baseline!.Kind);
+        Assert.Equal(15, baseline.SampleCount);
+        Assert.Equal(2, baseline.RegimeValue);
+        Assert.Equal("TAG42=2|TAG43=0|TAG46=450", baseline.RegimeKey);
+
+        Assert.Contains(
+            "BASELINE POR REGIME APLICADO Cliente=PK2 Tag=TAG29 Regime=2 " +
+            "Chave=TAG42=2|TAG43=0|TAG46=450 Amostras=15 Media=",
+            log);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            baseline,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"regimeKey\":\"TAG42=2|TAG43=0|TAG46=450\"", json);
+    }
+
+    [Fact]
+    public async Task RC9_RegimeNaoAplicado_DiagnosticoSemChave()
+    {
+        // Chave ligada, mas o componente 3 sem leitura: fallback global, e a
+        // chave não vai para o diagnóstico (só com o regime aplicado).
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+        historico.TargetHistory = TargetRc8();
+        historico.PeriodHistoryByTag["TAG46"] = new List<LeituraBruta>();
+
+        var result =
+            await new IAApi.Services.AnomalyDetection.Orchestration.PredictionDetectionPreparationService(
+                    historico,
+                    CreateProviderRc8(context, historico, Chave(true)))
+                .PrepararAsync(
+                    new AnomaliaRequest { ClienteId = "PK2", TagName = "TAG29", Valor = 50, DataHora = Utc(0, 31) },
+                    new TagPerfilIa { ClienteId = "PK2", TagName = "TAG29", Media = 75, DesvioPadrao = 25, VariacaoMinimaRelevante = 1, ConfiancaDeadband = 75 },
+                    "perfil-comportamental",
+                    Utc(0, 31));
+
+        Assert.Equal(
+            IAApi.IntelligenceLab.Observability.BaselineDiagnosticKind.Global,
+            result.BaselineEfetivo!.Kind);
+        Assert.Null(result.BaselineEfetivo.RegimeKey);
+        Assert.Null(result.BaselineEfetivo.RegimeValue);
+    }
+
     private static OperationalRegimeBaselineProvider CreateProvider(
         AppDbContext context,
         IHistoricoService historicoService,
@@ -1298,11 +1439,21 @@ public class OperationalRegimeBaselineProviderTests
 
         public DateTime? LastFim { get; private set; }
 
+        /// <summary>RC-9: histórico da tag analisada para PrepararAsync.</summary>
+        public List<LeituraBruta>? TargetHistory { get; set; }
+
         public List<LeituraBruta> BuscarHistorico(
             string clienteId,
             string tagName,
             string tipoTag)
         {
+            if (TargetHistory is not null)
+            {
+                return TargetHistory
+                    .Select(item => new LeituraBruta { DataHora = item.DataHora, Valor = item.Valor })
+                    .ToList();
+            }
+
             throw new NotSupportedException(
                 "Este teste utiliza somente BuscarHistoricoPorPeriodo.");
         }
