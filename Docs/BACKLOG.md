@@ -4,7 +4,7 @@ Atualizado na sessão 2 (2026-11-11), depois do cruzamento com `Docs/CENARIOS_CP
 
 Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa está aprovada**: implementar só com autorização explícita (`CLAUDE.md`). As tarefas 1 a 6 não alteram a decisão de anomalia.
 
-> **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. **Atualização 2026-11-13 (inventário do PK2, tarefa 2 concluída):** a nova tarefa **25 (P31, entrada inválida sistemática) passa a ser PRIORIDADE 1, antes de qualquer novo teste da IA real**. Em 12/11, 38 de 50 decisões não chegaram aos detectores; sem corrigir isso, um teste da IA real não mede detecção. A tarefa 6 continua necessária e vem logo depois. Entraram também a 26 (P30, escala da nota) e a 27 (P32, retreino do perfil). Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
+> **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. **Atualização 2026-11-13 (inventário do PK2, tarefa 2 concluída):** a nova tarefa **25 (P31, entrada inválida sistemática) passa a ser PRIORIDADE 1, antes de qualquer novo teste da IA real**. Em 12/11, 38 de 50 decisões não chegaram aos detectores; sem corrigir isso, um teste da IA real não mede detecção. A tarefa 6 continua necessária e vem logo depois. Entraram também a 26 (P30, escala da nota) e a 27 (P32, retreino do perfil). Depois, a 28 (P30 no LiveMonitor, para a demo; só planejada). Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
 
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
@@ -536,7 +536,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - [x] `dados/ia_real_preset3.csv` com `nota_0_100`, **calculada do próprio `nota_final`** (não havia JSON da API guardado; a API não foi chamada). Aceite: 50 de 50 iguais a `nota_real_x20` (dif. máx. 0,004); 13 colunas originais idênticas, então o placar não muda.
   - [x] RES3 §2.4b refeita na escala 0–100 (e o item 8 do resumo).
   - [x] Verificar o LiveMonitor (leitura do código): mostra o `score` persistido cru (0–5) e, na fonte de diagnóstico, o `normalizedScore` (0–100) ao lado do threshold. Não verificado na tela.
-  - [ ] Corrigir a exibição no LiveMonitor (rótulo ou × 20 na fonte persistida). **Exige aprovação**; não faz parte desta tarefa.
+  - [ ] Corrigir a exibição no LiveMonitor: virou a **tarefa 28**. **Exige aprovação**.
   - [ ] Opcional: a exportação poder gravar a resposta JSON bruta (e reler dela), para regenerar o CSV sem chamar a API. Não implementado.
 - **Arquivos:** `tools/Cp300Export/Export-AnomaliasIaReal.ps1`, `tools/Cp300OfflineReplay/README.md`, `Docs/RESULTADO_PRESET3.md`.
 - **Risco:** baixo (não toca no runtime). **Esforço:** P.
@@ -561,6 +561,70 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - relatório de pontos por regime no treino;
   - aprovação da responsável antes do retreino real.
 - **Depende de:** 25 (para medir o efeito na IA real) e 8.
+
+### 28. (LiveMonitor, demo) Toda nota exibida na escala 0–100, ao lado do limiar na mesma escala (P30)
+*Planejada em 2026-11-13; **não implementada, exige aprovação**. Liga-se ao P30 (pendência da tarefa 26) e à demo (mesma regra das tarefas 17–20: não muda decisão, pesos, limiares nem contratos HTTP).*
+
+- **Problema** (confirmado no código; não visto na tela):
+  - O mesmo campo `Decision.score` chega em duas escalas, conforme a fonte:
+
+    | Fonte | Onde entra | Valor | Escala |
+    |---|---|---|---|
+    | Persistida (`GET /api/anomalias`) | `src/domain.ts:16`, `parseDecisions` | `score` = `AnomaliaDetectada.Score` = nota ÷ 20 | **0–5** |
+    | Diagnóstico (Intelligence Lab) | `src/domain.ts:45-46`, `fromDiagnostic` | `ensemble.normalizedScore` e `ensemble.threshold` | **0–100** |
+
+  - Telas afetadas:
+    - `TagCard.tsx:59`: cartão da tag. Mostra "Score · persistido" (0–5) ou "Score normalizado · ensemble" (0–100) **ao lado de "Threshold · ensemble"**. Nas decisões persistidas, o threshold aparece "—", porque a API pública não o informa.
+    - `TagCard.tsx:80`: tabela de decisões, coluna "Score persistido".
+    - `App.tsx:94-95`: exportação CSV, coluna `score`, com as duas escalas misturadas no mesmo arquivo (a coluna `fonte` diz qual é qual).
+  - Na demo, um "2,1" perto de um limiar 60 sugere "muito longe de alarmar", quando a nota real é 42.
+- **Fatos do backend que o plano usa** (confirmados no código):
+  - `Services/AnomalyDetection/EnsembleDetectionService.cs:406-410`: `Score = scoreFinalNormalizado / 20.0`, `ScoreNormalizado = scoreFinalNormalizado`. Nas saídas antecipadas (entrada inválida, detectores bloqueados), `Score = 0`.
+  - `PredictionService` grava `resultadoDetector.Score`; `AnomaliaHistoricoService.Registrar` é o único que cria `AnomaliaDetectada`.
+  - O `/ 20.0` existe desde o primeiro commit do arquivo (`76852f9`, 28/07/2026), então todas as linhas persistidas estão na mesma escala. Os dados batem: as 131 anomalias do PK2 têm 3,0–3,73.
+  - Diagnóstico (`PredictionDiagnosticCapture.cs:330-341`): `originalScore` = `Score` (÷ 20), `normalizedScore` = `ScoreNormalizado` (0–100) e `threshold` = métrica `limiteEnsemble`. O `EnsembleThreshold` é validado em (0, 100] (`AnomalyDetectionOptionsValidators.cs:20`; 60 no `appsettings.json`).
+  - As notas por detector (`detectors[].normalizedScore`) também são 0–100.
+- **Onde converter: no domínio (`src/domain.ts`)**, reaproveitando as duas funções que já são a única porta de entrada de cada fonte.
+  - **Não no proxy** (`server/proxy.ts`): hoje ele só repassa e filtra o cliente (`proxy.ts:78-80`), e `proxy.test.ts` cobre isso. Converter ali mudaria o JSON que o navegador recebe em relação à API e misturaria responsabilidades.
+  - **Não no componente:** a conversão ficaria espalhada em três lugares (cartão, tabela, CSV), sem teste. O projeto não tem testes de componente (não há Testing Library nem jsdom), e criá-los exige instalar dependência.
+- **Proposta (pequena e reversível):**
+  1. `src/domain.ts`: criar a constante `PERSISTED_SCORE_FACTOR = 20`, com comentário apontando `EnsembleDetectionService.cs:406-410` e o P30.
+     - Em `parseDecisions`: `score = x.score × 20` (0–100) e um campo novo `storedScore = x.score`, o valor cru, só para auditoria e CSV.
+     - Score ausente ou não finito continua `undefined`, **nunca 0**, para não inventar nota.
+  2. `fromDiagnostic` continua usando `normalizedScore` e `threshold` sem conversão. Ela passa a guardar também `storedScore = ensemble.originalScore`.
+     - **Conferência em tempo de execução:** se `|originalScore × 20 − normalizedScore| > 0,01`, marca a decisão (`scaleMismatch`). O cartão mostra um aviso discreto em vez de esconder a diferença.
+     - Isso protege contra uma mudança futura do fator no backend, e o próprio diagnóstico vira a evidência de que o fator vale.
+  3. `src/types.ts`: em `Decision`, deixar documentado que `score` e `threshold` estão em 0–100. Acrescentar `storedScore?` e `scaleMismatch?`.
+  4. `src/TagCard.tsx`, só textos (os valores já chegam convertidos):
+     - cartão: "Nota do ensemble (0–100)" e "Limiar do ensemble (0–100)", com uma linha "fonte: persistida / diagnóstico";
+     - tabela: cabeçalho "Nota (0–100)".
+     - **Limiar das decisões persistidas:** continua "—", com o texto "não informado por esta fonte". O monitor não inventa o 60. O limiar só aparece quando a fonte o devolve, e aí já está em 0–100.
+     - **Não mexer** no bloco *shadow* multivariado (`TagCard.tsx:72`): é outra métrica, com limiar próprio, e já está rotulado como shadow.
+  5. Exportação CSV: tirar a montagem das linhas de `App.tsx` para uma função pura em `domain.ts` (por exemplo, `decisionCsvRows`), para poder testar.
+     - A coluna `score` vira `nota_0_100`, e entra `score_api_0_5` com o valor cru (vazio quando não houver).
+     - **Isso muda o cabeçalho do CSV do monitor.** Não há leitor conhecido no repositório: o placar lê a exportação de `tools/Cp300Export`, não esta.
+  6. `README.md` do LiveMonitor: uma linha em "Estados e correlação" e outra em "Limitações conhecidas" sobre a escala, apontando o P30.
+- **Testes** (linha de base em 13/11: `npx vitest run`, 28 de 28 aprovados em 4 arquivos, todos offline; o `fetch` é simulado):
+
+  | Arquivo | Situação | Mudança |
+  |---|---|---|
+  | `tests/domain.test.ts` (14) | **mudar 2** | "decisão persistida sem timestamp…" (`score: 0`) passa a verificar `score` 0 **e** `storedScore` 0. "usa a decisão final…" tem valores irreais (`normalizedScore: 0.9, threshold: 0.5`) e passa a usar valores do backend (`originalScore: 2.7, normalizedScore: 54, threshold: 60`) |
+  | `tests/domain.test.ts` | **criar ~5** | (a) persistida 2,1 → 42 e 3,0 → 60, com `storedScore` preservado; (b) `score` nulo, NaN ou texto → `undefined`, não 0; (c) diagnóstico não é multiplicado (54 continua 54, limiar 60); (d) **a mesma leitura pelas duas fontes dá a mesma nota** (persistida 2,1 ≡ diagnóstico 42); (e) `scaleMismatch` só quando `originalScore × 20` diverge de `normalizedScore` |
+  | `tests/domain.test.ts` ou novo `tests/csv.test.ts` | **criar 1–2** | cabeçalho com `nota_0_100` e `score_api_0_5`; linha persistida e linha de diagnóstico na mesma escala |
+  | `tests/proxy.test.ts` (7) | **manter**; opcional +1 | Garantir que o proxy repassa `score` sem alterar (já implícito em "transmite apenas GET, filtra cliente…") |
+  | `tests/polling.test.ts` (2), `tests/testRuns.test.ts` (5) | manter | Não usam `score` |
+  | Componentes | não criar | Sem infraestrutura de teste de componente; os textos do `TagCard` são conferidos no `npm run build` (o `tsc` checa os tipos) e na tela |
+
+- **Arquivos:** `tools/IAApi.LiveMonitor/src/domain.ts`, `src/types.ts`, `src/TagCard.tsx`, `src/App.tsx`, `tests/domain.test.ts` (e talvez `tests/csv.test.ts`), `README.md`. **Não toca** em `server/proxy.ts`, na IAApi, no `appsettings.json` nem na exportação `tools/Cp300Export`.
+- **Atenção, patch pendente:** `IAApi_LiveMonitor_clareza_cenario1.patch` (raiz, não versionado) mexe em `App.tsx`, `TagCard.tsx`, `domain.ts`, `types.ts` e `tests/domain.test.ts`. Ele **não está aplicado e não aplica mais** (`git apply --check` falha nos três primeiros); parte dele já parece incorporada (`readingAtBasis`). Ele não muda a escala da nota. Decidir antes se ele será descartado ou refeito, para não implementar a 28 em cima de um conflito.
+- **Risco:** baixo. É uma ferramenta local de leitura e não muda decisão, contrato nem dado gravado. O risco residual é o backend mudar o fator 20 no futuro; a conferência do item 2 e o teste (d) cobrem isso.
+- **Esforço:** **P**, cerca de 2 a 3 h com os testes (~40–60 linhas de código e ~60 de teste).
+- **Aceite:**
+  - `npx vitest run` com 28 + os novos, todos passando; `npm run build` (com `tsc --noEmit`) sem erro;
+  - na tela, com autorização para subir o monitor ligado à IAApi local: uma decisão persistida e o diagnóstico da mesma leitura mostram a **mesma nota 0–100**; nenhuma nota aparece em 0–5 perto do limiar 60;
+  - no CSV exportado, `nota_0_100` coerente entre as fontes.
+- **Rollback:** reverter o commit. Não há migração, dado nem configuração a desfazer.
+- **Depende de:** nada no backend. Para a demo, vem depois das 19 e 20 (sinal de vida), mas é barata o bastante para entrar no mesmo pacote do LiveMonitor.
 
 ---
 
