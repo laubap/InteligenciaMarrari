@@ -72,6 +72,74 @@ public sealed class OperationalRegimeBaselineService
                 regimePoints,
                 currentTimestamp);
 
+        return BuildFromHistoryResolution(
+            historyResolution);
+    }
+
+    /// <summary>
+    /// RC-8 (PLANO_REGIME_COMBINADO.md §6.3): regime combinado com
+    /// componentes 2..N. <paramref name="regimeHistories"/> traz a série do
+    /// componente 1 (a <c>TagRegime</c> da configuração) seguida das séries
+    /// de <paramref name="additionalComponents"/>, na mesma ordem.
+    ///
+    /// Delega ao resolver com N componentes (RC-6); o cálculo estatístico
+    /// e os fallbacks são os mesmos da assinatura atual, que não muda.
+    /// Só é chamada pelo provider com
+    /// <c>AnomalyDetection:RegimeCombinado:Habilitado = true</c> e
+    /// componentes cadastrados.
+    /// </summary>
+    public OperationalRegimeBaselineResolution Resolve(
+        TagRegimeOperacionalIa configuration,
+        IReadOnlyList<TagRegimeComponenteIa> additionalComponents,
+        IReadOnlyList<LeituraBruta> targetHistory,
+        IReadOnlyList<IReadOnlyList<LeituraBruta>> regimeHistories,
+        DateTime currentTimestamp)
+    {
+        ArgumentNullException.ThrowIfNull(
+            configuration);
+
+        ArgumentNullException.ThrowIfNull(
+            additionalComponents);
+
+        ArgumentNullException.ThrowIfNull(
+            targetHistory);
+
+        ArgumentNullException.ThrowIfNull(
+            regimeHistories);
+
+        var targetPoints =
+            targetHistory
+                .Where(IsValidReading)
+                .Select(ToDetectorPoint)
+                .ToArray();
+
+        var regimePoints =
+            regimeHistories
+                .Select(history =>
+                    (IReadOnlyList<HistoricoDetectorPoint>)
+                    (history ?? throw new ArgumentException(
+                        "Série de regime nula.",
+                        nameof(regimeHistories)))
+                        .Where(IsValidReading)
+                        .Select(ToDetectorPoint)
+                        .ToArray())
+                .ToArray();
+
+        var historyResolution =
+            _historyResolver.Resolve(
+                configuration,
+                additionalComponents,
+                targetPoints,
+                regimePoints,
+                currentTimestamp);
+
+        return BuildFromHistoryResolution(
+            historyResolution);
+    }
+
+    private OperationalRegimeBaselineResolution BuildFromHistoryResolution(
+        OperationalRegimeHistoryResolution historyResolution)
+    {
         /*
          * O resolver já implementa o comportamento fail-safe.
          *
@@ -86,7 +154,8 @@ public sealed class OperationalRegimeBaselineService
                 historyResolution.CurrentRegimeValue,
                 historyResolution.OriginalTargetSamples,
                 historyResolution.AlignedSamples,
-                historyResolution.SelectedSamples);
+                historyResolution.SelectedSamples,
+                historyResolution.CurrentRegimeKey);
         }
 
         /*
@@ -104,7 +173,8 @@ public sealed class OperationalRegimeBaselineService
                 historyResolution.CurrentRegimeValue,
                 historyResolution.OriginalTargetSamples,
                 historyResolution.AlignedSamples,
-                historyResolution.SelectedSamples);
+                historyResolution.SelectedSamples,
+                historyResolution.CurrentRegimeKey);
         }
 
         /*
@@ -144,7 +214,8 @@ public sealed class OperationalRegimeBaselineService
                 historyResolution.CurrentRegimeValue,
                 historyResolution.OriginalTargetSamples,
                 historyResolution.AlignedSamples,
-                historyResolution.SelectedSamples);
+                historyResolution.SelectedSamples,
+                historyResolution.CurrentRegimeKey);
         }
 
         return OperationalRegimeBaselineResolution.CreateApplied(
@@ -225,6 +296,13 @@ public sealed class OperationalRegimeBaselineResolution
 
     public string Reason { get; init; } = "";
 
+    /// <summary>
+    /// Chave do regime atual (ex.: <c>TAG42=2|TAG43=0|TAG46=380</c>), só no
+    /// regime combinado (RC-8, chave ligada e componentes cadastrados) e só
+    /// quando o estado atual foi determinado. Nula no caminho atual.
+    /// </summary>
+    public string? CurrentRegimeKey { get; init; }
+
     public static OperationalRegimeBaselineResolution CreateApplied(
         OperationalRegimeHistoryResolution historyResolution,
         TagProfileStatisticsResult statistics)
@@ -242,6 +320,9 @@ public sealed class OperationalRegimeBaselineResolution
 
             CurrentRegimeValue =
                 historyResolution.CurrentRegimeValue,
+
+            CurrentRegimeKey =
+                historyResolution.CurrentRegimeKey,
 
             OriginalTargetSamples =
                 historyResolution.OriginalTargetSamples,
@@ -268,7 +349,8 @@ public sealed class OperationalRegimeBaselineResolution
         double? currentRegimeValue = null,
         int originalTargetSamples = 0,
         int alignedSamples = 0,
-        int selectedSamples = 0)
+        int selectedSamples = 0,
+        string? currentRegimeKey = null)
     {
         return new OperationalRegimeBaselineResolution
         {
@@ -277,6 +359,9 @@ public sealed class OperationalRegimeBaselineResolution
 
             CurrentRegimeValue =
                 currentRegimeValue,
+
+            CurrentRegimeKey =
+                currentRegimeKey,
 
             OriginalTargetSamples =
                 originalTargetSamples,

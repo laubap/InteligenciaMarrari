@@ -589,7 +589,7 @@ Coluna "muda comportamento":
 | RC-5 | Modelo `TagRegimeComponenteIa` + migration — **concluída em 13/11/2026** | RC-4 | não |
 | RC-6 | Resolver com N componentes — **concluída em 13/11/2026** | RC-3, RC-4 | não (provado) |
 | RC-7 | Bloqueio de rótulos por cliente (backlog 11) — **concluída em 13/11/2026** | — | não (lista vazia por padrão) |
-| RC-8 | Service e provider com componentes, atrás da chave | RC-5, RC-6, RC-7 | só com a chave |
+| RC-8 | Service e provider com componentes, atrás da chave — **concluída em 13/11/2026** | RC-5, RC-6, RC-7 | só com a chave |
 | RC-9 | `RegimeKey` no diagnóstico e no log | RC-8 | só com a chave (observabilidade) |
 | RC-10 | Replay com regime combinado | RC-8, RC-9 | não (ferramenta) |
 | RC-11 | Equivalência com a etapa 0, critério da TAG29 e custo | RC-0, RC-1, RC-10 | não |
@@ -752,6 +752,36 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   - chave ligada: 3 consultas, tupla correta, componente proibido recusado, falha de consulta ⇒ fallback;
   - RC-2 com 0 diferenças.
 - **Muda comportamento:** **só com a chave** ligada **e** componentes cadastrados.
+- **Resultado (13/11/2026, sem mudança de comportamento com a chave desligada, que é o padrão):**
+  - **Provider** (`OperationalRegimeBaselineProvider`):
+    - ganhou o parâmetro opcional `IOptions<RegimeCombinadoOptions>?` (nulo = desligada). Os chamadores atuais, inclusive o replay, não mudaram; na API, a injeção de dependências passa a opção da seção (ainda sem a seção = desligada).
+    - Com a chave desligada, `TagsRegimesComponentesIa` **não é lida** e o caminho é o atual, ignorando `MapaEstados`.
+    - Com a chave ligada, depois da checagem da RC-7 do componente 1, ele carrega os componentes da configuração ordenados por `Ordem`. Erro ao ler ⇒ "não aplicado".
+    - Antes de qualquer consulta ao histórico, recusa componente com `TagRegime` vazia ou da lista da RC-7, pelo mesmo `IsForbidden`, com motivo `Componente k (TAG) ...` e a linha `BASELINE POR REGIME RECUSADO ... Componente=k`.
+    - Com componentes, depois da consulta atual do componente 1, faz **uma consulta `BuscarHistoricoPorPeriodo` por componente, com a mesma janela**. Falha em qualquer uma ⇒ "não aplicado" com o componente no motivo (fallback global).
+    - Com a chave ligada e **sem** componentes, segue o caminho atual (§6.1: só a tag com componentes usa o regime combinado).
+  - **Service** (`OperationalRegimeBaselineService`):
+    - sobrecarga `Resolve(configuração, componentes 2..N, alvo, séries [1..N], instante)`, que converte as séries e delega à sobrecarga do resolver da RC-6;
+    - a assinatura atual não muda; o trecho comum (fallbacks e estatística) foi extraído para `BuildFromHistoryResolution`, sem mudança de lógica.
+  - **Resolução:** `OperationalRegimeBaselineResolution.CurrentRegimeKey` (novo, `init`; parâmetro opcional no fim de `CreateNotApplied`), copiado da resolução do resolver. **Nulo no caminho atual.** Ainda não vai para diagnóstico nem log (RC-9).
+  - **Testes** (20 novos):
+    - `OperationalRegimeBaselineProviderTests`: 14 casos, com o `FakeHistoricoService` estendido (série por tag, falha por tag, lista de chamadas);
+    - `OperationalRegimeBaselineServiceTests`: 6 casos.
+    - **Chave desligada** (nula e `false`) com componentes e `MapaEstados` = resultado idêntico ao da configuração sem componentes e sem mapa (todos os campos, histórico e chamadas: só TAG42).
+    - Chave desligada com a tabela de componentes **apagada** ⇒ continua aplicando (prova que não lê); ligada ⇒ fallback.
+    - **Chave ligada, 3 componentes** (TAG42/TAG43/TAG46 com os mapas de §6.2): 3 consultas na mesma janela e na ordem; tupla `TAG42=2|TAG43=0|TAG46=450`; 15 de 30 alvos selecionados (o caminho atual pega 30). O resultado é igual ao do service chamado direto.
+    - Ligada sem componentes = caminho atual.
+    - Componente proibido (TAG73) recusado com 0 consultas.
+    - Falha na consulta do componente 2 ou 3 ⇒ fallback (parando na falha); falha no componente 1 ⇒ fallback sem consultar os outros.
+    - Componente sem leitura ⇒ "não aplicado".
+    - Injeção de dependências: a seção ausente, `false` e `true` dão 1, 1 e 3 consultas.
+    - Service: sem adicionais e sem mapa = assinatura atual (com a chave preenchida só na sobrecarga); 2 componentes; amostras insuficientes mantêm a chave; número de séries errado ⇒ exceção.
+  - **Sensibilidade:** chave forçada sempre ligada ⇒ 6 dos 14 testes RC-8 do provider falham; sempre desligada ⇒ 8 falham. Mutação temporária, restaurada e conferida com `cmp`.
+  - **Executado:**
+    - relacionados (`OperationalRegime|RegimeCombinado|Cp300|PredictionServiceDeadbandWiring|PredictionHistoryReuse|IntelligenceLabBehaviorBaselineEndToEnd|AnomalyDetectionOptions|DependencyInjection|HistoricoCausal|PredictionServiceObservabilityEquivalence|PerformanceDiagnostics`): **314/314**;
+    - `Compare-Replay.ps1`: **0 diferenças em 12 execuções** (`dados/rc2_rodadas/rc8_sem_hc`), e com `-HistoricoCausal` também 0 (`rc8_com_hc`);
+    - **suíte completa: 987/987**.
+  - O replay ainda não tem como ligar a chave nem cadastrar componentes (RC-10).
 
 #### RC-9. `RegimeKey` no diagnóstico e no log
 - **Objetivo:** campo aditivo `RegimeKey` em `BaselineDiagnostic` (`src/IAApi.Engine/Observability/DiagnosticContracts.cs`), preenchido em `PredictionDetectionPreparationService.PrepararAsync` / `CriarBaselineEfetivo`, e a chave na linha de log do regime aplicado. É só instrumentação: não entra em nenhuma decisão.

@@ -214,8 +214,9 @@ public sealed class OperationalRegimeHistoryResolver
     /// <see cref="OperationalRegimeHistoryResolution.CurrentRegimeValue"/> é a
     /// leitura (sem mapa) do componente 1; a chave leva os valores mapeados.
     ///
-    /// Nada no runtime chama esta sobrecarga ainda (só a partir da RC-8,
-    /// atrás de AnomalyDetection:RegimeCombinado:Habilitado).
+    /// Chamada pelo OperationalRegimeBaselineService (RC-8) só quando o
+    /// provider tem AnomalyDetection:RegimeCombinado:Habilitado = true e a
+    /// configuração tem componentes cadastrados.
     /// </summary>
     public OperationalRegimeHistoryResolution Resolve(
         TagRegimeOperacionalIa configuration,

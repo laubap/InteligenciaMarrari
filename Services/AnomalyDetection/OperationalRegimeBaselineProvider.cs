@@ -22,21 +22,31 @@ public sealed class OperationalRegimeBaselineProvider
     private readonly IHistoricoService _historicoService;
     private readonly OperationalRegimeBaselineService _baselineService;
     private readonly OperationalRegimeForbiddenTagsOptions _forbiddenTags;
+    private readonly bool _regimeCombinadoHabilitado;
 
     /// <param name="forbiddenTagsOptions">
     /// Tags proibidas como regime, por cliente (RC-7). Nulo ou vazio
     /// (padrão) = nenhuma tag bloqueada, comportamento anterior.
+    /// </param>
+    /// <param name="regimeCombinadoOptions">
+    /// Chave do regime combinado (RC-8). Nula ou <c>Habilitado = false</c>
+    /// (padrão) = a tabela de componentes não é lida e o caminho é o atual.
     /// </param>
     public OperationalRegimeBaselineProvider(
         AppDbContext context,
         IHistoricoService historicoService,
         OperationalRegimeBaselineService baselineService,
         Microsoft.Extensions.Options.IOptions<OperationalRegimeForbiddenTagsOptions>?
-            forbiddenTagsOptions = null)
+            forbiddenTagsOptions = null,
+        Microsoft.Extensions.Options.IOptions<RegimeCombinadoOptions>?
+            regimeCombinadoOptions = null)
     {
         _forbiddenTags =
             forbiddenTagsOptions?.Value ??
             new OperationalRegimeForbiddenTagsOptions();
+
+        _regimeCombinadoHabilitado =
+            regimeCombinadoOptions?.Value.Habilitado == true;
 
         _context =
             context ??
@@ -155,6 +165,73 @@ public sealed class OperationalRegimeBaselineProvider
 
             return OperationalRegimeBaselineResolution.CreateNotApplied(
                 reason);
+        }
+
+        /*
+         * RC-8: regime combinado (componentes 2..N), só com
+         * AnomalyDetection:RegimeCombinado:Habilitado = true. Com a chave
+         * desligada, a tabela de componentes nem é lida e a lista fica
+         * vazia: segue o caminho atual, inclusive ignorando MapaEstados.
+         * Com a chave ligada e sem componentes cadastrados, idem.
+         */
+        IReadOnlyList<TagRegimeComponenteIa> components =
+            Array.Empty<TagRegimeComponenteIa>();
+
+        if (_regimeCombinadoHabilitado)
+        {
+            try
+            {
+                components =
+                    _context
+                        .TagsRegimesComponentesIa
+                        .AsNoTracking()
+                        .Where(item =>
+                            item.ConfiguracaoId == configuration.Id)
+                        .OrderBy(item =>
+                            item.Ordem)
+                        .ToList();
+            }
+            catch (Exception exception)
+            {
+                return OperationalRegimeBaselineResolution.CreateNotApplied(
+                    "Não foi possível consultar os componentes do regime " +
+                    $"combinado: {exception.Message}");
+            }
+
+            /*
+             * Mesma recusa da RC-7 para cada componente, antes de
+             * qualquer consulta ao histórico.
+             */
+            foreach (var component in components)
+            {
+                if (string.IsNullOrWhiteSpace(
+                        component.TagRegime))
+                {
+                    return OperationalRegimeBaselineResolution.CreateNotApplied(
+                        $"O componente {component.Ordem} do regime combinado " +
+                        "não possui uma TagRegime válida.");
+                }
+
+                if (_forbiddenTags.IsForbidden(
+                        clienteId,
+                        component.TagRegime))
+                {
+                    Console.WriteLine(
+                        $"BASELINE POR REGIME RECUSADO " +
+                        $"Cliente={clienteId} " +
+                        $"Tag={tagName} " +
+                        $"TagRegime={component.TagRegime} " +
+                        $"Componente={component.Ordem} " +
+                        "Motivo=tag proibida como regime");
+
+                    return OperationalRegimeBaselineResolution.CreateNotApplied(
+                        $"Componente {component.Ordem} ({component.TagRegime}) " +
+                        $"está na lista de tags proibidas como regime do cliente " +
+                        $"{clienteId} " +
+                        "(AnomalyDetection:RegimeOperacional:TagsProibidasPorCliente). " +
+                        "Fallback para baseline global.");
+                }
+            }
         }
 
         if (configuration.LagMinutos < 0)
@@ -289,10 +366,53 @@ public sealed class OperationalRegimeBaselineProvider
          *
          * aos componentes já testados anteriormente.
          */
+        if (components.Count == 0)
+        {
+            return _baselineService.Resolve(
+                configuration,
+                validTargetHistory,
+                regimeHistory,
+                currentTimestamp);
+        }
+
+        /*
+         * RC-8: uma consulta por componente adicional, com a mesma janela
+         * do componente 1. Falha em qualquer uma ⇒ fallback global.
+         */
+        var regimeHistories =
+            new List<IReadOnlyList<LeituraBruta>>(
+                components.Count + 1)
+            {
+                regimeHistory
+            };
+
+        foreach (var component in components)
+        {
+            try
+            {
+                regimeHistories.Add(
+                    _historicoService
+                        .BuscarHistoricoPorPeriodo(
+                            clienteId,
+                            component.TagRegime,
+                            regimeWindowStart,
+                            regimeWindowEnd));
+            }
+            catch (Exception exception)
+            {
+                return OperationalRegimeBaselineResolution.CreateNotApplied(
+                    $"Não foi possível obter o histórico do componente " +
+                    $"{component.Ordem} ({component.TagRegime}) do regime " +
+                    $"combinado. Fallback para baseline global. " +
+                    $"Motivo: {exception.Message}");
+            }
+        }
+
         return _baselineService.Resolve(
             configuration,
+            components,
             validTargetHistory,
-            regimeHistory,
+            regimeHistories,
             currentTimestamp);
     }
 

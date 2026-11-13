@@ -286,6 +286,156 @@ public class OperationalRegimeBaselineServiceTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    // ===== RC-8: sobrecarga com componentes =====
+
+    [Theory]
+    [InlineData(12)]
+    [InlineData(24)]
+    public void ResolveComponentes_SemAdicionaisESemMapa_IgualAAssinaturaAtual(
+        int currentMinute)
+    {
+        var service = CreateService();
+        var configuration = CreateConfiguration();
+
+        var atual =
+            service.Resolve(
+                configuration,
+                CreateBimodalTargetHistory(),
+                CreateBimodalRegimeHistory(),
+                Utc(0, currentMinute));
+
+        var componentes =
+            service.Resolve(
+                configuration,
+                Array.Empty<TagRegimeComponenteIa>(),
+                CreateBimodalTargetHistory(),
+                new IReadOnlyList<LeituraBruta>[] { CreateBimodalRegimeHistory() },
+                Utc(0, currentMinute));
+
+        Assert.True(atual.Applied, atual.Reason);
+        Assert.Equal(atual.Applied, componentes.Applied);
+        Assert.Equal(atual.Reason, componentes.Reason);
+        Assert.Equal(atual.CurrentRegimeValue, componentes.CurrentRegimeValue);
+        Assert.Equal(atual.OriginalTargetSamples, componentes.OriginalTargetSamples);
+        Assert.Equal(atual.AlignedSamples, componentes.AlignedSamples);
+        Assert.Equal(atual.SelectedSamples, componentes.SelectedSamples);
+        Assert.Equal(atual.Statistics!.Media, componentes.Statistics!.Media);
+        Assert.Equal(atual.Statistics.DesvioPadrao, componentes.Statistics.DesvioPadrao);
+        Assert.Equal(atual.Statistics.DeadbandRecomendado, componentes.Statistics.DeadbandRecomendado);
+        Assert.Equal(
+            atual.History.Select(p => (p.DataHora, p.Valor)),
+            componentes.History.Select(p => (p.DataHora, p.Valor)));
+
+        // A chave só existe no caminho com componentes.
+        Assert.Null(atual.CurrentRegimeKey);
+        Assert.Equal(
+            $"TEST.PUMP_RUNNING={(currentMinute == 12 ? 0 : 1)}",
+            componentes.CurrentRegimeKey);
+    }
+
+    [Fact]
+    public void ResolveComponentes_DoisComponentes_SelecionaPelaTuplaECalculaEstatisticas()
+    {
+        var service = CreateService();
+
+        // Válvula: 0 nos minutos 00–01, 1 de 00:02 em diante.
+        var valve =
+            CreateHistory(
+                Enumerable.Range(0, 24)
+                    .Select(minute => minute < 2 ? 0f : 1f)
+                    .ToArray(),
+                firstTargetMinute: 0);
+
+        var result =
+            service.Resolve(
+                CreateConfiguration(),
+                new[] { Component(2, "TEST.VALVE") },
+                CreateBimodalTargetHistory(),
+                new IReadOnlyList<LeituraBruta>[] { CreateBimodalRegimeHistory(), valve },
+                Utc(0, 12));
+
+        // Estado em 00:11: bomba 0, válvula 1. Targets cujo regime (t − 1)
+        // é (0, 1): 00:03..00:12 (o caminho atual pegaria 00:01..00:12).
+        Assert.True(result.Applied, result.Reason);
+        Assert.Equal("TEST.PUMP_RUNNING=0|TEST.VALVE=1", result.CurrentRegimeKey);
+        Assert.Equal(0, result.CurrentRegimeValue!.Value, 3);
+        Assert.Equal(24, result.OriginalTargetSamples);
+        Assert.Equal(10, result.SelectedSamples);
+        Assert.Equal(
+            Enumerable.Range(3, 10).Select(minute => Utc(0, minute)),
+            result.History.Select(p => p.DataHora));
+        Assert.NotNull(result.Statistics);
+        Assert.InRange(result.Statistics!.Media, 0.02, 0.04);
+    }
+
+    [Fact]
+    public void ResolveComponentes_AmostrasInsuficientes_NaoAplicaEMantemAChave()
+    {
+        var service = CreateService();
+
+        // Válvula 1 até 00:05 e 0 depois: o regime (0, 0) só cobre 6 targets.
+        var valve =
+            CreateHistory(
+                Enumerable.Range(0, 24)
+                    .Select(minute => minute <= 5 ? 1f : 0f)
+                    .ToArray(),
+                firstTargetMinute: 0);
+
+        var result =
+            service.Resolve(
+                CreateConfiguration(),
+                new[] { Component(2, "TEST.VALVE") },
+                CreateBimodalTargetHistory(),
+                new IReadOnlyList<LeituraBruta>[] { CreateBimodalRegimeHistory(), valve },
+                Utc(0, 12));
+
+        Assert.False(result.Applied);
+        Assert.Null(result.Statistics);
+        Assert.Empty(result.History);
+        Assert.Equal(6, result.SelectedSamples);
+        Assert.Equal("TEST.PUMP_RUNNING=0|TEST.VALVE=0", result.CurrentRegimeKey);
+        Assert.Contains("insuficiente", result.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveComponentes_NumeroDeSeriesDiferenteDosComponentes_Excecao()
+    {
+        var service = CreateService();
+
+        Assert.Throws<ArgumentException>(() =>
+            service.Resolve(
+                CreateConfiguration(),
+                new[] { Component(2, "TEST.VALVE") },
+                CreateBimodalTargetHistory(),
+                new IReadOnlyList<LeituraBruta>[] { CreateBimodalRegimeHistory() },
+                Utc(0, 12)));
+    }
+
+    [Fact]
+    public void ResolveAtual_ResultadoSemChave()
+    {
+        var result =
+            CreateService().Resolve(
+                CreateConfiguration(),
+                CreateBimodalTargetHistory(),
+                CreateConstantRegimeHistory(0, 5),
+                Utc(0, 12));
+
+        Assert.Null(result.CurrentRegimeKey);
+    }
+
+    private static TagRegimeComponenteIa Component(
+        int ordem,
+        string tagRegime,
+        string? mapa = null) =>
+        new()
+        {
+            Ordem = ordem,
+            TagRegime = tagRegime,
+            MapaEstados = mapa,
+            ToleranciaEstado = 0.001
+        };
+
     private static OperationalRegimeBaselineService CreateService()
     {
         var historyResolver =

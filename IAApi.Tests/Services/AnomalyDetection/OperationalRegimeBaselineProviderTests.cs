@@ -694,6 +694,457 @@ public class OperationalRegimeBaselineProviderTests
         Assert.Empty(options.TagsProibidasPorCliente);
     }
 
+    // ===== RC-8: regime combinado (componentes) atrás da chave =====
+    //
+    // B-01 (TAG29) com 3 componentes, como a configuração alvo de §6.2:
+    // TAG42 (própria bomba, mapa 2:2;*:0), TAG43 (outra bomba, 2:2;*:0) e
+    // TAG46 (set-point, 380:380;*:450). Lag 1, tolerância 2, mínimo 10.
+    // Targets 00:01..00:30: ~100 até 00:15 e ~50 depois.
+    // TAG42 = 2 sempre; TAG43 = 2 até 00:14 e 0 depois; TAG46 = 450.
+    // Estado em 00:30 (leitura às 00:31): (2, 0, 450) ⇒ targets 00:16..00:30.
+    // O caminho atual (só TAG42) pega os 30 targets.
+
+    private static readonly DateTime JanelaInicioRc8 =
+        new(2026, 9, 10, 23, 58, 0, DateTimeKind.Utc);
+
+    private static List<LeituraBruta> TargetRc8() =>
+        Enumerable.Range(1, 30)
+            .Select(minute => new LeituraBruta
+            {
+                DataHora = Utc(0, minute),
+                Valor = (minute <= 15 ? 100f : 50f) + (minute % 3) * 0.5f
+            })
+            .ToList();
+
+    private static List<LeituraBruta> SerieRc8(Func<int, float> valor) =>
+        Enumerable.Range(0, 31)
+            .Select(minute => new LeituraBruta
+            {
+                DataHora = Utc(0, minute),
+                Valor = valor(minute)
+            })
+            .ToList();
+
+    private static FakeHistoricoService HistoricoRc8()
+    {
+        var historico = new FakeHistoricoService();
+        historico.PeriodHistoryByTag["TAG42"] = SerieRc8(_ => 2f);
+        historico.PeriodHistoryByTag["TAG43"] = SerieRc8(minute => minute <= 14 ? 2f : 0f);
+        historico.PeriodHistoryByTag["TAG46"] = SerieRc8(_ => 450f);
+        return historico;
+    }
+
+    private static async Task<(SqliteConnection Connection, AppDbContext Context)> SeedRc8Async(
+        bool comComponentes,
+        string? mapaComponente1 = "2:2;*:0",
+        string tagComponente3 = "TAG46")
+    {
+        var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var context =
+            new AppDbContext(
+                new DbContextOptionsBuilder<AppDbContext>()
+                    .UseSqlite(connection)
+                    .Options);
+
+        await context.Database.EnsureCreatedAsync();
+
+        var configuration =
+            new TagRegimeOperacionalIa
+            {
+                ClienteId = "PK2",
+                TagName = "TAG29",
+                TagRegime = "TAG42",
+                MapaEstados = mapaComponente1,
+                Ativo = true,
+                LagMinutos = 1,
+                ToleranciaAlinhamentoMinutos = 2,
+                ToleranciaEstado = 0.001,
+                MinimoAmostrasPorRegime = 10
+            };
+
+        context.TagsRegimesOperacionaisIa.Add(configuration);
+        await context.SaveChangesAsync();
+
+        if (comComponentes)
+        {
+            context.TagsRegimesComponentesIa.AddRange(
+                // Fora de ordem de propósito: o provider ordena por Ordem.
+                new TagRegimeComponenteIa
+                {
+                    ConfiguracaoId = configuration.Id,
+                    Ordem = 3,
+                    TagRegime = tagComponente3,
+                    MapaEstados = "380:380;*:450"
+                },
+                new TagRegimeComponenteIa
+                {
+                    ConfiguracaoId = configuration.Id,
+                    Ordem = 2,
+                    TagRegime = "TAG43",
+                    MapaEstados = "2:2;*:0"
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        context.ChangeTracker.Clear();
+
+        return (connection, context);
+    }
+
+    private static OperationalRegimeBaselineProvider CreateProviderRc8(
+        AppDbContext context,
+        IHistoricoService historicoService,
+        Microsoft.Extensions.Options.IOptions<RegimeCombinadoOptions>? regimeCombinado,
+        OperationalRegimeForbiddenTagsOptions? forbiddenTags = null)
+    {
+        return new OperationalRegimeBaselineProvider(
+            context,
+            historicoService,
+            new OperationalRegimeBaselineService(
+                new OperationalRegimeHistoryResolver(),
+                new TagProfileStatisticsCalculator(
+                    new HistoricoLimpezaService())),
+            forbiddenTags is null
+                ? null
+                : Microsoft.Extensions.Options.Options.Create(forbiddenTags),
+            regimeCombinado);
+    }
+
+    private static Microsoft.Extensions.Options.IOptions<RegimeCombinadoOptions> Chave(bool habilitado) =>
+        Microsoft.Extensions.Options.Options.Create(
+            new RegimeCombinadoOptions { Habilitado = habilitado });
+
+    private static void AssertMesmoResultado(
+        OperationalRegimeBaselineResolution esperado,
+        OperationalRegimeBaselineResolution atual)
+    {
+        Assert.Equal(esperado.Applied, atual.Applied);
+        Assert.Equal(esperado.Reason, atual.Reason);
+        Assert.Equal(esperado.CurrentRegimeValue, atual.CurrentRegimeValue);
+        Assert.Equal(esperado.CurrentRegimeKey, atual.CurrentRegimeKey);
+        Assert.Equal(esperado.OriginalTargetSamples, atual.OriginalTargetSamples);
+        Assert.Equal(esperado.AlignedSamples, atual.AlignedSamples);
+        Assert.Equal(esperado.SelectedSamples, atual.SelectedSamples);
+        Assert.Equal(esperado.Statistics?.Media, atual.Statistics?.Media);
+        Assert.Equal(esperado.Statistics?.DesvioPadrao, atual.Statistics?.DesvioPadrao);
+        Assert.Equal(esperado.Statistics?.DeadbandRecomendado, atual.Statistics?.DeadbandRecomendado);
+        Assert.Equal(esperado.Statistics?.ConfiancaDeadband, atual.Statistics?.ConfiancaDeadband);
+        Assert.Equal(
+            esperado.History.Select(p => (p.DataHora, p.Valor)),
+            atual.History.Select(p => (p.DataHora, p.Valor)));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    public async Task RC8_ChaveDesligada_ComComponentesEMapa_IdenticoASemComponentes_SemConsultaExtra(
+        bool? habilitado)
+    {
+        var (c1, comComponentes) = await SeedRc8Async(comComponentes: true);
+        var (c2, semComponentes) = await SeedRc8Async(comComponentes: false, mapaComponente1: null);
+        await using var _c1 = c1;
+        await using var _c2 = c2;
+        await using var _x1 = comComponentes;
+        await using var _x2 = semComponentes;
+
+        var historicoReferencia = HistoricoRc8();
+        var historicoAtual = HistoricoRc8();
+
+        var referencia =
+            CreateProviderRc8(semComponentes, historicoReferencia, regimeCombinado: null)
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        var atual =
+            CreateProviderRc8(
+                    comComponentes,
+                    historicoAtual,
+                    habilitado is null ? null : Chave(habilitado.Value))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        // Caminho atual: só TAG42, mapa ignorado, 30 targets, sem chave.
+        Assert.True(referencia.Applied, referencia.Reason);
+        Assert.Equal(30, referencia.SelectedSamples);
+        Assert.Null(referencia.CurrentRegimeKey);
+        AssertMesmoResultado(referencia, atual);
+
+        Assert.Equal(historicoReferencia.Calls, historicoAtual.Calls);
+        Assert.Equal(new[] { "TAG42" }, historicoAtual.Calls.Select(c => c.Tag));
+    }
+
+    [Fact]
+    public async Task RC8_ChaveDesligada_NaoLeATabelaDeComponentes()
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        // Sem a tabela, qualquer leitura falharia.
+        await context.Database.ExecuteSqlRawAsync("DROP TABLE TagsRegimesComponentesIa");
+
+        var desligada =
+            CreateProviderRc8(context, HistoricoRc8(), Chave(false))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.True(desligada.Applied, desligada.Reason);
+        Assert.Equal(30, desligada.SelectedSamples);
+
+        // Prova de que a ligada lê: a mesma situação vira fallback.
+        var historicoLigada = HistoricoRc8();
+        var ligada =
+            CreateProviderRc8(context, historicoLigada, Chave(true))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.False(ligada.Applied);
+        Assert.Contains("componentes do regime combinado", ligada.Reason);
+        Assert.Empty(historicoLigada.Calls);
+    }
+
+    [Fact]
+    public async Task RC8_ChaveLigada_TresComponentes_TresConsultasNaMesmaJanelaETupla()
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+
+        var result =
+            CreateProviderRc8(context, historico, Chave(true))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.Equal(
+            new[]
+            {
+                ("TAG42", JanelaInicioRc8, Utc(0, 30)),
+                ("TAG43", JanelaInicioRc8, Utc(0, 30)),
+                ("TAG46", JanelaInicioRc8, Utc(0, 30))
+            },
+            historico.Calls);
+
+        Assert.True(result.Applied, result.Reason);
+        Assert.Equal("TAG42=2|TAG43=0|TAG46=450", result.CurrentRegimeKey);
+        Assert.Equal(2, result.CurrentRegimeValue!.Value, 3);
+        Assert.Equal(30, result.OriginalTargetSamples);
+        Assert.Equal(15, result.SelectedSamples);
+        Assert.Equal(
+            Enumerable.Range(16, 15).Select(minute => Utc(0, minute)),
+            result.History.Select(p => p.DataHora));
+        Assert.NotNull(result.Statistics);
+        Assert.InRange(result.Statistics!.Media, 50, 51);
+    }
+
+    [Fact]
+    public async Task RC8_ChaveLigada_IgualAoServiceComAsMesmasSeries()
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+
+        var viaProvider =
+            CreateProviderRc8(context, historico, Chave(true))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        var configuration = context.TagsRegimesOperacionaisIa.AsNoTracking().Single();
+        var components =
+            context.TagsRegimesComponentesIa.AsNoTracking().OrderBy(c => c.Ordem).ToList();
+
+        var direto =
+            new OperationalRegimeBaselineService(
+                    new OperationalRegimeHistoryResolver(),
+                    new TagProfileStatisticsCalculator(new HistoricoLimpezaService()))
+                .Resolve(
+                    configuration,
+                    components,
+                    TargetRc8(),
+                    new IReadOnlyList<LeituraBruta>[]
+                    {
+                        historico.PeriodHistoryByTag["TAG42"],
+                        historico.PeriodHistoryByTag["TAG43"],
+                        historico.PeriodHistoryByTag["TAG46"]
+                    },
+                    Utc(0, 31));
+
+        AssertMesmoResultado(direto, viaProvider);
+    }
+
+    [Fact]
+    public async Task RC8_ChaveLigada_SemComponentes_IdenticoAoCaminhoAtual()
+    {
+        // Mesmo com MapaEstados no componente 1: sem componentes, caminho atual.
+        var (connection, context) = await SeedRc8Async(comComponentes: false);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historicoDesligada = HistoricoRc8();
+        var historicoLigada = HistoricoRc8();
+
+        var desligada =
+            CreateProviderRc8(context, historicoDesligada, regimeCombinado: null)
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        var ligada =
+            CreateProviderRc8(context, historicoLigada, Chave(true))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.True(desligada.Applied, desligada.Reason);
+        AssertMesmoResultado(desligada, ligada);
+        Assert.Null(ligada.CurrentRegimeKey);
+        Assert.Equal(historicoDesligada.Calls, historicoLigada.Calls);
+        Assert.Single(historicoLigada.Calls);
+    }
+
+    [Fact]
+    public async Task RC8_ChaveLigada_ComponenteProibido_RecusaSemConsultarHistorico()
+    {
+        var (connection, context) =
+            await SeedRc8Async(comComponentes: true, tagComponente3: "TAG73");
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+
+        var result =
+            CreateProviderRc8(context, historico, Chave(true), Pk2LabelList())
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.False(result.Applied);
+        Assert.Null(result.Statistics);
+        Assert.Empty(historico.Calls);
+        Assert.Contains("Componente 3 (TAG73)", result.Reason);
+        Assert.Contains("proibidas como regime", result.Reason);
+        Assert.Contains("PK2", result.Reason);
+
+        // Com a chave desligada o componente nem é lido: caminho atual (TAG42).
+        var historicoDesligada = HistoricoRc8();
+        var desligada =
+            CreateProviderRc8(context, historicoDesligada, Chave(false), Pk2LabelList())
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.True(desligada.Applied, desligada.Reason);
+        Assert.Equal(new[] { "TAG42" }, historicoDesligada.Calls.Select(c => c.Tag));
+    }
+
+    [Theory]
+    [InlineData("TAG43", 2, new[] { "TAG42", "TAG43" })]
+    [InlineData("TAG46", 3, new[] { "TAG42", "TAG43", "TAG46" })]
+    public async Task RC8_ChaveLigada_FalhaNaConsultaDeUmComponente_FallbackGlobal(
+        string tagComFalha,
+        int ordem,
+        string[] consultasEsperadas)
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+        historico.FailOnTag = tagComFalha;
+
+        var result =
+            CreateProviderRc8(context, historico, Chave(true))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.False(result.Applied);
+        Assert.Null(result.Statistics);
+        Assert.Empty(result.History);
+        Assert.Contains($"componente {ordem} ({tagComFalha})", result.Reason);
+        Assert.Contains("Fallback para baseline global", result.Reason);
+        Assert.Equal(consultasEsperadas, historico.Calls.Select(c => c.Tag));
+    }
+
+    [Fact]
+    public async Task RC8_ChaveLigada_FalhaNaConsultaDoComponente1_FallbackSemConsultarOsOutros()
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+        historico.FailOnTag = "TAG42";
+
+        var result =
+            CreateProviderRc8(context, historico, Chave(true))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.False(result.Applied);
+        Assert.Contains("Não foi possível obter o histórico da tag de regime", result.Reason);
+        Assert.Equal(new[] { "TAG42" }, historico.Calls.Select(c => c.Tag));
+    }
+
+    [Fact]
+    public async Task RC8_ChaveLigada_ComponenteSemLeituraNoEstadoAtual_NaoAplica()
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var historico = HistoricoRc8();
+        historico.PeriodHistoryByTag["TAG46"] = new List<LeituraBruta>();
+
+        var result =
+            CreateProviderRc8(context, historico, Chave(true))
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.False(result.Applied);
+        Assert.Null(result.Statistics);
+        Assert.Contains("TAG46", result.Reason);
+        Assert.Equal(3, historico.Calls.Count);
+    }
+
+    [Theory]
+    [InlineData(null, 1)]
+    [InlineData("false", 1)]
+    [InlineData("true", 3)]
+    public async Task RC8_DI_ChaveLidaDaSecao_ProviderSegueAChave(
+        string? habilitado,
+        int consultasEsperadas)
+    {
+        var (connection, context) = await SeedRc8Async(comComponentes: true);
+        await using var _connection = connection;
+        await using var _context = context;
+
+        var values = new Dictionary<string, string?>();
+        if (habilitado is not null)
+            values["AnomalyDetection:RegimeCombinado:Habilitado"] = habilitado;
+
+        var configuration =
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(values)
+                .Build();
+
+        var historico = HistoricoRc8();
+        var services = new ServiceCollection();
+
+        IAApi.Services.AnomalyDetection.DependencyInjection
+            .AnomalyDetectionServiceCollectionExtensions
+            .AddAnomalyDetectionConfiguration(services, configuration);
+
+        IAApi.Services.AnomalyDetection.DependencyInjection
+            .AnomalyDetectionServiceCollectionExtensions
+            .AddOperationalRegimeServices(services);
+
+        services.AddSingleton(context);
+        services.AddSingleton<IHistoricoService>(historico);
+        services.AddScoped<HistoricoLimpezaService>();
+        services.AddScoped<TagProfileStatisticsCalculator>();
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+
+        var result =
+            scope.ServiceProvider
+                .GetRequiredService<OperationalRegimeBaselineProvider>()
+                .Resolve("PK2", "TAG29", TargetRc8(), Utc(0, 31));
+
+        Assert.True(result.Applied, result.Reason);
+        Assert.Equal(consultasEsperadas, historico.Calls.Count);
+        Assert.Equal(consultasEsperadas == 3 ? 15 : 30, result.SelectedSamples);
+    }
+
     private static OperationalRegimeBaselineProvider CreateProvider(
         AppDbContext context,
         IHistoricoService historicoService,
@@ -826,6 +1277,17 @@ public class OperationalRegimeBaselineProviderTests
 
         public Exception? ExceptionToThrow { get; set; }
 
+        /// <summary>RC-8: série por tag; tag ausente usa PeriodHistory.</summary>
+        public Dictionary<string, List<LeituraBruta>> PeriodHistoryByTag { get; } =
+            new(StringComparer.Ordinal);
+
+        /// <summary>RC-8: só a consulta desta tag falha.</summary>
+        public string? FailOnTag { get; set; }
+
+        /// <summary>RC-8: todas as consultas, na ordem.</summary>
+        public List<(string Tag, DateTime Inicio, DateTime Fim)> Calls { get; } =
+            new();
+
         public int PeriodCallCount { get; private set; }
 
         public string? LastClienteId { get; private set; }
@@ -865,12 +1327,26 @@ public class OperationalRegimeBaselineProviderTests
             LastFim =
                 fim;
 
+            Calls.Add((tagName, inicio, fim));
+
             if (ExceptionToThrow is not null)
             {
                 throw ExceptionToThrow;
             }
 
-            return PeriodHistory
+            if (FailOnTag is not null &&
+                string.Equals(FailOnTag, tagName, StringComparison.Ordinal))
+            {
+                throw new TimeoutException(
+                    $"Tempo limite ao consultar {tagName}.");
+            }
+
+            var source =
+                PeriodHistoryByTag.TryGetValue(tagName, out var byTag)
+                    ? byTag
+                    : PeriodHistory;
+
+            return source
                 .Where(
                     item =>
                         item.DataHora >= inicio &&

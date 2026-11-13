@@ -9,8 +9,9 @@ namespace IAApi.Services.AnomalyDetection;
 ///
 /// Com a chave desligada, o provider não lê a tabela de componentes,
 /// ignora <c>MapaEstados</c> e o resolver segue pelo caminho atual
-/// (um componente, tolerância numérica). Na RC-4 nada lê esta opção
-/// ainda; o uso entra na RC-8.
+/// (um componente, tolerância numérica). Lida pelo
+/// <c>OperationalRegimeBaselineProvider</c> desde a RC-8: com a chave ligada,
+/// só as tags com componentes cadastrados usam o regime combinado.
 ///
 /// Rollback: chave em <c>false</c> (volta ao comportamento atual sem
 /// tocar no banco).
