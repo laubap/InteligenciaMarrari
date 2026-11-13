@@ -80,6 +80,7 @@ dotnet run --project tools/Cp300OfflineReplay -- `
 | `--appsettings` | Padrão: `appsettings.json` da pasta atual. Fornece pesos, limiares e `Bridge:HorasHistorico`. |
 | `--horas-historico N` | Substitui `Bridge:HorasHistorico`, tanto no treino quanto na detecção. |
 | `--historico-inclui-atual` | Inclui a própria leitura t no histórico servido a ela. Padrão: não inclui. |
+| `--historico-causal` | Liga a chave `AnomalyDetection:HistoricoCausal` (P31) nas duas preparações, com a tolerância padrão de 30 min: só os pontos anteriores à leitura entram na detecção. Sem `--historico-inclui-atual`, o CSV já serve só esses pontos; o recorte não remove nada e a saída é idêntica. Com `--historico-inclui-atual`, o recorte tira o ponto t, e a entrada dos detectores volta a ser a do padrão (não verificado byte a byte). |
 | `--regime TAGx=TAGy` | Baseline por regime: TAGy (tag de estado) vira a `TagRegime` de TAGx. Pode ser repetida, ou receber pares separados por vírgula. Cria a linha em `TagsRegimesOperacionaisIa` (SQLite em memória) com os padrões do modelo: lag 0, tolerância de 2 min, `ToleranciaEstado` 0,001 e mínimo de 30 amostras. **Recusa TAG60–TAG81** (rótulos), uma tag como regime de si mesma, TAGx fora das tags reproduzidas e TAGy ausente do CSV. TAGy precisa estar no CSV, mas não precisa ser reproduzida. |
 | `--verbose` | Mostra os `Console.WriteLine` do runtime. Por padrão ficam ocultos. |
 
@@ -128,7 +129,8 @@ Regime TAG28 <- TAG43, pontos por estado na primeira janela movel: ...
 - `-Gerar` roda `sem` e `rec` de preset 1, madrugada e preset 6 (`Docs/PLANO_REGIME_COMBINADO.md` §5.2) e grava o manifesto (comandos e SHA-256 da entrada, do `appsettings.json` e de cada `.csv`). Recusa sobrescrever sem `-Sobrescrever`.
 - O modo padrão roda os comandos do manifesto em `dados\rc2_rodadas\<data_hora>` e compara cada `.csv` por SHA-256 e cada `.log` linha a linha, ignorando só a linha `Saida:` (caminho). Para se a entrada mudou; avisa se o `appsettings.json` mudou.
 - Opções: `-Somente preset6_rec`, `-Pasta`, `-SemBuild`, `-Configuracao` (padrão `Debug`, a mesma da etapa 0).
-- Teste golden sem dados industriais: `Cp300OfflineReplayTests.Golden_BombasComRegime_SaidaIdenticaAReferencia`, referência em `IAApi.Tests/Cp300Replay/Golden/`. Regravar de propósito com `IAAPI_ATUALIZAR_GOLDEN=1`.
+- `-HistoricoCausal` (P31, só na comparação): acrescenta `--historico-causal` a cada execução e compara com a **mesma** referência. Esperado: 0 diferenças. O `-Gerar` recusa a opção.
+- Teste golden sem dados industriais: `Cp300OfflineReplayTests.Golden_BombasComRegime_SaidaIdenticaAReferencia`, referência em `IAApi.Tests/Cp300Replay/Golden/`. Roda com a chave desligada e ligada, contra a mesma referência. Regravar de propósito com `IAAPI_ATUALIZAR_GOLDEN=1` (só a partir da execução sem a chave).
 
 ## 3. O que é igual à produção
 

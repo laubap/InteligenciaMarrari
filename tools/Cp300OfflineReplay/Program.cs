@@ -92,7 +92,7 @@ internal static class Cp300ReplayCli
         "--entrada <historico.csv> --saida <replay.csv> " +
         "(--treino-ate <yyyy-MM-ddTHH:mm:ss> | --treino-inicio <data> --treino-fim <data> [--inicio <data>]) " +
         "[--fim <yyyy-MM-ddTHH:mm:ss>] [--cliente PK2] [--tags TAG22,TAG23,...] " +
-        "[--appsettings appsettings.json] [--horas-historico N] [--historico-inclui-atual] " +
+        "[--appsettings appsettings.json] [--horas-historico N] [--historico-inclui-atual] [--historico-causal] " +
         "[--regime TAGx=TAGy]... [--permitir-falha-no-treino] [--verbose]";
 
     public static async Task<int> RunAsync(string[] args)
@@ -143,6 +143,7 @@ internal static class Cp300ReplayCli
                     ? int.Parse(horas, NumberStyles.Integer, CultureInfo.InvariantCulture)
                     : null,
                 HistoricoIncluiLeituraAtual = parsed.ContainsKey("historico-inclui-atual"),
+                HistoricoCausal = parsed.ContainsKey("historico-causal"),
                 Regimes = regimes,
                 Log = stdout
             };
@@ -185,7 +186,7 @@ internal static class Cp300ReplayCli
 
     private static Dictionary<string, string?> Parse(string[] args, List<string> regimeArgs)
     {
-        string[] flags = ["historico-inclui-atual", "verbose", "permitir-falha-no-treino"];
+        string[] flags = ["historico-inclui-atual", "historico-causal", "verbose", "permitir-falha-no-treino"];
         string[] valued = ["entrada", "saida", "treino-ate", "treino-inicio", "treino-fim", "inicio", "fim", "cliente", "tags", "appsettings", "horas-historico"];
         var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < args.Length; i++)

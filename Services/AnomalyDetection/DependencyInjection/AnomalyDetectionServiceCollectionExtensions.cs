@@ -25,6 +25,12 @@ public static class AnomalyDetectionServiceCollectionExtensions
             configuration.GetSection(
                 RegimeCombinadoOptions.SectionName));
 
+        // P31: recorte causal do histórico; Habilitado = false se a seção
+        // não existir (padrão).
+        services.Configure<HistoricoCausalOptions>(
+            configuration.GetSection(
+                HistoricoCausalOptions.SectionName));
+
         return services;
     }
 

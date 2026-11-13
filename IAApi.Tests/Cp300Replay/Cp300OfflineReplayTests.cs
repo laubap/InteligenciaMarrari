@@ -402,16 +402,24 @@ public sealed class Cp300OfflineReplayTests : IDisposable
     /// core.autocrlf) e o BOM sao normalizados.
     /// Para regravar a referencia de proposito: IAAPI_ATUALIZAR_GOLDEN=1
     /// (o teste grava o arquivo e falha, para nao passar sem revisao).
+    /// P31: com --historico-causal a saida tem de ser a mesma referencia
+    /// (o CSV ja serve so pontos anteriores a leitura; o recorte nao remove nada).
     /// </summary>
-    [Fact]
-    public async Task Golden_BombasComRegime_SaidaIdenticaAReferencia()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Golden_BombasComRegime_SaidaIdenticaAReferencia(bool historicoCausal)
     {
         var input = WriteBombasCsv();
         var output = Path.Combine(_root, $"golden-{Guid.NewGuid():N}.csv");
         var regimes = Cp300Replay.ParseRegimes(["TAG29=TAG42", "TAG30=TAG43"]);
 
         var summary = await Cp300Replay.RunAsync(
-            Options(input, output, tags: ["TAG29", "TAG30"], regimes: regimes) with { FimReplay = T.AddMinutes(29) });
+            Options(input, output, tags: ["TAG29", "TAG30"], regimes: regimes) with
+            {
+                FimReplay = T.AddMinutes(29),
+                HistoricoCausal = historicoCausal
+            });
 
         Assert.Equal(2 * 30, summary.Leituras);
         Assert.Equal(0, summary.LeiturasComErro);
@@ -419,7 +427,8 @@ public sealed class Cp300OfflineReplayTests : IDisposable
 
         var atual = Normalizar(File.ReadAllText(output, Encoding.UTF8));
         var golden = GoldenPath();
-        if (Environment.GetEnvironmentVariable(VariavelAtualizarGolden) == "1")
+        // A referencia so e regravada a partir da execucao sem a chave.
+        if (!historicoCausal && Environment.GetEnvironmentVariable(VariavelAtualizarGolden) == "1")
         {
             Directory.CreateDirectory(Path.GetDirectoryName(golden)!);
             File.WriteAllText(golden, atual, new UTF8Encoding(false));

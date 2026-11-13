@@ -30,6 +30,10 @@
 
     # Depois de cada mudanca (ou duas vezes seguidas, para o aceite da RC-2):
     .\tools\Cp300OfflineReplay\Compare-Replay.ps1
+
+    # P31: as mesmas execucoes com a chave HistoricoCausal ligada no replay
+    # (acrescenta --historico-causal); a referencia continua a mesma:
+    .\tools\Cp300OfflineReplay\Compare-Replay.ps1 -HistoricoCausal
 #>
 [CmdletBinding()]
 param(
@@ -46,7 +50,9 @@ param(
     [string[]]$Somente,
     [string]$Configuracao = 'Debug',
     # Nao recompila o replay antes de rodar.
-    [switch]$SemBuild
+    [switch]$SemBuild,
+    # So na comparacao: acrescenta --historico-causal (P31) a cada execucao.
+    [switch]$HistoricoCausal
 )
 
 Set-StrictMode -Version Latest
@@ -105,6 +111,7 @@ function Rodar($execucao, [string]$entrada, [string]$pastaSaida) {
     $csv = Join-Path $pastaSaida "$($execucao.nome).csv"
     $log = Join-Path $pastaSaida "$($execucao.nome).log"
     $argv = @('--entrada', $entrada, '--saida', $csv) + @($execucao.args)
+    if ($HistoricoCausal) { $argv += '--historico-causal' }
     Write-Host ("  {0} ..." -f $execucao.nome) -NoNewline
     $inicio = Get-Date
     # Diretorio atual = raiz do repo: o replay le o appsettings.json daqui.
@@ -133,6 +140,10 @@ try {
     }
 
     if ($Gerar) {
+        if ($HistoricoCausal) {
+            Write-Error 'A referencia e gerada sem -HistoricoCausal; use a opcao so na comparacao.'
+            exit 2
+        }
         if ((Test-Path -LiteralPath $manifestoPath) -and -not $Sobrescrever) {
             Write-Error "Ja existe $manifestoPath. Use -Sobrescrever para gerar outra referencia."
             exit 2
@@ -208,7 +219,7 @@ try {
     $pastaSaida = Caminho $Pasta
     New-Item -ItemType Directory -Force -Path $pastaSaida | Out-Null
 
-    Write-Host "Comparando $($execucoes.Count) execucoes com $manifestoPath (referencia: commit $($m.commit))"
+    Write-Host "Comparando $($execucoes.Count) execucoes com $manifestoPath (referencia: commit $($m.commit))$(if ($HistoricoCausal) { ' com --historico-causal' })"
     Write-Host "Saidas desta rodada: $pastaSaida"
 
     $diferencas = 0

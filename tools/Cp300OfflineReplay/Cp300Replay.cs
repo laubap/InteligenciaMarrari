@@ -78,6 +78,14 @@ public sealed record Cp300ReplayOptions
     public bool HistoricoIncluiLeituraAtual { get; init; }
 
     /// <summary>
+    /// Liga a chave AnomalyDetection:HistoricoCausal (P31) na preparacao de
+    /// producao e na do detalhamento, com a tolerancia padrao. Sem
+    /// --historico-inclui-atual o CSV ja serve so pontos anteriores a leitura,
+    /// entao o recorte nao remove nada e a saida deve ser identica.
+    /// </summary>
+    public bool HistoricoCausal { get; init; }
+
+    /// <summary>
     /// Baseline por regime operacional: tag analisada -> tag de regime (estado).
     /// Null ou vazio = sem regime (comportamento anterior). Cada par vira uma
     /// linha em TagsRegimesOperacionaisIa do SQLite em memoria, com os valores
@@ -318,10 +326,10 @@ public static class Cp300Replay
                           FormatStateCounts(dataset, nomeAlvo, nomeRegime, t0.AddHours(-horasHistorico), t0));
         }
 
-        var production = BuildPredictionService(db, history, detectionOptions, regimes.Count > 0);
+        var production = BuildPredictionService(db, history, detectionOptions, regimes.Count > 0, options.HistoricoCausal);
         // Detalhamento: mesmas classes de producao, instancias separadas, sobre
         // o mesmo DetectorInput. A decisao oficial continua vindo do PredictionService.
-        var detailPreparation = BuildPreparation(db, history, regimes.Count > 0);
+        var detailPreparation = BuildPreparation(db, history, regimes.Count > 0, options.HistoricoCausal);
         var detailEnsemble = BuildEnsemble(detectionOptions);
         var resolver = new TagBehaviorProfileResolver();
 
@@ -596,10 +604,14 @@ public static class Cp300Replay
     /// real (mesmo banco em memoria e mesmo historico do CSV); sem regime, fica como antes.
     /// </summary>
     private static PredictionDetectionPreparationService BuildPreparation(
-        AppDbContext db, CsvHistorySource history, bool comRegime)
+        AppDbContext db, CsvHistorySource history, bool comRegime, bool historicoCausal)
     {
+        var causal = historicoCausal
+            ? Options.Create(new HistoricoCausalOptions { Habilitado = true })
+            : null;
+
         if (!comRegime)
-            return new PredictionDetectionPreparationService(history);
+            return new PredictionDetectionPreparationService(history, historicoCausal: causal);
 
         var provider = new OperationalRegimeBaselineProvider(
             db,
@@ -607,11 +619,12 @@ public static class Cp300Replay
             new OperationalRegimeBaselineService(
                 new OperationalRegimeHistoryResolver(),
                 new TagProfileStatisticsCalculator(new HistoricoLimpezaService())));
-        return new PredictionDetectionPreparationService(history, provider);
+        return new PredictionDetectionPreparationService(history, provider, historicoCausal: causal);
     }
 
     private static PredictionService BuildPredictionService(
-        AppDbContext db, CsvHistorySource history, AnomalyDetectionOptions options, bool comRegime)
+        AppDbContext db, CsvHistorySource history, AnomalyDetectionOptions options, bool comRegime,
+        bool historicoCausal)
     {
         var ensemble = BuildEnsemble(options);
         var interpretation = new PredictionInterpretationService(
@@ -641,7 +654,7 @@ public static class Cp300Replay
         return new PredictionService(
             new PredictionContextLoader(db, new ProcessoAnaliseService(db)),
             postDecision, finalization, decision,
-            BuildPreparation(db, history, comRegime),
+            BuildPreparation(db, history, comRegime, historicoCausal),
             multivariateShadowRuntimeCoordinator: null);
     }
 

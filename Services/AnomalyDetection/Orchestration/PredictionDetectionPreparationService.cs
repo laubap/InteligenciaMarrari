@@ -1,6 +1,7 @@
 using IAApi.Services.Diagnostics;
 using IAApi.IntelligenceLab.Observability;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
+using Microsoft.Extensions.Options;
 
 namespace IAApi.Services.AnomalyDetection.Orchestration;
 
@@ -17,6 +18,9 @@ public sealed class PredictionDetectionPreparationService
     private readonly BehaviorRuntimeBaselineProvider?
         _behaviorRuntimeBaselineProvider;
 
+    // P31: null ou Habilitado = false mantém o histórico como chegou.
+    private readonly HistoricoCausalOptions? _historicoCausal;
+
     public PredictionDetectionPreparationService(
         IHistoricoService servicoHistorico,
         OperationalRegimeBaselineProvider?
@@ -24,10 +28,12 @@ public sealed class PredictionDetectionPreparationService
         BehaviorRuntimeBaselineProvider?
             behaviorRuntimeBaselineProvider = null,
         PerformanceDiagnostics? performanceDiagnostics = null,
-        PredictionHistoryReuseOptions? historyReuse = null)
+        PredictionHistoryReuseOptions? historyReuse = null,
+        IOptions<HistoricoCausalOptions>? historicoCausal = null)
     {
         _performanceDiagnostics = performanceDiagnostics;
         _historyReuse = historyReuse;
+        _historicoCausal = historicoCausal?.Value;
 
         _servicoHistorico =
             servicoHistorico;
@@ -72,6 +78,15 @@ public sealed class PredictionDetectionPreparationService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // P31: com a chave ligada, só os pontos anteriores à leitura seguem
+        // para a detecção, o regime e o comportamento. O snapshot abaixo
+        // continua com o histórico bruto (só alimenta a tendência pós-decisão).
+        var historicoCausal =
+            RecortarAteLeitura(
+                historicoBruto,
+                request,
+                dataHoraAtual);
+
         // Capture the service's original values before any preparation or baseline selection.
         var rawSnapshot = _historyReuse?.Enabled == true
             ? PerformanceDiagnostics.Measure(_performanceDiagnostics, request.ClienteId, request.TagName,
@@ -83,7 +98,7 @@ public sealed class PredictionDetectionPreparationService
         var historicoRecebido =
             PerformanceDiagnostics.Measure(
             _performanceDiagnostics, request.ClienteId, request.TagName, "Preparation.ConvertRecords",
-            () => historicoBruto
+            () => historicoCausal
                 .Where(leitura =>
                     leitura != null)
                 .Select(leitura =>
@@ -155,7 +170,7 @@ public sealed class PredictionDetectionPreparationService
             () => _operationalRegimeBaselineProvider.Resolve(
                         request.ClienteId,
                         request.TagName,
-                        historicoBruto,
+                        historicoCausal,
                         dataHoraAtual));
 
                 if (regimeBaseline.Applied &&
@@ -224,7 +239,7 @@ public sealed class PredictionDetectionPreparationService
             () => _behaviorRuntimeBaselineProvider.ResolveAsync(
                         request.ClienteId,
                         request.TagName,
-                        historicoBruto,
+                        historicoCausal,
                         dataHoraAtual,
                         cancellationToken));
 
@@ -488,6 +503,95 @@ public sealed class PredictionDetectionPreparationService
             classificacaoComportamentoReconhecido,
             mediaHistoricaDetector,
             baselineEfetivo) { RawHistorySnapshot = rawSnapshot };
+    }
+
+    /// <summary>
+    /// P31 (BACKLOG 25). O monitor lê o valor atual em lote no início do
+    /// ciclo e só busca o histórico na vez da tag; o histórico pode então
+    /// trazer pontos posteriores à leitura, e o validador recusa a entrada
+    /// (nota 0). Com <c>AnomalyDetection:HistoricoCausal:Habilitado</c>,
+    /// ficam só os pontos com <c>DataHora &lt; dataHoraAtual</c>: a janela
+    /// do replay CP300. Mesmo critério de causalidade do
+    /// <c>BehaviorRuntimeBaselineProvider</c>, aplicado uma vez, antes de tudo,
+    /// e sem o ponto do próprio minuto.
+    ///
+    /// Devolve a MESMA lista quando a chave está desligada, quando não há
+    /// ponto a partir da leitura, ou quando esses pontos avançam mais que
+    /// <c>ToleranciaMinutos</c> (relógio ou fuso errado: o validador recusa,
+    /// como antes). O validador não muda.
+    /// </summary>
+    private List<LeituraBruta> RecortarAteLeitura(
+        List<LeituraBruta> historico,
+        AnomaliaRequest request,
+        DateTime dataHoraAtual)
+    {
+        var opcoes =
+            _historicoCausal;
+
+        if (opcoes is null ||
+            !opcoes.Habilitado)
+        {
+            return historico;
+        }
+
+        var removidos = 0;
+        DateTime? maisNovo = null;
+
+        foreach (var leitura in historico)
+        {
+            if (leitura is null ||
+                leitura.DataHora < dataHoraAtual)
+            {
+                continue;
+            }
+
+            removidos++;
+
+            if (maisNovo is null ||
+                leitura.DataHora > maisNovo)
+            {
+                maisNovo = leitura.DataHora;
+            }
+        }
+
+        if (removidos == 0)
+        {
+            return historico;
+        }
+
+        var avancoMinutos =
+            (maisNovo!.Value - dataHoraAtual).TotalMinutes;
+
+        if (!double.IsFinite(opcoes.ToleranciaMinutos) ||
+            opcoes.ToleranciaMinutos < 0 ||
+            avancoMinutos > opcoes.ToleranciaMinutos)
+        {
+            Console.WriteLine(
+                $"HISTÓRICO NÃO RECORTADO (TOLERÂNCIA) " +
+                $"Cliente={request.ClienteId} " +
+                $"Tag={request.TagName} " +
+                $"Leitura={dataHoraAtual:yyyy-MM-dd HH:mm:ss} " +
+                $"UltimoPonto={maisNovo:yyyy-MM-dd HH:mm:ss} " +
+                $"AvancoMin={avancoMinutos:F1} " +
+                $"ToleranciaMin={opcoes.ToleranciaMinutos:G6}");
+
+            return historico;
+        }
+
+        Console.WriteLine(
+            $"HISTÓRICO RECORTADO NA LEITURA " +
+            $"Cliente={request.ClienteId} " +
+            $"Tag={request.TagName} " +
+            $"Leitura={dataHoraAtual:yyyy-MM-dd HH:mm:ss} " +
+            $"Removidos={removidos} " +
+            $"UltimoRemovido={maisNovo:yyyy-MM-dd HH:mm:ss} " +
+            $"AvancoMin={avancoMinutos:F1}");
+
+        return historico
+            .Where(leitura =>
+                leitura is null ||
+                leitura.DataHora < dataHoraAtual)
+            .ToList();
     }
 
     private static BaselineDiagnostic? CriarBaselineEfetivo(

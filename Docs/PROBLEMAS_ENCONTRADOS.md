@@ -581,6 +581,24 @@
   - ou recortar o histórico até a hora da leitura;
   - ou, no mínimo, gravar "não avaliada" em vez de "sem anomalia" (observabilidade).
   As duas primeiras mudam o que chega aos detectores.
+- **Correção implementada em 13/11 (recorte), atrás de chave DESLIGADA; não ligada na IA real e não commitada:**
+  - **Chave:** `AnomalyDetection:HistoricoCausal` (`Services/AnomalyDetection/HistoricoCausalOptions.cs`): `Habilitado = false` e `ToleranciaMinutos = 30` por padrão, no código. O `appsettings.json` não tem a seção (há teste que confere isso).
+  - **Onde:** `PredictionDetectionPreparationService.PrepararAsync` → `RecortarAteLeitura`. Com a chave ligada, só os pontos com `DataHora < dataHoraAtual` seguem para o `DetectorInput`, o regime e o comportamento. O ponto do próprio minuto também sai, como no replay.
+  - **Proteção de relógio e fuso:** se os pontos posteriores à leitura avançam mais que a tolerância, ou se a tolerância é inválida, nada é recortado e o validador recusa como antes. O log grava `HISTÓRICO NÃO RECORTADO (TOLERÂNCIA)`; quando recorta, grava `HISTÓRICO RECORTADO NA LEITURA` com a quantidade de pontos removidos.
+  - **Não muda:** o validador, o contrato HTTP, o lote, a idade da leitura (P18), a cadência (P26), a escala (P30) e o snapshot bruto usado na tendência pós-decisão.
+  - **Testes:** `IAApi.Tests/Services/AnomalyDetection/HistoricoCausalTests.cs` (18 casos).
+    - T1 reproduz 12/11 com dados sintéticos: leitura às 14:37, histórico buscado às 14:54.
+    - T1b percorre a cadeia `CurrentValuePredictionService.DetectarComValorAtual` → `AnomaliaDetectada`.
+    - Antes do recorte, T1 e T1b **falhavam** pelo motivo do P31: "anterior ao último ponto" e nota gravada 0 contra 4,1 da referência. Depois, passam com nota igual à do histórico que termina antes da leitura.
+    - O golden do replay passa com a chave desligada e ligada.
+  - **Replay:** opção `--historico-causal` e `Compare-Replay.ps1 -HistoricoCausal`.
+    - Resultado: **0 diferenças em 12 execuções com a chave desligada e com ela ligada**. O CSV do replay já serve só pontos anteriores à leitura, então o recorte não remove nada.
+    - Suíte completa: 967 aprovados, 0 falhas.
+  - **Rollback:** chave em `false` (ou sem a seção) e reiniciar a IAApi; ou reverter o código.
+  - **Falta:**
+    - ligar numa sessão autorizada no simulador e medir a fração de entradas inválidas e de notas 0 (esperado ≈ 0);
+    - o caso acima da tolerância continua sendo nota 0 silenciosa (opção (a) do BACKLOG 25);
+    - risco de alarme falso com a B-02 ligada pelo perfil colapsado (P32) [hipótese].
 - **BACKLOG:** **25 (prioridade 1)**, 6 (medir) e 4.
 
 ### P32. Perfil de produção do PK2 antigo, curto e colapsado nas tags da B-02

@@ -498,6 +498,25 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - `Compare-Replay.ps1` com 0 diferenças (o replay não passa por esse caminho);
   - num teste autorizado com o simulador, fração de entradas inválidas ≈ 0 (ou medida e visível, na opção (a)).
 - **Rollback:** reverter o commit; na opção (a), nada muda na decisão.
+- **Status (13/11): opção (c) implementada atrás da chave `AnomalyDetection:HistoricoCausal`, DESLIGADA por padrão; não commitada.** Detalhes no P31.
+  - Decisões aprovadas:
+    - recorte com `<`, que exclui o ponto do próprio minuto;
+    - tolerância de 30 min;
+    - opção `--historico-causal` no replay.
+  - Arquivos:
+    - `Services/AnomalyDetection/HistoricoCausalOptions.cs` (novo; segue o padrão de `RegimeCombinadoOptions`, porque nenhuma opção existente servia);
+    - `PredictionDetectionPreparationService.cs` (`RecortarAteLeitura`);
+    - `AnomalyDetectionServiceCollectionExtensions.cs`;
+    - replay (`Cp300Replay.cs`, `Program.cs`, `Compare-Replay.ps1`, README);
+    - testes (`HistoricoCausalTests.cs`; golden com a chave desligada e ligada).
+  - **Aceite offline atingido (13/11):**
+    - `HistoricoCausalTests` 18/18 e golden 2/2; 284 testes relacionados;
+    - `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, tanto sem `-HistoricoCausal` quanto com ele;
+    - suíte completa: **967 aprovados, 0 falhas**.
+  - **Pendente:**
+    - [ ] ligar a chave numa sessão autorizada com o simulador e medir a fração de entradas inválidas e de notas 0 no PK2 (esperado ≈ 0);
+    - [ ] opção (a): tornar visível a entrada inválida que restar (acima da tolerância);
+    - [ ] avaliar os alarmes com a B-02 ligada antes de confiar neles (P32, tarefa 27).
 
 ### 26. (Ferramenta/documentação) Escala da nota nas análises da IA real (P30)
 - **Problema** (confirmado no código e nos dados; `INVENTARIO_PK2.md` §4.2a):
