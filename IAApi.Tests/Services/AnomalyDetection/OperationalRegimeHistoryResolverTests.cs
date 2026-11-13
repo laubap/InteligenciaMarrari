@@ -1,7 +1,7 @@
 using IAApi.Services.AnomalyDetection;
 using Xunit;
 
-public class OperationalRegimeHistoryResolverTests
+public partial class OperationalRegimeHistoryResolverTests
 {
     [Fact]
     public void Resolve_SelectsOnlyHistoryFromCurrentOffRegime()

@@ -28,3 +28,4 @@
 - Antes de propor mudanças, explicar evidências, hipóteses, arquivos envolvidos, impacto sobre a detecção, riscos, testes de aceite e rollback. Aguardar aprovação para implementar; preferir alterações pequenas e reversíveis.
 - Relatar comandos executados, testes aprovados/falhos/não executados e limitações. Não afirmar que um cenário CP300 foi validado sem dados observados.
 - Na **primeira sessão**, seguir as entregas e a exceção documental restrita descritas em `docs/IAAPI_HANDOFF_CLAUDE.md`: somente `docs/MAPA_DETECCAO.md` pode ser criado; nenhum código deve ser alterado.
+- Antes de criar arquivo, classe, ferramenta ou endpoint novo, procurar o que já existe com função parecida e preferir adaptar ou estender. Se criar algo em paralelo, justificar e registrar no Docs/BACKLOG.md o plano de substituir ou remover o antigo.

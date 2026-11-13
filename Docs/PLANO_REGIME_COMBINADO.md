@@ -456,14 +456,16 @@ Limiar = 60.
 | Onde fica o componente 1 | (a) `TagRegime` atual + coluna nova `MapaEstados` (nula) na tabela atual; a tabela filha guarda só os componentes 2..N. (b) Tabela filha com os componentes 1..N, e `TagRegime` tem de bater com o componente 1 | **(a)**: a linha atual continua válida sozinha, sem duplicar o componente 1 |
 | Tupla pura × "parada domina" | Tupla pura: (0,0,·) e (0,2,·) são classes diferentes. Com dominância, "própria parada" ignora os outros componentes, como o `RB01` da etapa 0 | **Tupla pura** na primeira versão. Nos dados de 10–11/11 a B-01 parada sempre teve a B-02 em 2 (§1.2), então deve dar o mesmo resultado; **conferir na RC-0** |
 | Valor fora do mapa, sem `*` | (a) passa sem mudar; (b) ponto descartado | **(a)**, e o relatório de cobertura do replay lista esses valores |
-| Comparação com mapa | Mapear e comparar exato × comparar com `ToleranciaEstado` | Mapear (a entrada do mapa casa com `ToleranciaEstado`) e comparar exato |
-| Lag e tolerância de alinhamento | Por componente × da configuração | **Da configuração** (os mesmos para os 3 componentes); por componente só se a RC-0 mostrar necessidade |
+| Comparação com mapa | Mapear e comparar exato × comparar com `ToleranciaEstado` | Mapear (a entrada do mapa casa com `ToleranciaEstado`) e comparar exato. **Ajustada na RC-6 (13/11/2026):** exato só com os dois lados mapeados; com algum lado fora do mapa, `ToleranciaEstado` (decisão 2 abaixo) |
+| Lag e tolerância de alinhamento | Por componente × da configuração | **Da configuração** (os mesmos para os 3 componentes); por componente só se a RC-0 mostrar necessidade. **Aprovada na RC-6 (13/11/2026)** (decisão 1 abaixo) |
 | Formato da chave | `TAG42=2\|TAG43=0\|TAG46=380`: valores **mapeados**, `InvariantCulture`, na ordem dos componentes | Esse; é a futura chave dos perfis por regime (PROP §4-A) |
 
 **Fechamento (13/11/2026, RC-4):**
 - **Aprovadas pela responsável:** componente 1 = opção (a) (`TagRegime` atual + coluna nula `MapaEstados`; tabela filha só com os componentes 2..N, entra na RC-5); **tupla pura** na primeira versão, com o mapa configurável por componente para corrigir se a RC-0 mostrar diferença (a RC-0 ainda não foi feita); valor fora do mapa e sem `*` **passa sem mudança** e entra no relatório de cobertura (RC-10).
 - **Adotadas conforme a recomendação na implementação da RC-4 e aprovadas pela responsável em 13/11/2026, depois da entrega:** comparação = mapear com `ToleranciaEstado` e comparar exato; formato da chave `TAG42=2|TAG43=0|TAG46=380`.
-- **Ainda sem aprovação explícita:** lag e tolerância de alinhamento da configuração valendo para os 3 componentes (recomendação de §6.2). Isso só entra no código na RC-6; confirmar lá.
+- **Decisões da RC-6 (13/11/2026, responsável):**
+  1. **Aprovado:** `LagMinutos` e `ToleranciaAlinhamentoMinutos` da configuração valem para **todos** os componentes (recomendação da tabela acima). É também o que o modelo da RC-5 permite (a tabela de componentes não tem lag nem tolerância de alinhamento).
+  2. **Valor fora do mapa e sem `*`:** passa sem mudança (como antes) e é comparado com `|Δ| ≤ ToleranciaEstado`, **igual a um componente sem mapa** (não exato). Isso ajusta a linha "Comparação com mapa" da tabela: a comparação exata vale só quando **os dois lados** foram mapeados (entrada ou `*`); se **algum** lado ficou fora do mapa, vale a tolerância (no caso misto, o valor mapeado de um lado contra a leitura do outro).
 
 **Configuração alvo das bombas** (cadastrada só na RC-12):
 
@@ -488,7 +490,7 @@ Coluna "muda comportamento":
 | RC-3 | Resolver com dois ponteiros — **concluída em 13/11/2026** | RC-2 | não (provado) |
 | RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) — **concluída em 13/11/2026** | RC-0 | não |
 | RC-5 | Modelo `TagRegimeComponenteIa` + migration — **concluída em 13/11/2026** | RC-4 | não |
-| RC-6 | Resolver com N componentes | RC-3, RC-4 | não (provado) |
+| RC-6 | Resolver com N componentes — **concluída em 13/11/2026** | RC-3, RC-4 | não (provado) |
 | RC-7 | Bloqueio de rótulos por cliente (backlog 11) — **concluída em 13/11/2026** | — | não (lista vazia por padrão) |
 | RC-8 | Service e provider com componentes, atrás da chave | RC-5, RC-6, RC-7 | só com a chave |
 | RC-9 | `RegimeKey` no diagnóstico e no log | RC-8 | só com a chave (observabilidade) |
@@ -602,6 +604,22 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   - num trecho sintético com a lógica das bombas, a tupla pura reproduz as classes esperadas;
   - RC-2 com 0 diferenças.
 - **Muda comportamento:** não (provado). A sobrecarga só é chamada a partir da RC-8.
+- **Resultado (13/11/2026, sem mudança de comportamento):**
+  - **Código** (`OperationalRegimeHistoryResolver.cs`): sobrecarga `Resolve(configuração, componentes adicionais (TagRegimeComponenteIa, Ordem crescente ≥ 2), histórico alvo, séries de regime [componente 1, 2, …], instante atual)`. Componente 1 = `TagRegime` + `MapaEstados` + `ToleranciaEstado` da configuração (opção (a)).
+    - um ponteiro por componente (técnica da RC-3); ponto do alvo só é alinhado se **todos** os componentes têm leitura causal na tolerância, senão é descartado (não conta em `AlignedSamples`);
+    - estado atual: busca linear por componente; faltou um ⇒ "não aplicado" com a mensagem atual + ` Componente k (TAG).`;
+    - componente com mapa: mapeia (entrada casa com a `ToleranciaEstado` do componente); os dois lados mapeados (entrada ou `*`) ⇒ compara exato; algum lado fora do mapa sem `*` (passa sem mudança) ⇒ `|Δ| ≤ ToleranciaEstado` (decisão 2 de §6.2). Sem mapa (nulo ou só espaços): `|Δ| ≤ ToleranciaEstado`, igual ao caminho atual; no código, "sem mapa" é tratado como "tudo fora do mapa", então é o mesmo teste;
+    - `LagMinutos` e `ToleranciaAlinhamentoMinutos` da configuração para todos os componentes (decisão 1 de §6.2, aprovada);
+    - `OperationalRegimeHistoryResolution.CurrentRegimeKey` (novo, `init`; parâmetro opcional no fim de `CreateApplied`/`CreateNotApplied`): preenchida pela sobrecarga quando o estado atual é determinado (`TAG42=2|TAG43=0|TAG46=380`, valores mapeados); **nula no caminho atual**. `CurrentRegimeValue` = leitura sem mapa do componente 1;
+    - validações novas só na sobrecarga ("não aplicado" com motivo): Ordem < 2 ou não crescente, componente nulo, tag vazia ou com `|`/`=`, tag repetida (sem diferenciar caixa), `ToleranciaEstado` do componente inválida, `MapaEstados` com sintaxe inválida. Número de séries ≠ 1 + componentes ⇒ `ArgumentException` (erro do chamador);
+    - as validações da configuração foram para `ValidateConfiguration`, usada pelas duas formas (mesmas mensagens, mesma ordem). **A assinatura atual não muda e não delega** para a sobrecarga; o laço dela é o mesmo da RC-3.
+  - **Testes** (`OperationalRegimeHistoryResolverComponentsTests.cs`, mesma classe `partial` dos testes da RC-3, 38 casos):
+    - **1 componente sem mapa = caminho atual:** oráculo linear da RC-3 (`LinearOracle`) em 3000 cenários aleatórios (mesmo gerador) + o teste de timestamps repetidos (5 combinações) + mapa nulo/vazio/espaços (300 cenários cada): mesmos `Applied`, `Reason`, `CurrentRegimeValue`, contagens e lista selecionada (por referência e na ordem); a chave é `TAG=valor` sempre que há estado atual e o caminho atual continua com chave nula;
+    - **N componentes:** oráculo de tupla escrito à parte (busca linear por componente e por ponto, com a regra de comparação da decisão 2), 3000 cenários com 2–3 componentes, mapas variados (com e sem `*`, fora do mapa), estados persistentes com ruído pequeno em 30% das leituras (±0,0004), buracos, repetições, pontos inválidos e entrada embaralhada: mesmos `Applied`, `CurrentRegimeValue`, chave, contagens e lista; cobertura mínima exigida (> 200 aplicados, não aplicados, com mapa, com pontos descartados, com 3 componentes, e > 50 cenários em que a tolerância decidiu uma comparação com valor fora do mapa);
+    - **Decisão 2:** fora do mapa sem `*` com valores próximos (5 e 5,0005 juntos; 5,5 separado; igual ao componente sem mapa); caso misto (2 → 7 mapeado contra 7 e 7,0005 fora do mapa ⇒ mesma classe); dois lados mapeados continuam exatos mesmo dentro da tolerância (10 × 10,5 com tolerância 0,6 ⇒ classes diferentes);
+    - **§3.2:** tupla de 2 componentes; 3 componentes com a lógica das bombas e os mapas da configuração alvo (agora em 59 ⇒ `TAG42=2|TAG43=0|TAG46=450`, minutos 40–59; em 25 ⇒ (0,2,380) sem juntar com (0,0,450): **tupla pura**); mapa em 1 componente agrupa 1 e 0; fora do mapa sem `*`; componente sem leitura na tolerância ⇒ ponto descartado; abaixo de `MinimoAmostrasPorRegime` ⇒ não aplicado com contagens e chave; estado atual sem um componente ⇒ não aplicado; série vazia; 15 componentes inválidos; mapa inválido no componente 1; validações da configuração com o mesmo motivo do caminho atual; erros de argumento.
+  - **Sensibilidade:** trocar `<=` por `<` no ponteiro da sobrecarga (mutação temporária, desfeita e conferida por comparação com cópia) fez **16** dos 47 testes do resolver falharem (antes da decisão 2). Depois da decisão 2, voltar à comparação exata para valores fora do mapa (mutação temporária, restaurada da cópia e conferida com `cmp`) fez **3** dos 49 testes falharem (os 2 unitários da decisão 2 e o aleatório de tupla).
+  - **Executado (depois das decisões, 13/11/2026):** `dotnet test -c Release` com o filtro da RC-5: **250/250** (212 + 38). Sem avisos de compilação nos arquivos alterados. `Compare-Replay.ps1 -Configuracao Release`: **0 diferenças** em 6 execuções (`dados/rc2_rodadas/20261113_133208`; a rodada anterior às decisões, `20261113_132248`, também deu 0). **A suíte completa não foi rodada.** Runtime: `OperationalRegimeBaselineService` continua chamando a assinatura atual (conferido no código).
 
 #### RC-7. Bloqueio de rótulos por cliente (backlog 11)
 - **Objetivo:** implementar o item 11 do backlog já pensando em vários componentes: lista configurável, **por cliente**, de tags proibidas como regime, **vazia por padrão**. O provider recusa ("não aplicado", com motivo claro) uma `TagRegime` da lista. A mesma função vale para os componentes na RC-8.
