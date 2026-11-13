@@ -4,7 +4,7 @@ Atualizado na sessão 2 (2026-11-11), depois do cruzamento com `Docs/CENARIOS_CP
 
 Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa está aprovada**: implementar só com autorização explícita (`CLAUDE.md`). As tarefas 1 a 6 não alteram a decisão de anomalia.
 
-> **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
+> **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. **Atualização 2026-11-13 (inventário do PK2, tarefa 2 concluída):** a nova tarefa **25 (P31, entrada inválida sistemática) passa a ser PRIORIDADE 1, antes de qualquer novo teste da IA real**. Em 12/11, 38 de 50 decisões não chegaram aos detectores; sem corrigir isso, um teste da IA real não mede detecção. A tarefa 6 continua necessária e vem logo depois. Entraram também a 26 (P30, escala da nota) e a 27 (P32, retreino do perfil). Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
 
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
@@ -21,7 +21,13 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Esforço:** P
 - **Aceite:** um arquivo por preset; 1 linha/min/tag; TAG73 presente; fuso horário documentado.
 
-### 2. Inventário do banco PK2 (somente leitura)
+### 2. Inventário do banco PK2 (somente leitura) — ✅ **CONCLUÍDA (2026-11-13)**
+- **Resultado:** `Docs/INVENTARIO_PK2.md`, feito numa cópia autorizada do `ia_config.db` (com `-wal`), com a IAApi parada.
+  - **Descartados:** rótulo ativo ou usado como `TagRegime` (só TAG22–33 ativas; nenhum regime cadastrado) e tipo explícito (`TagsContextoIa` vazia).
+  - **Confirmados:** perfil colapsado (TAG28 e TAG32) e treino curto (30/10, ~3 h).
+  - **Ausentes no PK2:** comportamento aprendido e modelo IF.
+  - **Explicado** o "2,1 × 20–35": escala, entrada inválida e perfil. O replay com o perfil real reproduziu as 50 decisões.
+  - Viraram os itens **25** (P31), **26** (P30) e **27** (P32).
 - **Objetivo:** listar por tag: `IaAtiva`; `TagContextoIa.TipoRepresentacao`; `TagsRegimesOperacionaisIa` (`TagRegime`, ativo); `TagPerfilIa` (data do treino, média, desvio, deadband, total usado, outliers removidos, % zeros); existência de modelo IF.
 - **Confirma ou descarta:** rótulo ativo ou usado como `TagRegime` (vazamento do gabarito); tipo explícito que bloqueie detectores; perfil colapsado (média 0 / desvio 0) nas tags de bomba; perfil treinado com ~2 h de dados.
 - **Caminho:** GETs já existentes (`GET /api/tags`, contexto, perfis) ou cópia autorizada do `ia_config.db`.
@@ -53,7 +59,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - Sem mudança. Campo opcional `DataHoraLeitura` em `AnomaliaDetectada`, com migration. **Risco:** médio. **Esforço:** M.
 - Enquanto não existir, o export das decisões reais (tarefa 16) usa a hora do processamento como `data_hora` (P18).
 
-### 6. Medir a duração do ciclo e a cadência real por tag no ambiente de teste — **PRIORIDADE 1 (desde 2026-11-13)**
+### 6. Medir a duração do ciclo e a cadência real por tag no ambiente de teste — **PRIORIDADE 2 (era 1; logo depois da 25 desde 2026-11-13)**
 - Sem mudança. `IAAPI_PERF_DIAGNOSTICS` numa sessão autorizada. **Risco:** médio. **Esforço:** P.
 - **Por que subiu (P26, confirmado em log, IA real no preset 3, 12/11 14:21–15:09):**
   - Cada tag do PK2 foi avaliada só 3 a 5 vezes em ~48 min, cerca de 1 vez a cada ~10 min, contra 1 leitura por minuto do simulador.
@@ -468,6 +474,64 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - medir a madrugada de 11/11: se os 9 fallbacks somem e quantos alarmes a B-01 tem.
 - **Risco:** médio a alto, porque muda o baseline (fase F3). **Esforço:** G para a proposta inteira; P para o primeiro passo.
 - **Aceite (a detalhar):** madrugada de 11/11 com `combs` sem `origem_baseline = Global` nas tags das bombas, sem piorar o preset 1 nem o preset 6.
+
+### 25. (Correção) Entrada inválida sistemática no monitor (P31) — **PRIORIDADE 1: antes de qualquer novo teste da IA real**
+- **Problema** (confirmado no código; reproduzido offline 50 de 50; `INVENTARIO_PK2.md` §4.2b e §4.3):
+  - `MonitoramentoTagsService` busca os valores atuais **em lote** no início do ciclo, e cada tag busca as 24 h de histórico só na sua vez.
+  - Se o histórico já tem um ponto posterior à leitura, `DetectionInputValidator` recusa a entrada (leitura anterior ao último ponto). A IA grava **nota 0 e "sem anomalia"**, sem aviso (P19).
+  - Em 12/11, **38 de 50** decisões foram assim. Somado ao P26, só ≈ 2 % dos minutos-tag foram avaliados.
+  - Desde 05/11, 67–91 % das decisões do PK2 têm nota 0 [hipótese: mesmo mecanismo].
+- **Por que é prioridade 1:**
+  - enquanto isso acontecer, nenhum teste da IA real mede detecção nem alarme falso;
+  - o LiveMonitor e o placar mostram essas leituras como "normal";
+  - quanto mais lento o ciclo (tarefa 6), pior.
+- **Opções a avaliar** (proposta antes de implementar: evidências, arquivos, impacto, riscos, aceite, rollback):
+  - **(a) Só observabilidade, não muda a decisão:** contar e expor por ciclo as entradas inválidas (log estruturado, PERF_DIAG ou LiveMonitor) e marcar a decisão como "não avaliada". Primeiro passo recomendado, porque dá a medida.
+  - **(b) Buscar o valor atual por tag, logo antes da predição.** Reduz a idade da leitura (P18), mas aumenta as chamadas ao Bridge (P10).
+  - **(c) Recortar o histórico até a hora da leitura**, como o replay faz. Mantém o lote e corresponde ao que o replay já valida. Muda o que chega aos detectores.
+  - (b) e (c) mudam o que os detectores recebem e exigem aprovação explícita. Não relaxar a validação (proteção contra vazamento temporal).
+- **Arquivos prováveis:** `Services/MonitoramentoTagsService.cs`, `Services/CurrentValuePredictionService.cs`, `Services/AnomalyDetection/Orchestration/PredictionDetectionPreparationService.cs`, `Services/AnomalyDetection/DetectionInputValidator.cs` (só leitura), testes em `IAApi.Tests/`.
+- **Antes de mexer:** checar com a tarefa 21 se já existe contador de entrada inválida reaproveitável (`EntradaInvalida` no detalhamento do replay; `PerformanceDiagnostics`).
+- **Risco:** médio para (a), alto para (b) e (c). **Esforço:** P para (a), M para (b) e (c).
+- **Aceite:**
+  - teste offline que simule lote + histórico mais novo e mostre a entrada inválida contada ou evitada;
+  - `Compare-Replay.ps1` com 0 diferenças (o replay não passa por esse caminho);
+  - num teste autorizado com o simulador, fração de entradas inválidas ≈ 0 (ou medida e visível, na opção (a)).
+- **Rollback:** reverter o commit; na opção (a), nada muda na decisão.
+
+### 26. (Ferramenta/documentação) Escala da nota nas análises da IA real (P30)
+- **Problema** (confirmado no código e nos dados; `INVENTARIO_PK2.md` §4.2a):
+  - `AnomaliaDetectada.Score`, e `score` em `GET /api/anomalias`, é a nota do ensemble **÷ 20** (`EnsembleDetectionService.cs:406-410`).
+  - `Export-AnomaliasIaReal.ps1` grava esse valor como `nota_final`, a mesma coluna em que o replay grava a nota 0–100.
+  - A RES3 §2.4b comparou as duas escalas.
+- **Proposta:**
+  - a exportação grava também `nota_0_100 = score × 20` e documenta a escala no README §1.1;
+  - corrigir a tabela da RES3 §2.4b;
+  - verificar como o LiveMonitor exibe o `Score`.
+  - **Não mudar** o contrato HTTP nem o valor gravado.
+- **Arquivos:** `tools/Cp300Export/Export-AnomaliasIaReal.ps1`, `tools/Cp300OfflineReplay/README.md`, `Docs/RESULTADO_PRESET3.md`.
+- **Risco:** baixo (não toca no runtime). **Esforço:** P.
+- **Aceite:** export das 50 decisões de 12/11 com `nota_0_100` igual a `nota_real_x20` de `dados/inventario_pk2/perfil_real_50_decisoes_12nov.csv`; placar inalterado.
+
+### 27. (Correção, configuração) Retreinar o perfil do PK2 com período limpo (P32)
+- **Problema** (confirmado nos dados; `INVENTARIO_PK2.md` §2):
+  - o `PerfisIa` do PK2 é de **30/10**, com 161–232 pontos (~3 h) e nunca foi retreinado;
+  - foi treinado com a B-02 parada: TAG28 (0,35 ± 0,72, deadband 2) e TAG32 (0,03 ± 0,17, deadband 0,04) estão colapsadas;
+  - TAG25 e TAG26 têm desvio inflado (mistura de estados), e a TAG24 tem desvio 12× o do treino limpo;
+  - com a B-02 ligada, o alarme falso é provável [hipótese].
+- **Proposta:**
+  - escolher um período limpo e longo (TAG73 = 0; pelo menos um dia inteiro com noite, rodízio e B-02 ligada e parada);
+  - medir antes no replay: perfil do banco × perfil novo, com `--treino-inicio/--treino-fim`;
+  - só então retreinar em produção.
+  - O endpoint atual treina só as últimas 24 h (P13). Para escolher o período em produção, depende do item **8**; sem ele, só dá para chamar o treino logo após 24 h limpas.
+- **Atenção:** P01 continua valendo. O IQR corta a noite da TAG24 mesmo com treino limpo, e o retreino sozinho não resolve a reserva parada (P02); ver itens 9 e 12.
+- **Antes de executar:** guardar cópia das linhas atuais de `PerfisIa` do PK2 (rollback = restaurar os valores).
+- **Risco:** alto (treinar altera a detecção; exige aprovação explícita). **Esforço:** P a M.
+- **Aceite:**
+  - replay do período de 12–13/11 com o perfil candidato sem piorar alarmes falsos nem a detecção nos presets 1 e 6;
+  - relatório de pontos por regime no treino;
+  - aprovação da responsável antes do retreino real.
+- **Depende de:** 25 (para medir o efeito na IA real) e 8.
 
 ---
 

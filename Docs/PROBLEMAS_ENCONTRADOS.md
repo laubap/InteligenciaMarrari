@@ -1,13 +1,15 @@
 # Problemas encontrados na detecção univariada (IAApi × simulador CP300)
 
 **Data:** 12/11/2026. **Cliente:** PK2. **Branch:** `feat/intelligence-lab-e2e-validation`.
-**Fontes:** `Docs/AUDITORIA_STATUS.md` (AUD), `Docs/MAPA_DETECCAO.md` (MAPA), `Docs/RESULTADO_PRESET1.md` (RES), `Docs/RESULTADO_PRESET6.md` (RES6), `Docs/RESULTADO_PRESET3.md` (RES3) e `Docs/BACKLOG.md`. Este documento **resume** essas fontes; os números completos estão nas seções indicadas.
+**Fontes:** `Docs/AUDITORIA_STATUS.md` (AUD), `Docs/MAPA_DETECCAO.md` (MAPA), `Docs/RESULTADO_PRESET1.md` (RES), `Docs/RESULTADO_PRESET6.md` (RES6), `Docs/RESULTADO_PRESET3.md` (RES3), `Docs/INVENTARIO_PK2.md` (INV) e `Docs/BACKLOG.md`. Este documento **resume** essas fontes; os números completos estão nas seções indicadas.
 
 > **Atualização com o preset 6 (12/11/2026, RES6):** o univariado **detectou** o desbalanceamento na TAG29 (15:32, ≈4 min após o início, a 94 ‰). Confirmou P01, P02, P03, P04, P07, P13, P20 e P21, com novidades em P01, P02, P03 e P20. Ajustou o alcance do P06 e trouxe um problema novo (P24). Itens marcados com **[preset 6]**.
 
 > **Atualização com a IA real no preset 3 (13/11/2026):** a exportação das decisões gravadas pela IAApi (`tools/Cp300Export/Export-AnomaliasIaReal.ps1`, 12/11 14:00 → 13/11 02:05) trouxe só 50 decisões do PK2, todas entre 14:21 e 15:09. Dois problemas novos: P26 (cada tag avaliada a cada ~10 min) e P27 (o monitor parou de gravar às 15:09). P10 e P11 ganharam evidência da IA real, e a medição de latência subiu para o passo 1 da §4.
 
 > **Atualização com a análise do preset 3 (13/11/2026, RES3):** **o preset 3 não rodou.** Em 12/11 às 14:20, o cenário anterior foi parado (TAG76 3 → 0), mas o TAG74 nunca foi a 3, não houve reset da planta e nenhum slot nem medição mostra falha de sensor até 13/11 07:59 (problema novo **P29**). O "teste do preset 3" foi operação normal; P26 e P27 continuam válidos (falam de cadência e parada, não de detecção). O período virou um **teste de alarme falso de 17,7 h com treino limpo** (12/11 14:15 → 13/11 07:59): sem regime 2.525, regime recomendado 1.378, combinado + set-point **297** minutos-tag. Novidades em P01, P02, P03, P08 e P22. A comparação com a IA real trouxe a **idade da leitura na decisão (0,2 a 17,2 min)**, que faltava em P18 e P26. P12 continua sem teste. Itens marcados com **[preset 3]**.
+
+> **Atualização com o inventário do banco do PK2 (13/11/2026, `Docs/INVENTARIO_PK2.md`, INV):** a diferença "IA real ≤ 2,1 × replay 20–35" tem três causas, todas demonstradas: **(a)** o `Score` gravado é a nota ÷ 20 (2,1 = nota 42; problema novo **P30**); **(b)** 38 das 50 decisões foram **entrada inválida** com nota 0, porque a leitura do lote é mais antiga que o histórico buscado depois (**P31**; P19 deixou de ser só teórico); **(c)** o perfil de produção é de 30/10, com ~3 h de dados e a B-02 parada, e TAG28/32 estão colapsadas (**P32**). Com o perfil do banco, as 50 decisões reais foram reproduzidas offline (diferença < 0,1). O banco não tem rótulo ativo, regime, contexto, comportamento nem modelo IF do PK2 (P14 e P15 descartados no PK2).
 
 **Como ler o status**
 
@@ -49,7 +51,7 @@
 | P16 | Os pesos do `appsettings.json` diferem dos padrões do código | Confirmado no código | — (AUD §3, §5e-4) | Risco (ferramentas divergentes) | Baixa |
 | P17 | `MinHistoryPoints` (30) não tem efeito em produção | Confirmado no código | — (AUD §3) | Risco (configuração enganosa) | Baixa |
 | P18 | O registro grava a hora do processamento, não a hora da leitura | Confirmado no código; **[preset 3]** idade da leitura na IA real de **0,2 a 17,2 min**, confirmada nos dados (valores do lote do início do ciclo) | — (MAPA #14); **[preset 3]** RES3 §2.4 | Atraso invisível | **Alta** (era Média) |
-| P19 | Entrada inválida (leitura mais antiga que o histórico) vira "sem anomalia" em silêncio | Confirmado no código; não ocorreu no preset 1 | — (MAPA #7; RES §2.2) | Risco | Baixa |
+| P19 | Entrada inválida (leitura mais antiga que o histórico) vira "sem anomalia" em silêncio | Confirmado no código; não ocorreu no preset 1; **na IA real, 38 de 50 decisões (12/11), reproduzido (P31)** | — (MAPA #7; RES §2.2); **IA real 12/11 (INV §4.2)** | **Falha não detectada** (era Risco) | **Alta** (era Baixa; ver P31) |
 | P20 | Tag com poucos valores distintos pode ser classificada como "discreta" e ter todos os detectores bloqueados | Confirmado no código; ocorreu nos replays com regime do preset 1 (73 min, não relatado na RES) e **[preset 6]** (TAG28/32, B-02 parada; TAG27/31 na config. 3) | TAG44 (RES §2.1); **[preset 6]** RES6 §2.2 | Falha não detectada (hipótese) | Baixa |
 | P21 | Alarmes que caem por acaso no horário da falha parecem acertos | Confirmado no replay (de novo no preset 6, inclusive no failover) | Preset 1 (RES §2.1, §4.2); **[preset 6]** RES6 §2.1, §2.3 | Risco de avaliação errada | Média |
 | P22 | TAG23 (sucção) teve 40 alarmes de madrugada. **[preset 3]** 45 alarmes iguais nas 3 configurações, sempre com o nível do reservatório num extremo; causa: hipótese | Confirmado no replay | Madrugada (RES §4.3); **[preset 3]** RES3 §2.3 | Alarme falso | Baixa |
@@ -60,6 +62,9 @@
 | **P27** | A IAApi parou de gravar decisões do PK2 (e do PK7) às 15:09 de 12/11, sem nenhum aviso ou erro no log, e só voltou depois de reiniciar em 13/11. Causa desconhecida | Parada confirmada nos dados e no Event Viewer; **causa: hipótese** | IA real no preset 3 | Monitoramento parado sem alerta: cerca de 11 h de teste perdidas | **Alta** |
 | **P28** | O endereço do Bridge está fixo no código (`http://localhost:5001`) em `BridgeValorAtualService` e `BridgeTagsService`, sem configuração nem ponto de substituição para teste. Só o histórico lê `Bridge:BaseUrl` | Confirmado no código (13/11) | — (levantamento da BACKLOG 19) | Risco: configuração enganosa; o laço do monitor não pode ser testado offline com tags | Média |
 | **P29** | **[preset 3]** O preset 3 de 12/11 **não iniciou** no simulador (TAG74 nunca foi a 3; TAG76 ficou em 0 desde 14:20; sem reset da planta nem falhas nos slots), e nada na rotina de teste conferiu o início. O período foi tratado como teste do preset 3 até a análise dos rótulos | Confirmado nos dados; **causa: hipótese** (comando de início não escrito ou não aceito) | Preset 3 (RES3 §1.2) | Teste perdido sem aviso; risco de avaliação errada | **Alta** (barato) |
+| **P30** | O `Score` gravado em `AnomaliaDetectada` (e exportado como `nota_final`) é a **nota do ensemble ÷ 20** (0–5), enquanto o replay grava a nota de 0 a 100. A comparação de notas da RES3 §2.4b misturou as escalas | Confirmado no código e nos dados (131 anomalias com `Score` 3,0–3,7) | IA real 12/11 (INV §4.2a) | Risco de avaliação errada (o placar não é afetado: usa só a decisão) | Média (barato) |
+| **P31** | O valor atual vem do **lote do início do ciclo**, mas o histórico de 24 h é buscado depois. Quando o histórico já tem um ponto mais novo, a entrada é **inválida** e a IA grava nota 0, "sem anomalia" (P19). Em 12/11, **38 de 50** decisões; só ≈ 2 % dos minutos-tag foram de fato avaliados | Confirmado no código; **reproduzido** offline (50 de 50); efeito em outros dias: hipótese (zeros em 67–91 % das decisões desde 05/11) | IA real 12/11 (INV §4.2b, §4.3) | **Falha não detectada** (a maioria das leituras não chega aos detectores) | **Alta** |
+| **P32** | O perfil de produção do PK2 (`PerfisIa`) é de **30/10**, com **161–232 pontos** (~3 h) e a B-02 quase sempre parada: TAG28 (0,35 ± 0,72, deadband 2) e TAG32 (0,03 ± 0,17, deadband 0,04) **colapsadas**. Nunca retreinado | Confirmado nos dados e no código; efeito com a B-02 ligada: hipótese | Inventário (INV §2) | Alarme falso (B-02 ligada) e falha não detectada (desvio inflado em TAG25/26) | **Alta** |
 
 ---
 
@@ -308,7 +313,7 @@
 ### P14. O código aceita rótulo (TAG60–TAG81) como tag de regime
 
 - **O que acontece.** Se alguém cadastrar uma tag de gabarito (por exemplo, TAG73, "falha ativa") como tag de regime, a IA passa a escolher o baseline sabendo a resposta. O teste fica inválido.
-- **Evidência:** confirmado no código (AUD §5a). O replay já recusa isso (`--regime`, RES §4.1); a produção não. Não sabemos se o banco do PK2 tem algo assim (BACKLOG 2).
+- **Evidência:** confirmado no código (AUD §5a). O replay já recusa isso (`--regime`, RES §4.1); a produção não. **Inventário (13/11, INV §3):** o banco local não tem nenhuma linha em `TagsRegimesOperacionaisIa`, então não há vazamento hoje no PK2. A proteção no código continua faltando.
 - **Causa no código:** `Services/AnomalyDetection/OperationalRegimeBaselineProvider.cs : Resolve`, que aceita qualquer `TagRegime`.
 - **BACKLOG:** 11. A regra precisa ser por cliente: TAG60–81 só são rótulos no simulador.
 
@@ -316,7 +321,8 @@
 
 - **O que acontece.** Cadastrar uma tag sem informar `IaAtiva` cria a tag **ativa**. Um rótulo cadastrado por engano entraria no monitoramento e poluiria as contagens e o LiveMonitor. Não afeta a decisão de outras tags.
 - **Evidência:** confirmado no código (AUD §5a): `Models/TagIaConfig.cs`; `Controllers/TagConfigController.cs : ConfigurarTag`.
-- **BACKLOG:** 2 (inventário). Não há item de correção.
+- **Inventário (13/11, INV §1):** o PK2 tem só TAG22–TAG33 ativas (12 tags, configuradas em 30/10). Nenhum rótulo ou estado está ativo.
+- **BACKLOG:** 2 (inventário, feito). Não há item de correção.
 
 ### P16. Pesos do `appsettings.json` diferentes dos padrões do código
 
@@ -346,6 +352,8 @@
 
 - **O que acontece.** Se a leitura atual tem hora anterior ao último ponto do histórico (problema de fuso ou relógio), ou se o histórico fica vazio, a IA responde "sem anomalia" sem avisar fora do log.
 - **Evidência:** confirmado no código (MAPA #7): `Services/AnomalyDetection/DetectionInputValidator.cs : Validate`. **Não ocorreu no preset 1** (`entrada_invalida = 0` em 100 %; RES §2.2). Em produção, com o Bridge real, não foi verificado.
+- **Na IA real (13/11, INV §4.2b):** ocorreu em **38 de 50** decisões do PK2 em 12/11, reproduzido offline. A causa não é fuso nem relógio: é o fluxo do monitor (P31). O replay não reproduz isso porque serve o histórico até a leitura.
+- **Impacto e prioridade revistos:** falha não detectada, Alta.
 - **BACKLOG:** 4 e 6.
 
 ### P20. Bloqueio por tipo "discreto"
@@ -454,7 +462,12 @@
 - **[preset 3] Contexto corrigido e idade da leitura** (RES3 §1.2, §2.4):
   - O preset 3 **não rodou** (P29): as 50 decisões são de operação normal. As conclusões sobre cadência, timeouts e parada continuam válidas, porque não dependem do cenário.
   - A idade da leitura, antes não medida, foi recuperada casando valores com o CSV: **0,2 a 17,2 min** (P18). Somada à cadência de ~10 min por tag, uma falha pode levar de ~10 a ~27 min para chegar a uma decisão, no pior caso [inferência].
-  - As notas da IA real ficaram **≤ 2,1 em todas as 50 decisões** (38 exatamente 0). O replay deu 20–35 de média nos mesmos minutos de leitura, inclusive em tags sem regime (TAG22, TAG23). A IA real não está com o mesmo perfil ou baseline do replay. Causa: hipótese (perfil treinado em outro período, P13; baseline comportamental ou contexto cadastrado no banco; BACKLOG 2).
+  - As notas da IA real ficaram **≤ 2,1 em todas as 50 decisões** (38 exatamente 0). O replay deu 20–35 de média nos mesmos minutos de leitura, inclusive em tags sem regime (TAG22, TAG23). ~~A IA real não está com o mesmo perfil ou baseline do replay. Causa: hipótese.~~ **Resolvido pelo inventário (13/11, INV §4):**
+    - o valor gravado é a nota ÷ 20 (P30): 2,1 = 42;
+    - os 38 zeros são entrada inválida (P31);
+    - o perfil de produção é outro (P32).
+    - Não há baseline comportamental nem contexto do PK2 no banco.
+    - As 50 decisões foram reproduzidas offline.
 - **Solução candidata:** primeiro medir (PERF_DIAG, BACKLOG 6). Depois avaliar reuso ou cache incremental do histórico (P10) e processamento não sequencial (P11). Nada aprovado.
 - **BACKLOG:** 6 (prioridade elevada em 13/11) e 4.
 
@@ -536,6 +549,53 @@
 - **Impacto:** teste perdido sem aviso; risco de avaliação errada ("a IA não detectou nada no preset 3").
 - **BACKLOG:** não há item; sugerido criar (roteiro de teste com conferência do início do cenário).
 
+### P30. A nota gravada pela IA real está em outra escala (÷ 20)
+
+- **O que acontece.** O ensemble calcula a nota de 0 a 100 e decide por ≥ 60. Mas o campo `Score` gravado em `AnomaliaDetectada`, devolvido por `GET /api/anomalias`, é essa nota **dividida por 20**. A exportação da IA real grava esse campo como `nota_final`, a mesma coluna em que o replay grava a nota de 0 a 100.
+- **Evidência:**
+  - Confirmado no código: `Services/AnomalyDetection/EnsembleDetectionService.cs:406-410` (`Score = scoreFinalNormalizado / 20.0`, `ScoreNormalizado = scoreFinalNormalizado`); `Services/PredictionService.cs:250-251` → `AnomaliaHistoricoService.Registrar`; `tools/Cp300Export/Export-AnomaliasIaReal.ps1:227`. O replay usa `ScoreNormalizado` (`tools/Cp300OfflineReplay/Cp300Replay.cs:680`).
+  - Confirmado nos dados: as 131 anomalias do PK2 no banco têm `Score` de 3,0 a 3,73 (nota 60–75).
+- **Consequência:** a tabela da RES3 §2.4b compara 0–5 com 0–100. Nas 12 decisões válidas, a nota real × 20 vai de 14,6 a 42,0, a mesma faixa do replay. O **placar não é afetado** (usa só `decisao_final`).
+- **Solução candidata (barata, só ferramenta e documentação):** a exportação passa a gravar também a nota 0–100 e a dizer a escala no cabeçalho; corrigir a RES3 §2.4b. Mudar o contrato da API não é proposto (contrato HTTP preservado).
+- **BACKLOG:** 26.
+
+### P31. A leitura do lote envelhece e a validação descarta a maioria das avaliações
+
+- **O que acontece.** O monitor busca os valores atuais de todas as tags do cliente **uma vez, no início do ciclo**. Depois avalia tag a tag, e cada avaliação busca as 24 h de histórico naquele momento. Se, nesse meio-tempo, o Bridge já tem o ponto de um minuto posterior à leitura, a leitura fica "mais antiga que o histórico". Então:
+  - o validador recusa a entrada;
+  - o ensemble devolve **nota 0, sem anomalia**;
+  - a decisão é gravada como se a tag tivesse sido avaliada e estivesse normal (P19).
+- **Evidência:**
+  - **Confirmado no código:** `Services/MonitoramentoTagsService.cs:54` (lote); `Services/CurrentValuePredictionService.cs:83-84` (`DataHora = valorAtual.DataHora`); `PredictionDetectionPreparationService.PrepararAsync` (histórico na hora da busca); `DetectionInputValidator.Validate:78-84`; `EnsembleDetectionService.CriarResultadoEntradaInvalida`.
+  - **Reproduzido** (INV §4.3): com as classes de produção, o perfil do banco e o histórico cortado na hora da busca, as **50 de 50** decisões reais de 12/11 foram reproduzidas, com diferença < 0,1 na nota 0–100. Os 38 zeros são entrada inválida. Os 12 casos válidos são o ciclo rápido de 14:38 (idade da leitura ≤ 1 min) e a primeira tag do ciclo de 14:21.
+  - **Contraprova:** com a leitura avaliada no próprio minuto, nenhuma das 50 teria nota abaixo de 13,8.
+  - **Hipótese:** a fração de notas exatamente 0 no PK2 subiu de 4–29 % (30/10–04/11) para 67 % (05/11) e 76–91 % (11–13/11), sem anomalias desde 06/11. É compatível com o mesmo mecanismo nesses dias, mas não foi reproduzido.
+- **Consequências:**
+  - Somado ao P26, a IA real avaliou ≈ 12 de ~576 minutos-tag em 12/11 14:21–15:09 (≈ 2 %).
+  - Nenhum teste da IA real mede detecção enquanto isso acontecer.
+  - O LiveMonitor e o placar mostram essas decisões como "normal".
+  - Quanto mais lento o ciclo (P10, P11, P26), pior.
+- **Ligação:** P18 (idade da leitura), P19 (mecanismo), P26 (cadência). O replay não reproduz este problema: ele serve o histórico até a leitura (§3.2, "Valor atual em lote").
+- **Soluções candidatas (nada aprovado; todas exigem proposta, testes e rollback):**
+  - buscar o valor atual por tag, imediatamente antes da predição;
+  - ou recortar o histórico até a hora da leitura;
+  - ou, no mínimo, gravar "não avaliada" em vez de "sem anomalia" (observabilidade).
+  As duas primeiras mudam o que chega aos detectores.
+- **BACKLOG:** **25 (prioridade 1)**, 6 (medir) e 4.
+
+### P32. Perfil de produção do PK2 antigo, curto e colapsado nas tags da B-02
+
+- **O que acontece.** Sem regime e sem comportamento (o caso do PK2), a média, o desvio e o deadband da detecção vêm do `PerfisIa`. No PK2, esse perfil foi treinado uma única vez, em **30/10** (14:10–15:23, tag a tag), com 161–232 pontos, ~2,7–3,9 h a 1/min. Nunca foi retreinado: só existe treino manual (P13).
+- **Evidência** (confirmado nos dados e no código, INV §2):
+  - **TAG28:** média 0,35, desvio 0,72, 77 % zeros, deadband 2;
+  - **TAG32:** média 0,03, desvio 0,17, 97 % zeros, deadband 0,04. Perfil da "B-02 parada".
+  - **TAG25/26:** desvio inflado (273 e 418) pela mistura de estados.
+  - **TAG24:** desvio 32,8, contra 2,6 no treino limpo.
+  - No trecho de 12/11, isso **evitou** os 7 alarmes de reserva parada que o replay deu (P02): o perfil do banco só conhece a B-02 parada.
+- **Efeito com a B-02 ligada:** hipótese. TAG28 e TAG32 ficariam a dezenas de desvios da média, com Z e EWMA saturados (alarme falso provável). As 131 anomalias de 30/10–05/11 não foram analisadas.
+- **Solução candidata:** retreinar com período limpo e longo, com aprovação, porque treinar altera a detecção. Depende de BACKLOG 8 (escolha do período) e do regime (P02, P03).
+- **BACKLOG:** 27 (depende de 8 e 25); 2 (feito).
+
 ---
 
 ## 3. Fluxo exercitado nos presets 1 e 6: arquivos e métodos
@@ -606,14 +666,14 @@ A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos 
 | Parte | Arquivo : método | Por que ficou de fora |
 |---|---|---|
 | Ciclo do monitor | `Services/MonitoramentoTagsService.cs : ExecuteAsync` | O replay chama `PredictionService.Detectar` diretamente, minuto a minuto, sem ciclo de 60 s nem fila sequencial (P11) |
-| Valor atual em lote | `Services/BridgeValorAtualService.cs : BuscarValoresAtuais`; `Services/CurrentValuePredictionService.cs : DetectarComValorAtual` | O valor atual vem do CSV; não há Bridge |
+| Valor atual em lote | `Services/BridgeValorAtualService.cs : BuscarValoresAtuais`; `Services/CurrentValuePredictionService.cs : DetectarComValorAtual` | O valor atual vem do CSV; não há Bridge. **Por isso o replay não reproduz o P31** (entrada inválida pela leitura envelhecida); o rascunho do INV §4.3 reproduz |
 | Histórico via Bridge | `Services/BridgeHistoricoService.cs : BuscarHistorico`, `BuscarHistoricoPorPeriodo` | Substituído pelo CSV; isolamento obrigatório e latência fora do escopo (P10) |
 | Multivariado em *shadow* | `Services/AnomalyDetection/Multivariate/MultivariateShadowRuntimeCoordinator.cs : ProcessarLeituraAsync` | Passado como `null`; não muda a decisão no PK2 e soma latência |
 | Fusão multivariada | `Services/AnomalyDetection/Multivariate/PredictionMultivariateDecisionService.cs : ResolveAsync` | Não registrado; a configuração restringe a PK7 (MAPA #12) |
 | Isolation Forest | `Services/AnomalyDetection/IsolationForestDetector.cs : Detectar` | Não há modelo do PK2 em `Models/IsolationForest/` |
 | Decisão runtime/canário ligada | `PredictionRuntimeDecisionService.Resolve` com `RuntimeDecision.Enabled` | O PK2 está fora do canário (`AllowedClientIds = ["PK7"]`), então o replay usa desligado; a lógica ligada não foi exercitada |
-| Baseline comportamental | `Services/AnomalyDetection/BehaviorProfiles/Runtime/BehaviorRuntimeBaselineProvider.cs : ResolveAsync` | Não instanciado; depende de snapshots no banco do PK2, que não foi inventariado (BACKLOG 2) |
-| Banco real | `ia_config.db` (`TagsIaConfig`, `PerfisIa`, `TagsRegimesOperacionaisIa`, `TagContextoIa`) | Acesso proibido sem autorização; o replay recria as tabelas em memória |
+| Baseline comportamental | `Services/AnomalyDetection/BehaviorProfiles/Runtime/BehaviorRuntimeBaselineProvider.cs : ResolveAsync` | Não instanciado. **Inventário (INV §3): o PK2 não tem comportamento cadastrado**, então não se aplica |
+| Banco real | `ia_config.db` (`TagsIaConfig`, `PerfisIa`, `TagsRegimesOperacionaisIa`, `TagContextoIa`) | O replay recria as tabelas em memória. **Inventariado em 13/11 (INV)**, numa cópia autorizada. A diferença relevante é o perfil de 30/10 (P32) |
 | Gravação real e LiveMonitor | `AnomaliaHistoricoService.Registrar` no `ia_config.db`; `tools/IAApi.LiveMonitor` (polling GET) | O registro foi para SQLite em memória; o LiveMonitor não foi aberto |
 | Interpretação por LLM | Implementação real de `IAnomalyInterpretationService` | Trocada por um interpretador fixo; não afeta a decisão |
 | PERF_DIAG | `Services/Diagnostics/PerformanceDiagnostics.cs` | Desligado (variável `IAAPI_PERF_DIAGNOSTICS` ausente); só mede |
@@ -633,7 +693,8 @@ A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos 
 ## 4. Próximos passos (em ordem)
 
 1. **Medir a latência real e garantir que o monitor fique de pé** (P10, P11, P26, P27 → BACKLOG **6**, **4**). Subiu do passo 4 em 13/11: a IA real avaliou cada tag só a cada ~10 min e parou sem aviso às 15:09. Sem isso, nenhum teste da IA real mede a detecção. Fazer numa sessão autorizada: PERF_DIAG, console gravado em arquivo com data e hora e vigia da última decisão (P27, "Como confirmar"). **[preset 3]** No mesmo teste, conferir o início do cenário pelos rótulos (P29), porque o "preset 3" de 12/11 não chegou a rodar. A idade da leitura já tem uma medida indireta: até 17,2 min (P18).
-2. **Barato e só de proteção:** bloquear rótulos como tag de regime em produção (P14 → BACKLOG **11**). Junto, fazer o inventário do banco do PK2 (BACKLOG **2**) para confirmar que não há rótulo cadastrado, ver quais tags estão ativas (P15) e se já existe algum regime.
+   - **[13/11, inventário] Antes de qualquer novo teste da IA real, tratar o P31.** Hoje ≈ 3/4 das decisões do PK2 são entrada inválida gravada como "normal". Sem isso, medir latência e cadência não basta para medir detecção. Precisa de proposta e aprovação. Nas análises, usar a nota × 20 (P30).
+2. **Barato e só de proteção:** bloquear rótulos como tag de regime em produção (P14 → BACKLOG **11**). ~~Junto, fazer o inventário do banco do PK2.~~ **Inventário feito em 13/11 (`Docs/INVENTARIO_PK2.md`):** só TAG22–33 ativas, nenhum regime, contexto, comportamento ou modelo IF. Perfil de 30/10 colapsado na B-02 (P32): retreinar só com aprovação e período limpo (passo 5).
 3. **Ativar o regime recomendado no PK2, com aprovação:** TAG28/30/32 ← TAG43, TAG26 ← TAG45, TAG24 ← TAG46. Validado no replay: preset 1 245 → 41 alarmes; madrugada 1.282 → 660 (P02, P04, P05; RES §4). **[preset 6]** 325 → 223, e os alarmes falsos fora da falha caem de 175 para 27, mas surgem 56 minutos-tag com a B-02 sozinha depois do failover (P03; RES6 §2.3). A detecção da TAG29 não muda. Só configuração no banco, reversível.
 4. **Regime combinado para as bombas** (P03, P08 → BACKLOG **12**). É o que falta para a B-01, que ainda gera 566 alarmes de madrugada. Testar no replay antes de produção, com a mesma tabela da RES §4.
 5. **Treino por período e limpeza IQR** (P01, P09, P13 → BACKLOG **8**, **9**). Permitir treinar com um período limpo e proteger o IQR em séries quase constantes.
