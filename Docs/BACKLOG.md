@@ -195,19 +195,150 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 ### 19. (Robustez) "Sinal de vida" do monitor: endpoint e LiveMonitor
 - **Problema (P27):** o monitor ficou ~11 h parado sem nenhum sinal, com a API respondendo. Hoje não existe forma de perguntar à IAApi se o monitor está rodando nem quando foi o último ciclo.
-- **Proposta:**
-  - Um serviço singleton em memória, atualizado por `MonitoramentoTagsService` em pontos que não mudam o fluxo, com:
-    - início e fim do último ciclo, duração e próximo ciclo previsto;
-    - etapa atual (consultando lote, tag X, aguardando);
-    - por cliente: tags ativas, avaliadas, com falha e timeouts;
-    - hora da última decisão gravada e última exceção.
-  - Endpoint aditivo de leitura, por exemplo `GET /api/monitoramento/status`.
-  - O LiveMonitor ganha a rota `/monitor-api/monitor-status` no `server/proxy.ts` e um indicador no topo: verde (ciclo recente), amarelo (ciclo lento) ou vermelho (sem ciclo concluído há mais de X min; ver tarefa 20).
-  - A "etapa atual" com a hora em que começou mostra **onde** o monitor travou, sem precisar de `dotnet-stack`.
-- **Arquivos:** `Services/MonitoramentoTagsService.cs`; novo `Services/Monitoring/MonitoramentoStatusService.cs` e controller; DI; `tools/IAApi.LiveMonitor/server/proxy.ts` e `src/`; testes.
-- **Risco:** baixo. Só observabilidade, sem efeito na decisão. O endpoint não pode expor dados de outros clientes além do que `/api/anomalias` já expõe; avaliar o filtro por cliente.
-- **Esforço:** M
-- **Aceite:** teste com relógio e Bridge falsos: o status reflete ciclo, etapa e contagens; com o laço travado de propósito, a etapa e a hora de início ficam paradas e o indicador fica vermelho; o replay (RC-2) não muda.
+- **Situação:** proposta detalhada em 2026-11-13 (abaixo). **Não aprovada; nada implementado.** Cada passo exige aprovação própria.
+
+#### 19.1 O que já existe (levantamento de 2026-11-13, regra "reaproveitar antes de criar")
+
+Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão marcados como inferência.
+
+| Mecanismo | O que já entrega | Por que não carrega o sinal de vida sozinho | O que se reaproveita |
+|---|---|---|---|
+| LiveMonitor, painel "Saúde do monitoramento agora" (`src/App.tsx`, card "2 · Análise operacional mais recente"), alimentado por `GET /api/anomalias` | Hora da última decisão das tags selecionadas. Fica vermelho acima de `staleMs` (padrão de 180 s, `MONITOR_STALE_MS`). | Não separa monitor parado, ciclo lento, timeout do Bridge e tags sem `IaAtiva`. Não mostra a etapa. Não vê leituras que falharam (P26: só aparecem no Event Viewer). Inferência: teria ficado vermelho no P27, mas só com a tela aberta e sem dizer o motivo. | **O lugar na tela:** o indicador novo entra nesse painel. Não se cria tela nova. O card 2 continua como plano B. |
+| `GET /api/anomaly-runtime/metrics` (`RuntimeDecisionMetricsController`; `AnomalyRuntimeMetrics:Enabled = true` no `appsettings.json`) | `TotalDecisions` e `LastDecisionAtUtc` em memória. Atualizados a cada decisão em `PredictionRuntimeDecisionService.Resolve`. | É global: soma todos os clientes e também as chamadas manuais a `POST /api/anomalias/tag`. Marca a hora da resolução, antes de gravar. Não tem ciclo, etapa nem falhas. Liga-se a uma chave do rollout multivariado. | **Já serve hoje, sem código** (passo 0). É também o **modelo de implementação**: singleton com `Interlocked` e um `record` de snapshot. |
+| PERF_DIAG (`Services/Diagnostics/PerformanceDiagnostics.cs`) | Tempo por etapa (`Bridge.*`, `Prediction.*`, `Decision.*`) e `Monitoring.Reading` por tag, com idade da leitura. | Só escreve no log. Só liga com `Development` + `IAAPI_PERF_DIAGNOSTICS=1`. Escreve pelo `ILogger`, o mesmo console suspeito na hipótese 1 do P27. Não guarda estado que se possa consultar. | Os **nomes das etapas** (passo 5, opcional) e o padrão "nunca lançar exceção" (`catch { }` com comentário). |
+| Diagnóstico do Intelligence Lab (`BoundedDiagnosticBuffer`, `IntelligenceLabHealthMetrics`, `GET /api/intelligence-lab/health` e `/diagnostics`) | Diagnóstico **por leitura**, capturado dentro de `PredictionService`, e contadores de captura. | Vem desligado (`IntelligenceLab:Enabled = false`). Exige `Development`, loopback, chave com 32 caracteres ou mais e metadados de versão. Não vê o laço, o lote nem as falhas antes de `Detectar`. Pôr o sinal de vida aí o deixaria preso ao modo laboratório. | O padrão do controller (`Cache-Control: no-store`) e o estilo de teste de controller sem servidor (`IntelligenceLabDiagnosticsEndpointTests`). |
+| `MonitoramentoTagsService.ExecuteAsync` | Já mede o tempo do lote (`tempoColeta`) e o de cada tag (`tempoTag`), o status da tag (`Concluída`, `Falha`, `Cancelada`) e conta as `analisadas`. Tudo isso só vai para o log. | Os dados se perdem no log e não podem ser consultados. | **Os pontos de atualização:** o status é preenchido nesses mesmos lugares, com os valores já calculados. |
+| Patches soltos na raiz (`*.patch`) | `tempo_por_tag` e `bridge_em_lote` já estão incorporados ao código (com acréscimos posteriores). `sessoes_de_teste` e `observabilidade_temporal` já foram aplicados. | Nenhum guarda estado do ciclo. `clareza_cenario1` diverge do código atual e não foi analisado a fundo. | — |
+
+**Conclusão:** nenhum mecanismo atual guarda **ciclo, etapa atual e contagens por cliente** num lugar que se possa consultar. O serviço de status é novo, mas reaproveita o modelo do `RuntimeDecisionMetrics`, os pontos de medição que o laço já tem e o painel de saúde do LiveMonitor.
+
+**Por que um controller próprio e não uma rota no `RuntimeDecisionMetricsController`:** aquele controller pertence ao rollout multivariado e só responde com `AnomalyRuntimeMetrics:Enabled`. Isso amarraria o sinal de vida a uma chave de outra finalidade. Nada fica em paralelo: o card 2 do LiveMonitor e o `/api/anomaly-runtime/metrics` continuam com a mesma função de hoje.
+
+#### 19.2 Passos (pequenos e reversíveis; nenhum muda a decisão)
+
+**Passo 0 — Sem código, já possível na sessão de teste autorizada (tarefa 6).**
+- Vigiar `GET /api/anomaly-runtime/metrics` a cada 5 min, junto com a última `DataDeteccao` de `/api/anomalias` (P27, "Como confirmar", passo b).
+- Se `TotalDecisions` parar de subir enquanto a API responde, o laço parou. Registrar a hora e seguir o passo c do P27.
+- Limite: o contador é global. Uma chamada manual a `POST /api/anomalias/tag` também o faz subir.
+
+**Passo 1 — Serviço de status em memória, sem ligação com o laço.** Esforço: P. Risco: nenhum, porque nada existente muda.
+- Novo `Services/Monitoring/MonitoramentoStatusService.cs`, ao lado do `MonitoramentoTagsBatchPlanner`.
+  - Singleton com `TimeProvider`, que é nativo do .NET (sem pacote novo).
+  - Usa lock curto. Não faz I/O nem log, e nenhum método lança exceção (corpo em `try/catch` vazio, como no PERF_DIAG).
+  - Métodos: `IniciarCiclo`, `IniciarEtapa(etapa, clienteId?, tag?)`, `RegistrarTagsAtivas(porCliente)`, `RegistrarResultadoTag(clienteId, tag, status, duracaoMs, ehTimeout)`, `RegistrarFalhaLote(clienteId, qtdTags, ehTimeout)`, `RegistrarErroGeral(tipoExcecao)`, `ConcluirCiclo` e `Snapshot()`.
+- Etapas: `Iniciando`, `ConsultandoTagsAtivas`, `ConsultandoLote`, `AvaliandoTag`, `Aguardando` e `Encerrado`.
+- Contrato `MonitoramentoStatusSnapshot` (record, só aditivo):
+  - `GeradoEmUtc` e `ServicoIniciadoEmUtc`;
+  - `CicloAtual { Numero, IniciadoEmUtc }`;
+  - `UltimoCicloConcluido { Numero, IniciadoEmUtc, ConcluidoEmUtc, DuracaoMs }`;
+  - `ProximoCicloPrevistoEmUtc`;
+  - `EtapaAtual { Etapa, ClienteId, TagName, DesdeUtc }`;
+  - `Clientes[] { ClienteId, TagsAtivas, AvaliadasUltimoCiclo, FalhasUltimoCiclo, TimeoutsUltimoCiclo, LoteFalhouUltimoCiclo, UltimaAvaliacaoConcluidaUtc }`;
+  - `UltimoErro { QuandoUtc, Origem (Lote | Tag | Geral), TipoExcecao, ClienteId, TagName }`.
+- **Sem a mensagem da exceção.** Ela pode trazer URL ou host do Bridge. Basta o tipo e a origem.
+- **Regra de timeout:** `TaskCanceledException` ou `TimeoutException` sem cancelamento do host. É a mesma distinção que o laço já faz com `stoppingToken`.
+- **Testes** (`IAApi.Tests/Monitoring/MonitoramentoStatusServiceTests.cs`, offline, com um `TimeProvider` falso de poucas linhas escrito no próprio teste):
+  - ciclo completo (números, duração e contagens);
+  - tag com timeout (conta como falha e como timeout);
+  - lote com timeout (todas as tags do cliente ficam não avaliadas e `LoteFalhouUltimoCiclo = true`);
+  - sem novas chamadas, a etapa e o `DesdeUtc` ficam parados enquanto o relógio avança (simula o laço travado);
+  - o snapshot é uma cópia (não muda depois de gerado);
+  - argumentos nulos ou vazios não lançam exceção;
+  - chamadas de várias threads não corrompem as contagens.
+
+**Passo 2 — Ligar o serviço no laço.** Esforço: P. Risco: baixo.
+- `MonitoramentoTagsService` recebe `MonitoramentoStatusService? status = null` no construtor. É o mesmo padrão do `PerformanceDiagnostics? = null`, então o construtor atual continua válido.
+- Só se acrescentam chamadas, nos pontos que já existem:
+  - começo do `while` → `IniciarCiclo`;
+  - antes do `ToListAsync` → etapa `ConsultandoTagsAtivas`; depois → `RegistrarTagsAtivas`;
+  - antes de `BuscarValoresAtuais` → etapa `ConsultandoLote`;
+  - `catch` do lote → `RegistrarFalhaLote`;
+  - antes de `DetectarComValorAtual` → etapa `AvaliandoTag`;
+  - `finally` da tag → `RegistrarResultadoTag`, com o `status` e o `tempoTag` já calculados;
+  - fim dos lotes → `ConcluirCiclo`;
+  - `catch` geral → `RegistrarErroGeral`;
+  - antes do `Task.Delay` → etapa `Aguardando`, com o próximo ciclo previsto (agora + 1 min);
+  - saída do laço → etapa `Encerrado`.
+- `UltimaAvaliacaoConcluidaUtc` corresponde ao status `Concluída`. Pelo código, isso significa que `Detectar` gravou a decisão (P27: toda leitura que chega a `Detectar` grava ou lança). `PredictionService` não muda.
+- DI em `Services/DependencyInjection/IAApiApplicationServiceCollectionExtensions.cs`, ao lado do `AddHostedService<MonitoramentoTagsService>()`: `AddSingleton<MonitoramentoStatusService>()` e `TryAddSingleton(TimeProvider.System)`.
+- **Testes:**
+  - teste do laço com SQLite em memória **sem nenhuma tag ativa**: o ciclo é concluído, `Aguardando` aparece e, ao cancelar, `Encerrado`;
+  - o mesmo teste com um contexto que falha: `UltimoErro.Origem = Geral`;
+  - replay RC-2 com 0 diferenças. O replay chama `Detectar` direto, sem passar pelo laço (confirmado no código). Isso só confirma que o caminho da decisão não mudou.
+- **Limite de teste (confirmado no código):** `BridgeValorAtualService` cria o próprio `HttpClient`, aponta fixo para `http://localhost:5001` e não tem interface nem métodos virtuais.
+  - Um teste automático do laço **com tags** chamaria o Bridge real, se estivesse ligado. Isso viola o isolamento do `CLAUDE.md`.
+  - Os caminhos de lote e de tag ficam cobertos pelos testes do passo 1 e pela conferência do passo 5.
+  - O ponto de substituição no Bridge é a **tarefa 22** (P28). Fazê-la antes deste passo permite testar o laço com tags e um handler falso. Sem ela, a alternativa seria trocar o `_httpClient` por reflexão, como os testes do histórico já fazem. Não é recomendada: o contorno é frágil.
+
+**Passo 3 — Endpoint de leitura.** Esforço: P. Risco: baixo.
+- Novo `Controllers/MonitoramentoStatusController.cs`: `GET /api/monitoramento/status?clienteId=` com `Cache-Control: no-store`. Rota nova; nenhum contrato existente muda.
+- O controller calcula, **na hora da consulta**, `SegundosDesdeUltimoCicloConcluido` e `SegundosNaEtapaAtual`. Esse cálculo não depende da thread do laço, que pode estar travada. É a base do verificador independente da tarefa 20.
+- **Isolamento:** com `clienteId`, devolve só aquele cliente. Na etapa atual e no último erro, nome de tag de outro cliente vira `"(outro cliente)"`.
+  - Não expõe nada além do que `/api/anomalias` e `/api/tags` já expõem (que hoje não têm filtro): nada de valores, mensagens ou URLs.
+  - Sem o serviço registrado, responde 404, como os endpoints do Intelligence Lab.
+- **Testes** (`IAApi.Tests/Monitoring/MonitoramentoStatusControllerTests.cs`, no estilo de `RuntimeDecisionMetricsControllerTests`):
+  - filtro por cliente;
+  - mascaramento da tag de outro cliente;
+  - cálculo das idades com o relógio falso;
+  - cabeçalho `no-store`;
+  - 404 sem o serviço.
+
+**Passo 4 — LiveMonitor.** Esforço: P–M. Risco: baixo (ferramenta local, só leitura).
+- **Proxy** (`server/proxy.ts`): `case '/monitor-api/monitor-status'` → `/api/monitoramento/status?clienteId=<client>`. Rota sem chave, como `decisions`. Entra na lista fechada que já existe.
+- **Código:** `src/api.ts` (`monitorStatus`), `src/types.ts` (`MonitorStatus`) e `src/useMonitor.ts` (um polling próprio, no mesmo intervalo das decisões, com o erro guardado à parte).
+- **Classificação** em `src/domain.ts`, função pura `monitorHealth(status, now, staleMs)`. Usa o `staleMs` que o monitor já tem (180 s), sem número novo. O limite definitivo é decisão da tarefa 20.
+
+  | Estado | Regra |
+  |---|---|
+  | **ATIVO** (verde) | Último ciclo concluído há até `staleMs`. |
+  | **LENTO** (amarelo) | Sem ciclo concluído há mais de `staleMs`, mas a etapa atual começou há até `staleMs` (o laço está andando, como nos ciclos de 8–15 min do P26). |
+  | **PARADO** (vermelho) | A etapa atual não muda há mais de `staleMs`, ou está `Encerrado`. |
+  | **SEM STATUS** (cinza) | A rota respondeu 404 (IAApi sem o passo 3) ou deu erro. O card 2 atual continua valendo. |
+
+- **Como aparece na tela:**
+  - **Barra do topo:** ao lado de "IAApi conectada", um segundo indicador: "Monitor da IA: ATIVO / LENTO / PARADO / sem status". Isso separa "a API responde" de "o laço roda", que é a confusão do P27.
+  - **Painel "Saúde do monitoramento agora":** um card novo, "0 · Ciclo do monitor da IA", antes dos quatro atuais. Exemplo:
+    - linha principal: estado e "último ciclo concluído há 2 min 10 s · durou 1 min 40 s";
+    - detalhe: "12/12 tags avaliadas · 0 falhas · 0 timeouts";
+    - etapa: "Agora: avaliando PK2.TAG28 há 45 s".
+    - Com lote em timeout: "Lote do Bridge falhou (timeout) no último ciclo".
+  - **Aviso amarelo** já existente (`readiness-warning`): passa a aparecer também com LENTO ou PARADO. No PARADO, o texto diz a etapa e desde quando, por exemplo "parado em 'avaliando PK2.TAG33' desde 15:09:13". É isso que mostra **onde** travou, sem `dotnet-stack`.
+  - O texto fixo do aviso "A IA tem seu próprio ritmo" ganha a duração real do último ciclo, quando houver.
+- **Testes** (vitest, offline; `fetch` é substituído por `vi.fn` como já se faz):
+  - `tests/proxy.test.ts`: rota nova, cliente passado adiante e nenhum cabeçalho de chave;
+  - `tests/domain.test.ts`: os quatro estados de `monitorHealth`, incluindo os limites exatos de `staleMs` e relógio adiantado ou atrasado (a mesma tolerância de −5 s já usada).
+
+**Passo 5 — Conferência no ambiente de teste e etapa fina (opcional).** Exige aprovação própria, porque roda a IAApi ligada ao Bridge e ao simulador.
+- **a.** Num teste do simulador de pelo menos 2 h (o mesmo da tarefa 6), comparar o card novo com o log gravado em arquivo. A duração dos ciclos, as tags avaliadas e os timeouts devem bater com as linhas `Bridge lote…` e `Predição finalizada…`.
+- **b. Opcional:** levar a "etapa atual" para dentro da tag (`Bridge.HttpBuffered`, `Prediction.Preparation`, `Decision.Ensemble`…), reaproveitando as chamadas `PerformanceDiagnostics.Measure` que já delimitam essas etapas.
+  - Para isso, `Measure` precisaria avisar o status mesmo com o PERF_DIAG desligado, o que muda o caminho rápido de hoje (`if (!Enabled) return operation()`).
+  - Fica para depois do passo 4 e só se a etapa da tag não bastar para achar o travamento.
+
+#### 19.3 Resumo de arquivos, risco e aceite
+- **Arquivos novos:**
+  - `Services/Monitoring/MonitoramentoStatusService.cs` (com o record do snapshot);
+  - `Controllers/MonitoramentoStatusController.cs`;
+  - `IAApi.Tests/Monitoring/MonitoramentoStatusServiceTests.cs` e `MonitoramentoStatusControllerTests.cs`.
+- **Arquivos alterados:**
+  - `Services/MonitoramentoTagsService.cs` (só chamadas acrescentadas);
+  - `Services/DependencyInjection/IAApiApplicationServiceCollectionExtensions.cs`;
+  - LiveMonitor: `tools/IAApi.LiveMonitor/server/proxy.ts`, `src/api.ts`, `src/types.ts`, `src/useMonitor.ts`, `src/domain.ts`, `src/App.tsx`, `src/style.css`, `tests/proxy.test.ts` e `tests/domain.test.ts`.
+- **Não muda:** `PredictionService`, detectores, pesos, limiares, `AnomaliaDetectada`, `GET /api/anomalias`, `/api/anomaly-runtime/*`, `/api/intelligence-lab/*`, `appsettings.json`. Não há migration nem pacote novo.
+- **Risco:** baixo. O ponto sensível é o passo 2: uma chamada ao status que lançasse exceção desviaria o laço. Por isso o serviço é "nunca lança", e isso é testado no passo 1.
+- **Rollback:**
+  - passo 4: reverter o commit do LiveMonitor. O card 2 continua funcionando sozinho;
+  - passos 2 e 3: reverter o commit, ou só tirar o registro na DI. O laço aceita `status = null`;
+  - passo 1: apagar o arquivo.
+- **Aceite:**
+  - **(a)** `dotnet test` (filtro `Monitoramento` e a suíte completa) e `npm test` no LiveMonitor, ambos verdes e offline. Antes de rodar, conferir o isolamento, como pede o `CLAUDE.md`.
+  - **(b)** Com o relógio falso e sem chamadas novas, a etapa e o `DesdeUtc` ficam parados, e `monitorHealth` devolve PARADO depois de `staleMs`.
+  - **(c)** Replay RC-2 com 0 diferenças.
+  - **(d)** Na conferência do passo 5a, o card bate com o log por ciclo.
+  - Sem (d), não afirmar que o indicador funciona no teste real.
+- **Relação com outras tarefas:**
+  - O cálculo de idade do passo 3 é o "verificador independente do laço" da **tarefa 20**. Ela só acrescenta o limite configurável e o Warning.
+  - A **tarefa 18** pode usar as contagens de falha e timeout deste status como o "buffer em memória" que ela cita. A decisão entre buffer e tabela continua na 18.
+- **Esforço total:** M (passos 1–4).
 
 ### 20. (Robustez) Alerta quando o ciclo passa de X minutos
 - **Problema (P26, P27):** um ciclo de 15 min e um monitor parado por 11 h passaram despercebidos.
@@ -249,6 +380,59 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
   - contratos HTTP e o formato dos diagnósticos já consumidos (LiveMonitor, `Dump-Diagnostics.ps1`) só mudam de forma aditiva.
 - **Risco:** baixo (só leitura e documento). **Esforço:** M.
 - **Aceite:** todos os itens do escopo estão na tabela, com finalidade, dependências, usos, sobreposições e proposta com motivo, e com cada afirmação marcada como confirmada no código ou hipótese. Nenhum arquivo de código ou de ferramenta foi alterado.
+
+---
+
+*Item 22 acrescentado em 2026-11-13, a partir do P28 (levantamento da tarefa 19). Não aprovado; nada implementado.*
+
+### 22. (Robustez/testes) Endereço do Bridge pela configuração e `HttpClient` substituível nos serviços do Bridge
+- **Problema (P28, confirmado no código):**
+  - `BridgeValorAtualService` e `BridgeTagsService` têm `http://localhost:5001` fixo no código e criam o próprio `HttpClient`. Só o `BridgeHistoricoService` lê `Bridge:BaseUrl`.
+  - Mudar a chave muda só o histórico, sem aviso.
+  - Os testes não têm como substituir o transporte, a não ser por reflexão em campo privado. Isso bloqueia testes offline do laço do monitor com tags (tarefa 19, passo 2) e o aceite da tarefa 18.
+- **O que se reaproveita** (confirmado no código; não se cria configuração nova):
+  - **A chave `Bridge:BaseUrl`**, que já existe no `appsettings.json` e já é lida por `BridgeHistoricoService.ObterBaseUrl`, com o mesmo padrão `http://localhost:5001`. O valor configurado hoje é **igual** ao endereço fixo, conferido sem expor o valor. Com a configuração atual, as URLs não mudam.
+  - **O padrão de cliente tipado:** `AddHttpClient<ILlmProvider, LmStudioLlmProvider>` em `DependencyInjection/Llm/LlmServiceCollectionExtensions.cs` já define `BaseAddress` e `Timeout` pela configuração. O `AddHttpClient` já compila no projeto, então não há pacote novo.
+  - **O registro atual:** `Services/DependencyInjection/BridgeServiceCollectionExtensions.cs` (`AddBridgeServices`), sem mudar a assinatura. A configuração é lida pelo `IServiceProvider` dentro do registro, como faz o LLM.
+  - **O handler falso dos testes** (`BridgeHandler` em `IAApi.Tests/PerformanceDiagnosticsTests.cs`, com `http://bridge.test`): reaproveitar ou mover para um auxiliar de teste comum, em vez de escrever outro.
+- **Proposta em passos** (cada um com aprovação própria; nenhum muda a decisão):
+  - **Passo 1. `BridgeValorAtualService` e `BridgeTagsService` como clientes tipados.**
+    - Em `AddBridgeServices`, trocar `AddScoped<BridgeValorAtualService>()` e `AddScoped<BridgeTagsService>()` por `AddHttpClient<…>`.
+    - `BaseAddress` vem de `Bridge:BaseUrl`, com o mesmo padrão `http://localhost:5001`, normalizado com uma `/` no fim. Sem essa barra, um endereço com caminho perderia o último trecho ao juntar com o caminho relativo.
+    - **Timeouts iguais aos de hoje:** 60 s no valor atual. Nos tags, os 100 s do padrão do .NET, escritos explicitamente para documentar.
+    - Os construtores passam a receber `HttpClient`. As chamadas usam caminhos relativos: `valores-atuais` e `tags?cliente=…`, com o mesmo `clienteId` de hoje, sem mudar a codificação.
+    - **Vida útil:** de `Scoped` passa a `Transient`, que é o padrão do cliente tipado. Os dois serviços não guardam estado além do `HttpClient` (confirmado no código), então a troca não muda o comportamento. Ela também elimina o `HttpClient` novo e não descartado a cada escopo (P28, hipótese de esgotar conexões).
+    - **Fora do escopo:** chave nova de timeout. Mudar o timeout é decisão operacional.
+  - **Passo 2. Testes e ajuste dos usos diretos.**
+    - Novo `IAApi.Tests/Bridge/BridgeServicesTests.cs`, com handler falso e sem rede:
+      - URL final igual a `{BaseUrl}/valores-atuais` e `{BaseUrl}/tags?cliente=…`, com e sem barra no fim e com caminho no `BaseUrl`;
+      - corpo JSON do `POST` idêntico ao atual;
+      - a conversão da resposta não muda;
+      - registro na DI: resolver pelo `ServiceCollection` com configuração em memória e conferir o `Timeout` e o `BaseAddress` do cliente nomeado (`IHttpClientFactory.CreateClient(nameof(…))`);
+      - sem `Bridge:BaseUrl`, cai em `http://localhost:5001`, só verificando a URL montada pelo handler falso, sem conexão.
+    - **Ajuste** em `IAApi.Tests/IntelligenceLab/IntelligenceLabBehaviorBaselineEndToEndTests.cs:1105`: passar um `HttpClient` com handler que **falha o teste se for chamado**. A garantia que hoje só está no comentário passa a ser verificada.
+    - `tools/Cp300OfflineReplay` (`null!`) não muda.
+  - **Passo 3 (opcional). `BridgeHistoricoService` no mesmo padrão.**
+    - Receber `HttpClient` pelo construtor, mantendo o `IConfiguration` para `Bridge:HorasHistorico`.
+    - Isso apaga o `ObterBaseUrl` duplicado. Os testes de `PerformanceDiagnosticsTests` e `PredictionHistoryReuseTests` deixam de usar reflexão.
+    - **Cuidado:** o serviço é `Singleton`, registrado como `IHistoricoService`. Um cliente tipado dentro de um singleton fica preso para sempre. Usar `IHttpClientFactory` ou manter um único `HttpClient` criado no registro.
+    - Fica separado porque mexe no histórico de toda leitura e nos testes do PERF_DIAG e do reaproveitamento do histórico.
+- **Arquivos:** `Services/BridgeValorAtualService.cs`; `Services/BridgeTagsService.cs`; `Services/DependencyInjection/BridgeServiceCollectionExtensions.cs`; `IAApi.Tests/Bridge/BridgeServicesTests.cs` (novo); `IAApi.Tests/IntelligenceLab/IntelligenceLabBehaviorBaselineEndToEndTests.cs`. No passo 3, também `Services/BridgeHistoricoService.cs`, `IAApi.Tests/PerformanceDiagnosticsTests.cs` e `IAApi.Tests/PredictionHistoryReuseTests.cs`.
+- **Não muda:**
+  - URLs, corpo, timeouts e tratamento de erro com a configuração atual;
+  - decisão de anomalia, contratos HTTP da IAApi e `appsettings.json` (a chave já existe).
+- **Risco:** baixo a médio. É o caminho de aquisição de toda leitura do monitor, mas só a forma de obter o cliente e a URL. O comportamento muda apenas onde `Bridge:BaseUrl` for diferente de `http://localhost:5001`: aí o valor atual e os tags passam a seguir a chave, como o histórico já faz.
+  - Antes de implementar, conferir sem expor valores se alguma máquina de teste define a chave diferente, por `appsettings.*.json` ou pela variável de ambiente `Bridge__BaseUrl`.
+  - Hoje o `appsettings.Development.json` não define a chave.
+- **Rollback:** reverter o commit. Não há migration nem configuração nova.
+- **Esforço:** P (passos 1 e 2) / P (passo 3).
+- **Aceite:**
+  - **(a)** Testes novos verdes, offline, sem nenhuma conexão real. O handler falso conta as chamadas.
+  - **(b)** Suíte completa de `dotnet test` verde. Antes de rodar, conferir o isolamento, como pede o `CLAUDE.md`.
+  - **(c)** Replay RC-2 com 0 diferenças. Só como sanidade: o replay não usa estes serviços (confirmado no código).
+  - **(d)** `localhost:5001` aparece no código de produção em um único lugar, o valor padrão da configuração.
+  - **(e)** Na próxima sessão autorizada com o Bridge, as linhas `Bridge lote…` do log mostram tempos e contagens normais. Sem essa conferência, não afirmar que o comportamento no ambiente de teste ficou igual.
+- **Ordem:** antes do passo 2 da tarefa 19 e dos testes das tarefas 18 e 20. Não depende de nenhuma outra tarefa.
 
 ---
 

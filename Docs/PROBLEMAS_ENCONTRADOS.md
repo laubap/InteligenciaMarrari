@@ -56,6 +56,7 @@
 | **P25** | Absorção da falha pelo baseline móvel: uma deterioração longa entra nas 24 h móveis e passa a ser "normal"; com regime, nenhum detector fica ancorado em referência estável | **Hipótese** (mecanismo confirmado no código; efeito a medir com o teste de deriva sintética) | Indício pequeno no preset 6 (RES6 §2.6); proposta em `Docs/PROPOSTA_BASELINE_ESTAVEL.md` | Falha não detectada (deterioração lenta) | **Alta** (medir) |
 | **P26** | A IA real avaliou cada tag do PK2 só 3 a 5 vezes em ~48 min (12/11 14:21–15:09): cerca de uma avaliação a cada ~10 min por tag, enquanto os dados chegam a 1 por minuto. Parte das tentativas estourou o timeout de 60 s do Bridge e ficou sem decisão | Confirmado em log (decisões da API + Event Viewer); efeito na detecção é inferência | IA real no preset 3 (`dados/ia_real_preset3.csv`) | Falha não detectada / atraso (~90% dos minutos sem avaliação) | **Alta** |
 | **P27** | A IAApi parou de gravar decisões do PK2 (e do PK7) às 15:09 de 12/11, sem nenhum aviso ou erro no log, e só voltou depois de reiniciar em 13/11. Causa desconhecida | Parada confirmada nos dados e no Event Viewer; **causa: hipótese** | IA real no preset 3 | Monitoramento parado sem alerta: cerca de 11 h de teste perdidas | **Alta** |
+| **P28** | O endereço do Bridge está fixo no código (`http://localhost:5001`) em `BridgeValorAtualService` e `BridgeTagsService`, sem configuração nem ponto de substituição para teste. Só o histórico lê `Bridge:BaseUrl` | Confirmado no código (13/11) | — (levantamento da BACKLOG 19) | Risco: configuração enganosa; o laço do monitor não pode ser testado offline com tags | Média |
 
 ---
 
@@ -453,7 +454,32 @@
   - **c.** Se parar: **antes de reiniciar**, (1) ver a última linha do log (um "Predição iniciada" sem "finalizada" indica a tag e a etapa); (2) ver se a janela do console está em modo "Selecionar"; (3) registrar o PID, o uso de CPU e o número de threads do processo; (4) se aprovado, tirar uma pilha com `dotnet-stack report -p <PID>` (exige instalar a ferramenta) para ver onde a thread do monitor está parada.
   - **d.** Conferir o Event Viewer (Aplicativo, `.NET Runtime`, `MonitoramentoTagsService`) da janela do teste.
   - **e.** Adiar as reinicializações do Windows Update durante testes longos: o de 12/11 foi interrompido pelo reinício das 02:01.
-- **BACKLOG:** não há item.
+- **BACKLOG** (atualizado em 13/11; nenhuma tarefa aprovada nem implementada):
+  - **6:** execução já aprovada com o log em arquivo, com data e hora (passos a, b e d acima).
+  - **17:** trocar `Console.WriteLine` por `ILogger` no caminho do monitor. Ataca a hipótese 1, mas não basta sozinha.
+  - **18:** leituras com timeout ou falha passam a gerar um registro visível de "sem dados".
+  - **19:** "sinal de vida" do monitor: último ciclo, duração, tags avaliadas e etapa atual, com endpoint e indicador no LiveMonitor. Mostra **onde** o laço parou, sem `dotnet-stack`.
+  - **20:** alerta quando o ciclo passa de X minutos, com verificação independente da thread do laço.
+
+### P28. Endereço do Bridge fixo no código, sem configuração nem ponto de substituição para teste
+
+- **O que acontece** (confirmado no código, 13/11, no levantamento da tarefa 19):
+  - `Services/BridgeValorAtualService.cs` chama `http://localhost:5001/valores-atuais` com o endereço fixo no código. O `HttpClient` é criado no próprio campo (`new() { Timeout = 60 s }`). Não há interface, método virtual nem construtor que receba o cliente ou a configuração.
+  - `Services/BridgeTagsService.cs` faz o mesmo em `http://localhost:5001/tags?cliente=…`, com `new HttpClient()` sem timeout explícito (o padrão do .NET é 100 s).
+  - Só o `Services/BridgeHistoricoService.cs` lê a chave `Bridge:BaseUrl` (método `ObterBaseUrl`, com `http://localhost:5001` como valor padrão). Mesmo assim, ele também cria o próprio `HttpClient` no construtor.
+  - O valor de `Bridge:BaseUrl` no `appsettings.json` hoje é igual ao endereço fixo. Por isso, as três consultas vão para o mesmo lugar **na configuração atual**.
+  - O projeto já registra `HttpClient` pela DI em outro lugar: `AddHttpClient<ILlmProvider, LmStudioLlmProvider>` em `DependencyInjection/Llm/LlmServiceCollectionExtensions.cs`, com `BaseAddress` e `Timeout` vindos da configuração.
+- **Consequências:**
+  - **Configuração enganosa** (confirmado no código; não ocorreu): mudar `Bridge:BaseUrl` muda só o histórico. O valor atual (usado em toda leitura do monitor) e a lista de tags continuam em `localhost:5001`, sem nenhum aviso.
+  - **Testes sem ponto de substituição suportado** (confirmado no código e nos testes): um teste que passe pelo serviço real do valor atual chama o Bridge real, se ele estiver ligado na máquina. Hoje, os testes contornam isso de três formas:
+    - `IAApi.Tests/IntelligenceLab/IntelligenceLabBehaviorBaselineEndToEndTests.cs` usa `new BridgeValorAtualService()` e confia que o fluxo "retorna antes de chamar". O próprio comentário avisa que, se o fluxo mudar, o teste tenta acessar localhost;
+    - `tools/Cp300OfflineReplay/Cp300Replay.cs` passa `null!`;
+    - `IAApi.Tests/PerformanceDiagnosticsTests.cs` e `PredictionHistoryReuseTests.cs` trocam por **reflexão** o campo privado `_httpClient` do `BridgeHistoricoService` por um cliente com handler falso (`http://bridge.test`). O contorno funciona, mas quebra sem aviso se o campo mudar de nome ou de forma.
+  - **Tarefas afetadas:** sem um ponto de substituição suportado, um teste automático do laço `MonitoramentoTagsService` com tags (BACKLOG 19, passo 2) e o aceite da tarefa 18 ("Bridge simulado fora") ficam dependentes do mesmo contorno por reflexão.
+  - **Hipótese, não observada:** como `BridgeValorAtualService` e `BridgeTagsService` são `Scoped`, cada escopo cria um `HttpClient` novo e não o descarta. É o uso que o .NET desaconselha, porque pode esgotar conexões em uso prolongado. Não há evidência de que isso tenha contribuído para P26 ou P27.
+- **Status:** confirmado no código. Não é causa demonstrada de nenhuma falha de detecção.
+- **Impacto:** risco (testabilidade e configuração enganosa). **Prioridade:** Média, porque destrava os testes das tarefas 18 a 20.
+- **BACKLOG:** 22.
 
 ---
 
