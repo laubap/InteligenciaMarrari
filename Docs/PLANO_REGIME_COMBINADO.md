@@ -449,7 +449,7 @@ Limiar = 60.
 - **Com a chave ligada**, só usa regime combinado a tag que tiver componentes cadastrados; as demais seguem iguais.
 - **Rollback:** desligar a chave (volta ao comportamento atual sem tocar no banco) ou `Ativo = false` por tag (volta ao baseline global daquela tag).
 
-### 6.2 Decisões de projeto (fechar na RC-4)
+### 6.2 Decisões de projeto (fechadas na RC-4, 13/11/2026)
 
 | Decisão | Opções | Recomendação |
 |---|---|---|
@@ -459,6 +459,11 @@ Limiar = 60.
 | Comparação com mapa | Mapear e comparar exato × comparar com `ToleranciaEstado` | Mapear (a entrada do mapa casa com `ToleranciaEstado`) e comparar exato |
 | Lag e tolerância de alinhamento | Por componente × da configuração | **Da configuração** (os mesmos para os 3 componentes); por componente só se a RC-0 mostrar necessidade |
 | Formato da chave | `TAG42=2\|TAG43=0\|TAG46=380`: valores **mapeados**, `InvariantCulture`, na ordem dos componentes | Esse; é a futura chave dos perfis por regime (PROP §4-A) |
+
+**Fechamento (13/11/2026, RC-4):**
+- **Aprovadas pela responsável:** componente 1 = opção (a) (`TagRegime` atual + coluna nula `MapaEstados`; tabela filha só com os componentes 2..N, entra na RC-5); **tupla pura** na primeira versão, com o mapa configurável por componente para corrigir se a RC-0 mostrar diferença (a RC-0 ainda não foi feita); valor fora do mapa e sem `*` **passa sem mudança** e entra no relatório de cobertura (RC-10).
+- **Adotadas conforme a recomendação na implementação da RC-4 e aprovadas pela responsável em 13/11/2026, depois da entrega:** comparação = mapear com `ToleranciaEstado` e comparar exato; formato da chave `TAG42=2|TAG43=0|TAG46=380`.
+- **Ainda sem aprovação explícita:** lag e tolerância de alinhamento da configuração valendo para os 3 componentes (recomendação de §6.2). Isso só entra no código na RC-6; confirmar lá.
 
 **Configuração alvo das bombas** (cadastrada só na RC-12):
 
@@ -481,7 +486,7 @@ Coluna "muda comportamento":
 | RC-1 | Análise do atraso da TAG29 com as saídas da etapa 0 — **concluída em 12/11/2026 (§5.6.1)** | — | não |
 | RC-2 | Referência congelada e regressão byte a byte — **concluída em 12/11/2026** | — | não |
 | RC-3 | Resolver com dois ponteiros — **concluída em 13/11/2026** | RC-2 | não (provado) |
-| RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) | RC-0 | não |
+| RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) — **concluída em 13/11/2026** | RC-0 | não |
 | RC-5 | Modelo `TagRegimeComponenteIa` + migration | RC-4 | não |
 | RC-6 | Resolver com N componentes | RC-3, RC-4 | não (provado) |
 | RC-7 | Bloqueio de rótulos por cliente (backlog 11) — **concluída em 13/11/2026** | — | não (lista vazia por padrão) |
@@ -556,6 +561,13 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - **Arquivos:** novos `Services/AnomalyDetection/RegimeCombinadoOptions.cs`, `OperationalRegimeStateMap.cs` e `OperationalRegimeKey.cs`; `Services/AnomalyDetection/DependencyInjection/AnomalyDetectionServiceCollectionExtensions.cs`; testes novos em `IAApi.Tests/Services/AnomalyDetection/`.
 - **Aceite:** testes do parse (válido, inválido, `*`, tolerância), da chave (cultura pt-BR × invariante, ordem) e das opções (padrão `false`, leitura da seção). Nada chama essas classes ainda; RC-2 com 0 diferenças.
 - **Muda comportamento:** não.
+- **Resultado (13/11/2026, sem mudança de comportamento):**
+  - **Decisões de §6.2:** fechadas (ver "Fechamento" em §6.2); comparação e formato da chave aprovados em 13/11/2026, depois da entrega. Feita antes da RC-0, por decisão da responsável; a tupla pura fica sujeita à conferência da RC-0, com o mapa como ajuste.
+  - **`RegimeCombinadoOptions`** (novo): seção `AnomalyDetection:RegimeCombinado`, `Habilitado = false` por padrão no código; registrada em `AddAnomalyDetectionConfiguration`. O `appsettings.json` não mudou (há teste que confere que ele não tem a seção). Nada lê a opção ainda (RC-8).
+  - **`OperationalRegimeStateMap`** (novo): `Parse`/`TryParse` da sintaxe `chave:valor;…;*:valor`, `InvariantCulture`, sem separador de milhar (`2,5` é erro). Erro para texto vazio, entrada vazia (inclusive `;` no fim), forma inválida, número inválido ou não finito (`NaN`, `Infinity`, `1e400`), valor `*`, chave repetida (numericamente: `2` e `2.0`) e `*` repetido. `Apply(valor, ToleranciaEstado)`: casa com a **primeira** entrada numérica, na ordem escrita, com `|valor − chave| ≤ tolerância`; senão o `*`; senão `OutOfMap` com o valor sem mudança (status exposto para o relatório da RC-10). Leitura não finita = `OutOfMap`; tolerância negativa ou não finita = exceção. `ToString()` dá a forma canônica.
+  - **`OperationalRegimeKey`** (novo): `Build(componentes)` ⇒ `TAG42=2|TAG43=0|TAG46=380`, na ordem dos componentes, valores com `"R"` e `InvariantCulture`, `-0` ⇒ `0`, tag sem espaços nas pontas. Erro para lista vazia, tag vazia, tag com `|` ou `=`, tag repetida (sem diferenciar caixa) e valor não finito.
+  - **Testes** (`IAApi.Tests/Services/AnomalyDetection/RegimeCombinadoClassesTests.cs`, 65): opções (padrão `false`, leitura da seção, seção ausente, sem efeito nas outras opções, `appsettings.json` sem a seção); parse válido e 25 inválidos; independência da cultura pt-BR; aplicação com tolerância, curinga, fora do mapa, ordem de prioridade, não finitos; chave (formato do plano, ordem B-01 × B-02, pt-BR = invariante, `-0`, erros) e a configuração alvo das bombas de ponta a ponta (mapa + chave).
+  - **Executado:** `dotnet test -c Release` com filtro `OperationalRegime|RegimeCombinado|Cp300|PredictionServiceDeadbandWiring|PredictionHistoryReuse|IntelligenceLabBehaviorBaselineEndToEnd|AnomalyDetectionOptions|DependencyInjection`: **205/205**. Sem avisos de compilação nos arquivos novos. `Compare-Replay.ps1 -Configuracao Release`: **0 diferenças** em 6 execuções (`dados/rc2_rodadas/20261113_120512`). **A suíte completa não foi rodada.**
 
 #### RC-5. Modelo e migration
 - **Objetivo:** entidade `TagRegimeComponenteIa` (`Id`, `ConfiguracaoId`, `Ordem` ≥ 2, `TagRegime`, `MapaEstados` nulo, `ToleranciaEstado`), relação com `TagRegimeOperacionalIa`, índice único (`ConfiguracaoId`, `Ordem`) e, se a opção (a) de §6.2 for a escolhida, coluna nula `MapaEstados` na tabela atual. O índice único atual (`ClienteId`, `TagName`) não muda.

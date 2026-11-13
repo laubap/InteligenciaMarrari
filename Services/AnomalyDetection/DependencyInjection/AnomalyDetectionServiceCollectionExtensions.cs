@@ -19,6 +19,12 @@ public static class AnomalyDetectionServiceCollectionExtensions
             configuration.GetSection(
                 OperationalRegimeForbiddenTagsOptions.SectionName));
 
+        // RC-4: chave do regime combinado; Habilitado = false se a seção
+        // não existir (padrão). Nada lê esta opção até a RC-8.
+        services.Configure<RegimeCombinadoOptions>(
+            configuration.GetSection(
+                RegimeCombinadoOptions.SectionName));
+
         return services;
     }
 
