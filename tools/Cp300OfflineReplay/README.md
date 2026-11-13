@@ -82,6 +82,9 @@ dotnet run --project tools/Cp300OfflineReplay -- `
 | `--historico-inclui-atual` | Inclui a própria leitura t no histórico servido a ela. Padrão: não inclui. |
 | `--historico-causal` | Liga a chave `AnomalyDetection:HistoricoCausal` (P31) nas duas preparações, com a tolerância padrão de 30 min: só os pontos anteriores à leitura entram na detecção. Sem `--historico-inclui-atual`, o CSV já serve só esses pontos; o recorte não remove nada e a saída é idêntica. Com `--historico-inclui-atual`, o recorte tira o ponto t, e a entrada dos detectores volta a ser a do padrão (não verificado byte a byte). |
 | `--regime TAGx=TAGy` | Baseline por regime: TAGy (tag de estado) vira a `TagRegime` de TAGx. Pode ser repetida, ou receber pares separados por vírgula. Cria a linha em `TagsRegimesOperacionaisIa` (SQLite em memória) com os padrões do modelo: lag 0, tolerância de 2 min, `ToleranciaEstado` 0,001 e mínimo de 30 amostras. **Recusa TAG60–TAG81** (rótulos), uma tag como regime de si mesma, TAGx fora das tags reproduzidas e TAGy ausente do CSV. TAGy precisa estar no CSV, mas não precisa ser reproduzida. |
+| `--regime-combinado` | RC-10 (`Docs/PLANO_REGIME_COMBINADO.md` §6): liga `AnomalyDetection:RegimeCombinado:Habilitado` no provider do replay, com TAG60–TAG81 na lista de tags proibidas do cliente (defesa extra). Só com ela `--regime` aceita vários componentes e `--regime-mapa` é aceito; a saída ganha a coluna `chave_regime` e o log, a cobertura por chave (seção 2.3). **Sem a opção, `+` e `--regime-mapa` são recusados (código 2) e a saída é a anterior, byte a byte.** |
+| `--regime TAGx=TAGa+TAGb+TAGc` | Só com `--regime-combinado`. Regime combinado com N componentes, na ordem da tupla (ex.: `TAG27=TAG42+TAG43+TAG46`). O componente 1 vai para a linha de `TagsRegimesOperacionaisIa` (com o mapa em `MapaEstados`) e os demais para `TagsRegimesComponentesIa` (`Ordem` 2..N, `ToleranciaEstado` 0,001), como na configuração alvo de §6.2. Lag e tolerância de alinhamento da linha principal valem para todos. **Recusa TAG60–TAG81 em qualquer componente**, componente ausente do CSV, componente repetido e a própria TAGx como componente. Um regime de 1 componente segue o caminho atual do runtime (o mapa dele é ignorado, com aviso). |
+| `--regime-mapa "TAGa=2:2;*:0"` | Só com `--regime-combinado`. Mapa de estados da tag de regime TAGa (sintaxe de `OperationalRegimeStateMap`), aplicado a ela em todas as configurações. Repetível, um mapa por opção. Recusa sintaxe inválida, mapa repetido e tag que não é componente de nenhum `--regime`. |
 | `--verbose` | Mostra os `Console.WriteLine` do runtime. Por padrão ficam ocultos. |
 
 Código de saída: 0 = ok; 1 = erro, divergência na conferência ou treino recusado pela trava de TAG73; 2 = uso incorreto (inclusive combinação inválida de opções de treino).
@@ -115,6 +118,18 @@ Regime TAG28 <- TAG43, pontos por estado no treino: 0=... 2=... 3=...
 Regime TAG28 <- TAG43, pontos por estado na primeira janela movel: ...
 ```
 
+Com `--regime-combinado`, aparecem também (só para regimes com 2 ou mais componentes):
+
+```
+Regime combinado: ligado (AnomalyDetection:RegimeCombinado:Habilitado = true no replay; ...)
+Regime: TAG29 <- TAG42+TAG43+TAG46 | mapas: TAG42=2:2;*:0 TAG43=2:2;*:0 TAG46=380:380;*:450
+Regime TAG29 <- TAG42+TAG43+TAG46, pontos por chave no treino: TAG42=0|TAG43=2|TAG46=380 (20), ... | fora do mapa: nenhum
+Regime TAG29 <- TAG42+TAG43+TAG46, pontos por chave na primeira janela movel: ... | fora do mapa: TAG46=400 (12)
+```
+
+- A chave tem o formato de `OperationalRegimeKey` (valores **mapeados**). `fora do mapa` lista, por componente com mapa, os valores que não casaram com nenhuma entrada nem com `*` (passam sem mudança; decisão de §6.2). `sem_estado` = algum componente sem leitura nos 2 min anteriores.
+- Mesmo alinhamento simplificado da contagem por estado. Para componente sem mapa, a chave usa o valor lido, mas o resolver compara com `ToleranciaEstado` (não exato).
+
 - `pontos_treino` = pontos da tag no período de treino, **antes** da limpeza IQR (`usados` e `outliers` são depois).
 - A contagem por estado usa um alinhamento simplificado: o último estado até 2 min antes, com lag 0 (os padrões do modelo). A seleção real é feita pelo `OperationalRegimeHistoryResolver`; a contagem serve para ver se o período cobre os regimes.
 - O resumo da API (`Cp300ReplaySummary`) traz os mesmos dados: `TreinoInicio`, `TreinoFim`, `InicioReplay`, `PontosTreino`, `MinutosFalhaNoTreino` e `MinutosFalhaNaJanelaDoRegime`.
@@ -131,6 +146,7 @@ Regime TAG28 <- TAG43, pontos por estado na primeira janela movel: ...
 - Opções: `-Somente preset6_rec`, `-Pasta`, `-SemBuild`, `-Configuracao` (padrão `Debug`, a mesma da etapa 0).
 - `-HistoricoCausal` (P31, só na comparação): acrescenta `--historico-causal` a cada execução e compara com a **mesma** referência. Esperado: 0 diferenças. O `-Gerar` recusa a opção.
 - Teste golden sem dados industriais: `Cp300OfflineReplayTests.Golden_BombasComRegime_SaidaIdenticaAReferencia`, referência em `IAApi.Tests/Cp300Replay/Golden/`. Roda com a chave desligada e ligada, contra a mesma referência. Regravar de propósito com `IAAPI_ATUALIZAR_GOLDEN=1` (só a partir da execução sem a chave).
+- RC-10: `Golden_BombasComRegimeCombinado_SaidaIdenticaAReferencia` (`--regime-combinado`, `TAG29=TAG42+TAG43+TAG46`, `TAG30=TAG43+TAG42`, mapas de §6.2), referência `replay_bombas_regime_combinado.csv`. O `Compare-Replay.ps1` não usa `--regime-combinado`: ele prova que a saída sem a opção não mudou.
 
 ## 3. O que é igual à produção
 
@@ -144,7 +160,7 @@ Regime TAG28 <- TAG43, pontos por estado na primeira janela movel: ...
 - **Isolation Forest:** desligado. O PK2 não tem modelo no repositório.
 - **Multivariado** (shadow e fusão): desligado.
 - **Decisão runtime/canário:** desligada, então a decisão é a legada do ensemble. Isso vale para o PK2, que está fora do canário.
-- **Baseline por regime:** só com `--regime`. Nesse caso usa o `OperationalRegimeBaselineProvider` real, nas duas instâncias da preparação. Sem a opção, a coluna `origem_baseline` sai sempre `Global`, como antes.
+- **Baseline por regime:** só com `--regime`. Nesse caso usa o `OperationalRegimeBaselineProvider` real, nas duas instâncias da preparação. Sem a opção, a coluna `origem_baseline` sai sempre `Global`, como antes. Regime combinado só com `--regime-combinado` (chave ligada só no replay; a API continua com o padrão `false`).
 - **Baseline por comportamento:** não instanciado. O banco do PK2 não foi inventariado (BACKLOG, tarefa 2).
 - **Latência, ciclo de 60 s e processamento sequencial:** não reproduzidos. Cada leitura do CSV é avaliada no próprio minuto.
 - **Contexto da tag** (`TipoRepresentacao`) do banco real: não usado.
@@ -166,6 +182,7 @@ Uma linha por leitura e detector (6 por leitura). Se a leitura falhar antes do e
 | `erro` | Exceção do `PredictionService` ou do detalhamento. Exemplos: histórico com menos de 10 pontos, perfil não treinado. |
 | `conferencia` | `ok`, ou `divergente:<itens>` |
 | `valor_regime`, `motivo_baseline` | `BaselineEfetivo.RegimeValue` (vazio se o regime não foi aplicado) e `BaselineEfetivo.Reason` |
+| `chave_regime` | **Só com `--regime-combinado`** (última coluna). `BaselineEfetivo.RegimeKey` (RC-9), ex.: `TAG42=2\|TAG43=0\|TAG46=450`. Vazia se o regime não foi aplicado ou tem 1 componente. `valor_regime` continua sendo a leitura do componente 1 |
 
 **Como o detalhamento é obtido.** A resposta de produção não expõe tipo, origem do deadband nem motivo de entrada inválida. Por isso, para cada leitura, a ferramenta pede o mesmo `DetectorInput` ao `PredictionDetectionPreparationService` real e roda nele uma **segunda instância** do mesmo `EnsembleDetectionService`. A coluna `conferencia` compara a decisão e a nota dessa execução com as do `PredictionService` e confere se as contribuições somam a nota final.
 

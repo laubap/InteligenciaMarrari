@@ -591,7 +591,7 @@ Coluna "muda comportamento":
 | RC-7 | Bloqueio de rótulos por cliente (backlog 11) — **concluída em 13/11/2026** | — | não (lista vazia por padrão) |
 | RC-8 | Service e provider com componentes, atrás da chave — **concluída em 13/11/2026** | RC-5, RC-6, RC-7 | só com a chave |
 | RC-9 | `RegimeKey` no diagnóstico e no log — **concluída em 13/11/2026** | RC-8 | só com a chave (observabilidade) |
-| RC-10 | Replay com regime combinado | RC-8, RC-9 | não (ferramenta) |
+| RC-10 | Replay com regime combinado — **concluída em 13/11/2026** | RC-8, RC-9 | não (ferramenta) |
 | RC-11 | Equivalência com a etapa 0, critério da TAG29 e custo | RC-0, RC-1, RC-10 | não |
 | RC-12 | Ativação no ambiente de teste do PK2 | RC-11 + aprovação | **sim** |
 
@@ -827,6 +827,29 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - **Arquivos:** `tools/Cp300OfflineReplay/Cp300Replay.cs` (`ParseRegimes`, `ValidateRegimes`, `Colunas`, montagem do banco), `Program.cs` (uso), `README.md`; `IAApi.Tests/Cp300Replay/Cp300OfflineReplayTests.cs`.
 - **Aceite:** testes de parse (válido, TAG73 em qualquer posição, `+` sem `--regime-combinado`); teste golden da RC-2 inalterado; um teste golden novo com `--regime-combinado` sobre o CSV sintético.
 - **Muda comportamento:** não (ferramenta offline).
+- **Resultado (13/11/2026, sem mudança de runtime; sem a opção, saída do replay igual byte a byte):**
+  - **Opções** (`Cp300Replay.cs`, `Program.cs`):
+    - `--regime-combinado` (`Cp300ReplayOptions.RegimeCombinado`): o provider do replay recebe `RegimeCombinadoOptions { Habilitado = true }` e a lista de tags proibidas TAG60–TAG81 do cliente (defesa extra; a ferramenta já recusa antes). Sem a opção, o provider é construído **exatamente como antes** (sem opções);
+    - `--regime TAG27=TAG42+TAG43+TAG46`: `ParseRegimes(entradas, regimeCombinado)`; sem a opção, `+` é recusado com erro (código 2). Componente vazio (`TAG42++TAG43`, `TAG42+`) é erro;
+    - `--regime-mapa "TAG42=2:2;*:0"` (repetível, um mapa por opção; `ParseRegimeMapas`, sintaxe conferida por `OperationalRegimeStateMap`, guardado na forma canônica): vale para aquela tag de regime em todas as configurações. Sem `--regime-combinado`, recusado (código 2).
+  - **`ValidateRegimes`:** recusa TAG60–TAG81 em **qualquer** componente (a mensagem diz a posição), a tag analisada como componente, componente repetido (sem diferenciar caixa), componente ausente do CSV, mapa com sintaxe inválida e mapa de tag que não é componente de nenhum `--regime`. Com 1 componente, mensagens e ordem iguais às anteriores.
+  - **Banco em memória:** componente 1 na linha de `TagsRegimesOperacionaisIa` (com `MapaEstados`); componentes 2..N em `TagsRegimesComponentesIa` (`Ordem` 2..N, `ToleranciaEstado` 0,001 do modelo), como a configuração alvo de §6.2. Um regime de 1 componente segue o caminho atual do runtime (§6.1); se tiver mapa, o log avisa que ele é ignorado.
+  - **Saída:** `Colunas` não mudou; `ColunasDaSaida(true)` acrescenta `chave_regime` no fim, preenchida com `BaselineEfetivo.RegimeKey` (RC-9), **só** com a opção. `valor_regime` continua sendo a leitura do componente 1.
+  - **Log:** com a opção, a linha `Regime combinado: ligado ...`, a configuração de cada tag com os mapas e, para regimes de 2 ou mais componentes, `pontos por chave` no treino e na primeira janela móvel (chave no formato de `OperationalRegimeKey`, valores mapeados) com `fora do mapa` por componente (decisão de §6.2: passa sem mudança e entra no relatório). Alinhamento simplificado, igual ao da contagem por estado (último estado até 2 min antes, lag 0). Sem a opção, o log é o anterior.
+  - **Testes** (`Cp300OfflineReplayTests`, 11 novos; o golden da RC-2 não mudou):
+    - parse de componentes e mapas (válidos e inválidos; `+` sem a opção);
+    - TAG73 nas posições 1, 2 e 3, TAG60 e TAG81 ⇒ recusa com a posição;
+    - recusas: `+` e mapa sem a opção (opções montadas direto, sem a CLI), componente ausente, repetido ou igual à tag analisada, mapa de tag que não é componente, mapa inválido; nenhuma saída gravada;
+    - **equivalência:** com `--regime-combinado` e só regimes de 1 componente sem mapa, a saída é o golden da RC-2 mais a coluna `chave_regime` vazia;
+    - **golden novo** `IAApi.Tests/Cp300Replay/Golden/replay_bombas_regime_combinado.csv` (CSV sintético das bombas; `TAG29=TAG42+TAG43+TAG46` e `TAG30=TAG43+TAG42`, mapas de §6.2), sem e com `HistoricoCausal`, contra a mesma referência. Nele, a TAG30 (2 componentes, 3 classes de 40 pontos) aplica o regime com chave `TAG43=…|TAG42=…`. A TAG29 (3 componentes) cai no global em todas as leituras, porque as 6 classes do CSV sintético têm cerca de 20 pontos (< 30). É um limite do CSV sintético, não um resultado sobre os dados do simulador;
+    - log: cobertura por chave (6 classes somando 120 na B-01; 3 × 40 na B-02) e `TAG46=450` fora do mapa quando o mapa não tem `*`.
+    - CLI conferida à parte: `+` sem a opção, mapa sem a opção, mapa inválido e `--regime-mapa` sem valor ⇒ código 2.
+  - **Sensibilidade:** `chave_regime` sempre vazia (mutação temporária, restaurada e conferida com `cmp`) ⇒ os 2 casos do golden novo falham.
+  - **Executado:**
+    - ferramenta (`Cp300`): **44/44**;
+    - `Compare-Replay.ps1 -Configuracao Release`: **0 diferenças em 12 execuções** (`dados/rc2_rodadas/rc10_sem_hc`) e também com `-HistoricoCausal` (`rc10_com_hc`);
+    - **suíte completa: 1010/1010** (999 + 11).
+  - O replay real com `--regime-combinado` sobre os CSVs do simulador fica para a RC-11.
 
 #### RC-11. Equivalência com a etapa 0, critério da TAG29 e custo
 - **Objetivo:** rodar a Opção A real no replay e conferir contra a etapa 0.

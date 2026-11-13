@@ -94,6 +94,22 @@ public sealed record Cp300ReplayOptions
     /// </summary>
     public IReadOnlyDictionary<string, string>? Regimes { get; init; }
 
+    /// <summary>
+    /// RC-10: liga AnomalyDetection:RegimeCombinado:Habilitado no provider do
+    /// replay. So com ela o valor de <see cref="Regimes"/> pode ter varios
+    /// componentes ("TAG42+TAG43+TAG46"), <see cref="MapasRegime"/> pode ser
+    /// usado e a coluna chave_regime e gravada. False (padrao) = saida igual a
+    /// de antes, byte a byte.
+    /// </summary>
+    public bool RegimeCombinado { get; init; }
+
+    /// <summary>
+    /// RC-10: tag de regime -> mapa de estados (sintaxe de
+    /// OperationalRegimeStateMap, ex.: "2:2;*:0"). Vale para aquela tag de
+    /// regime em todas as configuracoes. Exige <see cref="RegimeCombinado"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? MapasRegime { get; init; }
+
     /// <summary>Destino das mensagens da ferramenta (nao do runtime).</summary>
     public TextWriter? Log { get; init; }
 }
@@ -148,11 +164,28 @@ public static class Cp300Replay
         "valor_regime", "motivo_baseline"
     ];
 
+    /// <summary>Coluna extra gravada so com --regime-combinado (RC-10).</summary>
+    public const string ColunaChaveRegime = "chave_regime";
+
+    /// <summary>
+    /// Colunas da saida: <see cref="Colunas"/> sem --regime-combinado (formato
+    /// anterior, inalterado); com a opcao, mais <see cref="ColunaChaveRegime"/> no fim.
+    /// </summary>
+    public static IReadOnlyList<string> ColunasDaSaida(bool regimeCombinado) =>
+        regimeCombinado ? [.. Colunas, ColunaChaveRegime] : Colunas;
+
+    /// <summary>Separador dos componentes do regime combinado em --regime.</summary>
+    public const char SeparadorComponentes = '+';
+
     /// <summary>
     /// Converte "TAGx=TAGy" (uma ou mais entradas; cada uma pode ter varios
     /// pares separados por virgula) em tag analisada -> tag de regime.
+    /// Com <paramref name="regimeCombinado"/>, TAGy pode ter varios componentes
+    /// ("TAG42+TAG43+TAG46"); o valor guardado e "TAG42+TAG43+TAG46" (sem espacos).
+    /// Sem a opcao, '+' e recusado.
     /// </summary>
-    public static IReadOnlyDictionary<string, string> ParseRegimes(IEnumerable<string> entradas)
+    public static IReadOnlyDictionary<string, string> ParseRegimes(
+        IEnumerable<string> entradas, bool regimeCombinado = false)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entrada in entradas)
@@ -162,7 +195,20 @@ public static class Cp300Replay
                 var partes = par.Split('=', StringSplitOptions.TrimEntries);
                 if (partes.Length != 2 || partes[0].Length == 0 || partes[1].Length == 0)
                     throw new ArgumentException($"--regime invalido: '{par}'. Formato: TAGx=TAGy");
-                if (!result.TryAdd(partes[0], partes[1]))
+                var regime = partes[1];
+                if (regime.Contains(SeparadorComponentes))
+                {
+                    if (!regimeCombinado)
+                        throw new ArgumentException(
+                            $"--regime '{par}': '+' (varios componentes) exige --regime-combinado.");
+                    var componentes = regime.Split(SeparadorComponentes, StringSplitOptions.TrimEntries);
+                    if (componentes.Any(c => c.Length == 0))
+                        throw new ArgumentException(
+                            $"--regime invalido: '{par}'. Formato: TAGx=TAGa+TAGb+TAGc");
+                    regime = string.Join(SeparadorComponentes, componentes);
+                }
+
+                if (!result.TryAdd(partes[0], regime))
                     throw new ArgumentException($"--regime repetido para {partes[0]}.");
             }
         }
@@ -171,28 +217,103 @@ public static class Cp300Replay
     }
 
     /// <summary>
-    /// Recusa rotulo do simulador como tag de regime ou analisada, regime
-    /// igual a propria tag, tag analisada fora do replay e regime ausente do CSV.
+    /// Converte "TAGy=mapa" (uma por entrada; o mapa usa ';' e ':', ex.:
+    /// "TAG42=2:2;*:0") em tag de regime -> mapa canonico. Sintaxe do mapa
+    /// conferida por OperationalRegimeStateMap.Parse.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ParseRegimeMapas(IEnumerable<string> entradas)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entrada in entradas)
+        {
+            var i = entrada.IndexOf('=');
+            var tag = i < 0 ? "" : entrada[..i].Trim();
+            var texto = i < 0 ? "" : entrada[(i + 1)..].Trim();
+            if (tag.Length == 0 || texto.Length == 0)
+                throw new ArgumentException($"--regime-mapa invalido: '{entrada}'. Formato: TAGy=2:2;*:0");
+            OperationalRegimeStateMap mapa;
+            try
+            {
+                mapa = OperationalRegimeStateMap.Parse(texto);
+            }
+            catch (FormatException ex)
+            {
+                throw new ArgumentException($"--regime-mapa {tag}: {ex.Message}", ex);
+            }
+
+            if (!result.TryAdd(tag, mapa.ToString()))
+                throw new ArgumentException($"--regime-mapa repetido para {tag}.");
+        }
+
+        return result;
+    }
+
+    /// <summary>Componentes de um valor de <see cref="Cp300ReplayOptions.Regimes"/>, na ordem.</summary>
+    private static string[] Componentes(string regime) =>
+        regime.Split(SeparadorComponentes, StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// Recusa rotulo do simulador como tag analisada ou em qualquer componente
+    /// do regime, regime igual a propria tag, componente repetido, tag analisada
+    /// fora do replay e componente ausente do CSV. Sem --regime-combinado,
+    /// recusa '+' e --regime-mapa; com ela, recusa mapa de tag que nao e componente.
     /// </summary>
     private static void ValidateRegimes(
-        IReadOnlyDictionary<string, string> regimes, IReadOnlyCollection<string> tags, Cp300Dataset dataset)
+        IReadOnlyDictionary<string, string> regimes, IReadOnlyDictionary<string, string> mapas,
+        bool regimeCombinado, IReadOnlyCollection<string> tags, Cp300Dataset dataset)
     {
+        if (!regimeCombinado)
+        {
+            if (mapas.Count > 0)
+                throw new ArgumentException("--regime-mapa exige --regime-combinado.");
+            var combinado = regimes.FirstOrDefault(p => p.Value.Contains(SeparadorComponentes));
+            if (combinado.Key is not null)
+                throw new ArgumentException(
+                    $"--regime {combinado.Key}={combinado.Value}: '+' (varios componentes) exige --regime-combinado.");
+        }
+
         foreach (var (alvo, regime) in regimes)
         {
-            if (IsLabelTag(regime))
-                throw new InvalidOperationException(
-                    $"{regime} e rotulo do simulador (TAG60-TAG81) e nunca pode ser tag de regime.");
+            var componentes = Componentes(regime);
+            if (componentes.Any(c => c.Length == 0))
+                throw new ArgumentException($"--regime invalido: '{alvo}={regime}'.");
+            for (var k = 0; k < componentes.Length; k++)
+            {
+                var componente = componentes[k];
+                var posicao = componentes.Length > 1 ? $" (componente {k + 1})" : "";
+                if (IsLabelTag(componente))
+                    throw new InvalidOperationException(
+                        $"{componente}{posicao} e rotulo do simulador (TAG60-TAG81) e nunca pode ser tag de regime.");
+            }
+
             if (IsLabelTag(alvo))
                 throw new InvalidOperationException(
                     $"{alvo} e rotulo do simulador (TAG60-TAG81) e nunca pode ser entrada da IA.");
-            if (string.Equals(alvo, regime, StringComparison.OrdinalIgnoreCase))
+            if (componentes.Any(c => string.Equals(alvo, c, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException($"{alvo} nao pode ser tag de regime de si mesma.");
+            if (componentes.Distinct(StringComparer.OrdinalIgnoreCase).Count() != componentes.Length)
+                throw new InvalidOperationException($"--regime {alvo}={regime}: componente repetido.");
             if (!tags.Contains(alvo, StringComparer.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"--regime: {alvo} nao esta entre as tags reproduzidas.");
-            if (!dataset.Readings.ContainsKey(regime))
-                throw new InvalidOperationException($"--regime: tag de regime {regime} nao existe no CSV.");
+            foreach (var componente in componentes)
+            {
+                if (!dataset.Readings.ContainsKey(componente))
+                    throw new InvalidOperationException($"--regime: tag de regime {componente} nao existe no CSV.");
+            }
+        }
+
+        foreach (var (tag, texto) in mapas)
+        {
+            if (!OperationalRegimeStateMap.TryParse(texto, out _, out var erro))
+                throw new ArgumentException($"--regime-mapa {tag}: {erro}");
+            if (!regimes.Values.SelectMany(Componentes).Contains(tag, StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException($"--regime-mapa {tag}: a tag nao e componente de nenhum --regime.");
         }
     }
+
+    /// <summary>Nome da tag como aparece no CSV (o --regime nao diferencia caixa).</summary>
+    private static string NomeNoCsv(Cp300Dataset dataset, string tag) =>
+        dataset.Readings.Keys.First(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase));
 
     public static async Task<Cp300ReplaySummary> RunAsync(Cp300ReplayOptions options)
     {
@@ -206,7 +327,9 @@ public static class Cp300Replay
             throw new InvalidOperationException("Nenhuma tag para reproduzir.");
 
         var regimes = options.Regimes ?? new Dictionary<string, string>();
-        ValidateRegimes(regimes, tags, dataset);
+        var mapas = options.MapasRegime ?? new Dictionary<string, string>();
+        var regimeCombinado = options.RegimeCombinado;
+        ValidateRegimes(regimes, mapas, regimeCombinado, tags, dataset);
 
         var clienteId = dataset.ClienteId;
         var periodo = ResolveTrainingPeriod(options, horasHistorico);
@@ -260,18 +383,58 @@ public static class Cp300Replay
             db.TagsIaConfig.Add(new TagIaConfig { ClienteId = clienteId, TagName = tag, IaAtiva = true });
         // Baseline por regime: mesma tabela lida por OperationalRegimeBaselineProvider
         // em producao, com os valores padrao do modelo.
+        if (regimeCombinado)
+            log.WriteLine("Regime combinado: ligado (AnomalyDetection:RegimeCombinado:Habilitado = true no replay; " +
+                          "rotulos TAG60-TAG81 na lista de tags proibidas do cliente).");
+        var configuracoes = new List<(string Alvo, TagRegimeOperacionalIa Configuracao, List<TagRegimeComponenteIa> Extras)>();
         foreach (var (alvo, regime) in regimes)
         {
             var nomeAlvo = tags.First(t => string.Equals(t, alvo, StringComparison.OrdinalIgnoreCase));
-            var nomeRegime = dataset.Readings.Keys.First(t => string.Equals(t, regime, StringComparison.OrdinalIgnoreCase));
-            db.TagsRegimesOperacionaisIa.Add(new TagRegimeOperacionalIa
+            if (!regimeCombinado)
             {
-                ClienteId = clienteId, TagName = nomeAlvo, TagRegime = nomeRegime, Ativo = true
-            });
-            log.WriteLine($"Regime: {nomeAlvo} <- {nomeRegime}");
+                var nomeRegime = NomeNoCsv(dataset, regime);
+                db.TagsRegimesOperacionaisIa.Add(new TagRegimeOperacionalIa
+                {
+                    ClienteId = clienteId, TagName = nomeAlvo, TagRegime = nomeRegime, Ativo = true
+                });
+                log.WriteLine($"Regime: {nomeAlvo} <- {nomeRegime}");
+                continue;
+            }
+
+            // RC-10: componente 1 na linha principal (com MapaEstados), 2..N na
+            // tabela de componentes, como a configuracao alvo de §6.2.
+            var nomes = Componentes(regime).Select(c => NomeNoCsv(dataset, c)).ToArray();
+            var configuracao = new TagRegimeOperacionalIa
+            {
+                ClienteId = clienteId, TagName = nomeAlvo, TagRegime = nomes[0], Ativo = true,
+                MapaEstados = mapas.GetValueOrDefault(nomes[0])
+            };
+            var extras = nomes.Skip(1).Select((nome, k) => new TagRegimeComponenteIa
+            {
+                Ordem = k + 2, TagRegime = nome, MapaEstados = mapas.GetValueOrDefault(nome)
+            }).ToList();
+            db.TagsRegimesOperacionaisIa.Add(configuracao);
+            configuracoes.Add((nomeAlvo, configuracao, extras));
+            log.WriteLine($"Regime: {nomeAlvo} <- {string.Join(SeparadorComponentes, nomes)}" +
+                          $" | mapas: {string.Join(" ", nomes.Select(n => $"{n}={mapas.GetValueOrDefault(n) ?? "(sem)"}"))}");
+            if (nomes.Length == 1 && configuracao.MapaEstados is not null)
+                log.WriteLine($"AVISO Regime {nomeAlvo}: 1 componente; o runtime segue o caminho atual e ignora o mapa de {nomes[0]}.");
         }
 
         await db.SaveChangesAsync();
+        if (configuracoes.Any(c => c.Extras.Count > 0))
+        {
+            foreach (var (_, configuracao, extras) in configuracoes)
+            {
+                foreach (var extra in extras)
+                {
+                    extra.ConfiguracaoId = configuracao.Id;
+                    db.TagsRegimesComponentesIa.Add(extra);
+                }
+            }
+
+            await db.SaveChangesAsync();
+        }
 
         // Treino com o PerfilTagService real. Modo --treino-ate: historico = ultimas
         // HorasHistorico horas antes de T (como em producao). Modo por periodo:
@@ -319,17 +482,32 @@ public static class Cp300Replay
         foreach (var (alvo, regime) in regimes)
         {
             var nomeAlvo = tags.First(t => string.Equals(t, alvo, StringComparison.OrdinalIgnoreCase));
-            var nomeRegime = dataset.Readings.Keys.First(t => string.Equals(t, regime, StringComparison.OrdinalIgnoreCase));
+            var componentes = Componentes(regime).Select(c => NomeNoCsv(dataset, c)).ToArray();
+            if (componentes.Length > 1)
+            {
+                // RC-10: cobertura por chave de regime (so com --regime-combinado).
+                var descricao = string.Join(SeparadorComponentes, componentes);
+                log.WriteLine($"Regime {nomeAlvo} <- {descricao}, pontos por chave no treino: " +
+                              FormatKeyCounts(dataset, nomeAlvo, componentes, mapas, periodo.Inicio, periodo.Fim));
+                log.WriteLine($"Regime {nomeAlvo} <- {descricao}, pontos por chave na primeira janela movel: " +
+                              FormatKeyCounts(dataset, nomeAlvo, componentes, mapas, t0.AddHours(-horasHistorico), t0));
+                continue;
+            }
+
+            var nomeRegime = componentes[0];
             log.WriteLine($"Regime {nomeAlvo} <- {nomeRegime}, pontos por estado no treino: " +
                           FormatStateCounts(dataset, nomeAlvo, nomeRegime, periodo.Inicio, periodo.Fim));
             log.WriteLine($"Regime {nomeAlvo} <- {nomeRegime}, pontos por estado na primeira janela movel: " +
                           FormatStateCounts(dataset, nomeAlvo, nomeRegime, t0.AddHours(-horasHistorico), t0));
         }
 
-        var production = BuildPredictionService(db, history, detectionOptions, regimes.Count > 0, options.HistoricoCausal);
+        var regimeCombinadoCliente = regimeCombinado ? clienteId : null;
+        var production = BuildPredictionService(db, history, detectionOptions, regimes.Count > 0, options.HistoricoCausal,
+            regimeCombinadoCliente);
         // Detalhamento: mesmas classes de producao, instancias separadas, sobre
         // o mesmo DetectorInput. A decisao oficial continua vindo do PredictionService.
-        var detailPreparation = BuildPreparation(db, history, regimes.Count > 0, options.HistoricoCausal);
+        var detailPreparation = BuildPreparation(db, history, regimes.Count > 0, options.HistoricoCausal,
+            regimeCombinadoCliente);
         var detailEnsemble = BuildEnsemble(detectionOptions);
         var resolver = new TagBehaviorProfileResolver();
 
@@ -350,7 +528,7 @@ public static class Cp300Replay
         if (!string.IsNullOrEmpty(outputDir))
             Directory.CreateDirectory(outputDir);
         await using var writer = new StreamWriter(options.CsvSaida, false, new UTF8Encoding(true));
-        await writer.WriteLineAsync(string.Join(',', Colunas));
+        await writer.WriteLineAsync(string.Join(',', ColunasDaSaida(regimeCombinado)));
 
         foreach (var (tag, reading) in readings)
         {
@@ -364,7 +542,7 @@ public static class Cp300Replay
                 DataHora = reading.DataHora
             };
 
-            var row = new ReadingRow(reading.DataHora, clienteId, tag, reading.Valor);
+            var row = new ReadingRow(reading.DataHora, clienteId, tag, reading.Valor, regimeCombinado);
 
             AnomaliaResponse? response = null;
             try
@@ -551,6 +729,81 @@ public static class Cp300Replay
         return partes.Count == 0 ? "nenhum ponto" : string.Join(' ', partes);
     }
 
+    /// <summary>
+    /// RC-10: pontos da tag analisada por chave de regime (formato de
+    /// OperationalRegimeKey, valores mapeados) e valores fora do mapa por
+    /// componente. Mesmo alinhamento simplificado de FormatStateCounts (ultimo
+    /// estado ate 2 min antes, lag 0) e ToleranciaEstado padrao do modelo; a
+    /// selecao real e do resolver (sem mapa, ele compara com tolerancia, nao exato).
+    /// </summary>
+    private static string FormatKeyCounts(
+        Cp300Dataset dataset, string alvo, IReadOnlyList<string> componentes,
+        IReadOnlyDictionary<string, string> mapas, DateTime inicio, DateTime fim)
+    {
+        var tolerancia = new TagRegimeComponenteIa().ToleranciaEstado;
+        var series = componentes.Select(c => dataset.Readings[c]).ToArray();
+        var parsed = componentes
+            .Select(c => mapas.TryGetValue(c, out var texto) ? OperationalRegimeStateMap.Parse(texto) : null)
+            .ToArray();
+        var cursores = new int[componentes.Count];
+        var contagem = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var foraDoMapa = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var semEstado = 0;
+        var valores = new OperationalRegimeKeyComponent[componentes.Count];
+        var fora = new List<string>();
+        foreach (var leitura in dataset.Readings[alvo])
+        {
+            if (leitura.DataHora < inicio || leitura.DataHora >= fim)
+                continue;
+
+            var alinhado = true;
+            fora.Clear();
+            for (var k = 0; k < componentes.Count; k++)
+            {
+                var estados = series[k];
+                var j = cursores[k];
+                while (j + 1 < estados.Length && estados[j + 1].DataHora <= leitura.DataHora)
+                    j++;
+                cursores[k] = j;
+                if (estados.Length == 0 || estados[j].DataHora > leitura.DataHora ||
+                    (leitura.DataHora - estados[j].DataHora).TotalMinutes > 2)
+                {
+                    alinhado = false;
+                    break;
+                }
+
+                double valor = estados[j].Valor;
+                if (parsed[k] is { } mapa)
+                {
+                    var mapeado = mapa.Apply(valor, tolerancia);
+                    if (mapeado.Status == OperationalRegimeStateMapStatus.OutOfMap)
+                        fora.Add($"{componentes[k]}={OperationalRegimeKey.FormatValue(valor)}");
+                    valor = mapeado.MappedValue;
+                }
+
+                valores[k] = new OperationalRegimeKeyComponent(componentes[k], valor);
+            }
+
+            if (!alinhado)
+            {
+                semEstado++;
+                continue;
+            }
+
+            var chave = OperationalRegimeKey.Build(valores);
+            contagem[chave] = contagem.GetValueOrDefault(chave) + 1;
+            foreach (var f in fora)
+                foraDoMapa[f] = foraDoMapa.GetValueOrDefault(f) + 1;
+        }
+
+        var partes = contagem.Select(p => $"{p.Key} ({p.Value})").ToList();
+        if (semEstado > 0)
+            partes.Add($"sem_estado ({semEstado})");
+        var texto = partes.Count == 0 ? "nenhum ponto" : string.Join(", ", partes);
+        return texto + " | fora do mapa: " +
+               (foraDoMapa.Count == 0 ? "nenhum" : string.Join(", ", foraDoMapa.Select(p => $"{p.Key} ({p.Value})")));
+    }
+
     private static List<string> SelectTags(Cp300Dataset dataset, IReadOnlyList<string>? requested)
     {
         if (requested is null || requested.Count == 0)
@@ -604,7 +857,8 @@ public static class Cp300Replay
     /// real (mesmo banco em memoria e mesmo historico do CSV); sem regime, fica como antes.
     /// </summary>
     private static PredictionDetectionPreparationService BuildPreparation(
-        AppDbContext db, CsvHistorySource history, bool comRegime, bool historicoCausal)
+        AppDbContext db, CsvHistorySource history, bool comRegime, bool historicoCausal,
+        string? regimeCombinadoCliente)
     {
         var causal = historicoCausal
             ? Options.Create(new HistoricoCausalOptions { Habilitado = true })
@@ -613,18 +867,32 @@ public static class Cp300Replay
         if (!comRegime)
             return new PredictionDetectionPreparationService(history, historicoCausal: causal);
 
-        var provider = new OperationalRegimeBaselineProvider(
-            db,
-            history,
-            new OperationalRegimeBaselineService(
-                new OperationalRegimeHistoryResolver(),
-                new TagProfileStatisticsCalculator(new HistoricoLimpezaService())));
+        var baselineService = new OperationalRegimeBaselineService(
+            new OperationalRegimeHistoryResolver(),
+            new TagProfileStatisticsCalculator(new HistoricoLimpezaService()));
+        // Sem --regime-combinado: provider construido exatamente como antes
+        // (chave desligada, lista de tags proibidas vazia).
+        var provider = regimeCombinadoCliente is null
+            ? new OperationalRegimeBaselineProvider(db, history, baselineService)
+            : new OperationalRegimeBaselineProvider(
+                db,
+                history,
+                baselineService,
+                Options.Create(new OperationalRegimeForbiddenTagsOptions
+                {
+                    // Defesa extra: o replay ja recusa rotulos em ValidateRegimes.
+                    TagsProibidasPorCliente = new Dictionary<string, List<string>>
+                    {
+                        [regimeCombinadoCliente] = Enumerable.Range(60, 22).Select(n => $"TAG{n}").ToList()
+                    }
+                }),
+                Options.Create(new RegimeCombinadoOptions { Habilitado = true }));
         return new PredictionDetectionPreparationService(history, provider, historicoCausal: causal);
     }
 
     private static PredictionService BuildPredictionService(
         AppDbContext db, CsvHistorySource history, AnomalyDetectionOptions options, bool comRegime,
-        bool historicoCausal)
+        bool historicoCausal, string? regimeCombinadoCliente)
     {
         var ensemble = BuildEnsemble(options);
         var interpretation = new PredictionInterpretationService(
@@ -654,7 +922,7 @@ public static class Cp300Replay
         return new PredictionService(
             new PredictionContextLoader(db, new ProcessoAnaliseService(db)),
             postDecision, finalization, decision,
-            BuildPreparation(db, history, comRegime, historicoCausal),
+            BuildPreparation(db, history, comRegime, historicoCausal, regimeCombinadoCliente),
             multivariateShadowRuntimeCoordinator: null);
     }
 
@@ -671,6 +939,7 @@ public static class Cp300Replay
         row.OrigemBaseline = prepared.BaselineEfetivo?.Kind.ToString() ?? "desconhecida";
         row.ValorRegime = prepared.BaselineEfetivo?.RegimeValue;
         row.MotivoBaseline = prepared.BaselineEfetivo?.Reason;
+        row.ChaveRegime = prepared.BaselineEfetivo?.RegimeKey;
 
         var protection = BaselineProtectionProfile.Build(input, input.MediaHistorica);
         row.Deadband = protection.Deadband;
@@ -758,7 +1027,7 @@ public static class Cp300Replay
         string Nome, bool Aplicavel, bool Participou, string? MotivoNaoAplicavel,
         double Nota, double Peso, double Contribuicao);
 
-    private sealed class ReadingRow(DateTime dataHora, string cliente, string tag, float valor)
+    private sealed class ReadingRow(DateTime dataHora, string cliente, string tag, float valor, bool comChaveRegime)
     {
         public List<DetectorRow> Detectores { get; } = [];
         public double? NotaFinal { get; set; }
@@ -776,6 +1045,7 @@ public static class Cp300Replay
         public string? OrigemBaseline { get; set; }
         public double? ValorRegime { get; set; }
         public string? MotivoBaseline { get; set; }
+        public string? ChaveRegime { get; set; }
         public double? Media { get; set; }
         public double? Desvio { get; set; }
         public int? PontosHistorico { get; set; }
@@ -811,7 +1081,9 @@ public static class Cp300Replay
                 Bool(EntradaInvalida), MotivoEntradaInvalida ?? "", Erro ?? "", Conferencia,
                 Fmt(ValorRegime), MotivoBaseline ?? ""
             ];
-            return string.Join(',', fields.Select(Cp300Csv.Escape));
+            // chave_regime so com --regime-combinado (sem ela, formato anterior).
+            string[] todos = comChaveRegime ? [.. fields, ChaveRegime ?? ""] : fields;
+            return string.Join(',', todos.Select(Cp300Csv.Escape));
         }
 
         private static string Bool(bool? value) => value is null ? "" : value.Value ? "1" : "0";

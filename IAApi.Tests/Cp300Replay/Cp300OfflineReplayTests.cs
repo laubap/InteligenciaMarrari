@@ -425,10 +425,25 @@ public sealed class Cp300OfflineReplayTests : IDisposable
         Assert.Equal(0, summary.LeiturasComErro);
         Assert.Equal(0, summary.Divergencias);
 
-        var atual = Normalizar(File.ReadAllText(output, Encoding.UTF8));
-        var golden = GoldenPath();
+        // O cenario cobre os dois caminhos do baseline e decisoes nos dois sentidos.
+        var rows = ReadOutput(output);
+        Assert.Contains(rows, r => r["origem_baseline"] == "OperationalRegime");
+        Assert.Contains(rows, r => r["decisao_final"] == "1");
+        Assert.Contains(rows, r => r["decisao_final"] == "0");
+
         // A referencia so e regravada a partir da execucao sem a chave.
-        if (!historicoCausal && Environment.GetEnvironmentVariable(VariavelAtualizarGolden) == "1")
+        CompararComGolden(output, GoldenArquivo, podeRegravar: !historicoCausal);
+    }
+
+    /// <summary>
+    /// Compara a saida inteira com Golden/arquivo (so fim de linha e BOM
+    /// normalizados). Com IAAPI_ATUALIZAR_GOLDEN=1 e podeRegravar, grava e falha.
+    /// </summary>
+    private static void CompararComGolden(string output, string arquivo, bool podeRegravar)
+    {
+        var atual = Normalizar(File.ReadAllText(output, Encoding.UTF8));
+        var golden = GoldenPath(arquivo);
+        if (podeRegravar && Environment.GetEnvironmentVariable(VariavelAtualizarGolden) == "1")
         {
             Directory.CreateDirectory(Path.GetDirectoryName(golden)!);
             File.WriteAllText(golden, atual, new UTF8Encoding(false));
@@ -437,29 +452,228 @@ public sealed class Cp300OfflineReplayTests : IDisposable
 
         Assert.True(File.Exists(golden), $"Golden ausente: {golden} (gerar com {VariavelAtualizarGolden}=1).");
         var esperado = Normalizar(File.ReadAllText(golden, Encoding.UTF8));
+        AssertMesmoTexto(esperado, atual, "golden " + arquivo);
+    }
 
-        // O cenario cobre os dois caminhos do baseline e decisoes nos dois sentidos.
-        var rows = ReadOutput(output);
-        Assert.Contains(rows, r => r["origem_baseline"] == "OperationalRegime");
-        Assert.Contains(rows, r => r["decisao_final"] == "1");
-        Assert.Contains(rows, r => r["decisao_final"] == "0");
+    private static void AssertMesmoTexto(string esperado, string atual, string referencia)
+    {
+        if (atual == esperado)
+            return;
 
-        if (atual != esperado)
-        {
-            var a = esperado.Split('\n');
-            var b = atual.Split('\n');
-            var i = 0;
-            while (i < a.Length && i < b.Length && a[i] == b[i])
-                i++;
-            Assert.Fail($"Saida difere do golden na linha {i + 1} ({a.Length} x {b.Length} linhas).\n" +
-                        $"esperado: {(i < a.Length ? a[i] : "<fim>")}\natual:    {(i < b.Length ? b[i] : "<fim>")}");
-        }
+        var a = esperado.Split('\n');
+        var b = atual.Split('\n');
+        var i = 0;
+        while (i < a.Length && i < b.Length && a[i] == b[i])
+            i++;
+        Assert.Fail($"Saida difere de {referencia} na linha {i + 1} ({a.Length} x {b.Length} linhas).\n" +
+                    $"esperado: {(i < a.Length ? a[i] : "<fim>")}\natual:    {(i < b.Length ? b[i] : "<fim>")}");
     }
 
     private static string Normalizar(string texto) => texto.Replace("\r\n", "\n");
 
-    private static string GoldenPath([CallerFilePath] string arquivoFonte = "") =>
-        Path.Combine(Path.GetDirectoryName(arquivoFonte)!, "Golden", GoldenArquivo);
+    private static string GoldenPath(string arquivo, [CallerFilePath] string arquivoFonte = "") =>
+        Path.Combine(Path.GetDirectoryName(arquivoFonte)!, "Golden", arquivo);
+
+    // --- RC-10: regime combinado no replay -------------------------------------
+
+    private const string GoldenCombinadoArquivo = "replay_bombas_regime_combinado.csv";
+
+    // Configuracao alvo de PLANO_REGIME_COMBINADO.md §6.2 na B-01 (3 componentes)
+    // e 2 componentes na B-02, para cobrir regime aplicado e fallback.
+    private static readonly string[] RegimesCombinados = ["TAG29=TAG42+TAG43+TAG46", "TAG30=TAG43+TAG42"];
+    private static readonly string[] MapasCombinados = ["TAG42=2:2;*:0", "TAG43=2:2;*:0", "TAG46=380:380;*:450"];
+
+    private static Cp300ReplayOptions OptionsCombinado(string input, string output, bool historicoCausal = false) =>
+        Options(input, output, tags: ["TAG29", "TAG30"],
+            regimes: Cp300Replay.ParseRegimes(RegimesCombinados, regimeCombinado: true)) with
+        {
+            FimReplay = T.AddMinutes(29),
+            HistoricoCausal = historicoCausal,
+            RegimeCombinado = true,
+            MapasRegime = Cp300Replay.ParseRegimeMapas(MapasCombinados)
+        };
+
+    [Fact]
+    public void RegimeCombinado_Parse_ComponentesEMapas()
+    {
+        var regimes = Cp300Replay.ParseRegimes([" TAG27 = TAG42 + TAG43+TAG46 ", "TAG28=TAG43"], regimeCombinado: true);
+        Assert.Equal("TAG42+TAG43+TAG46", regimes["TAG27"]);
+        Assert.Equal("TAG43", regimes["TAG28"]);
+
+        // '+' sem --regime-combinado; componente vazio.
+        var semOpcao = Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimes(["TAG27=TAG42+TAG43"]));
+        Assert.Contains("--regime-combinado", semOpcao.Message);
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimes(["TAG27=TAG42++TAG43"], regimeCombinado: true));
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimes(["TAG27=TAG42+"], regimeCombinado: true));
+        // Sem '+', a opcao nao muda o parse.
+        Assert.Equal(Cp300Replay.ParseRegimes(["TAG27=TAG42,TAG28=TAG43"]),
+            Cp300Replay.ParseRegimes(["TAG27=TAG42,TAG28=TAG43"], regimeCombinado: true));
+
+        var mapas = Cp300Replay.ParseRegimeMapas(["TAG42=2:2;*:0", " TAG46 = 380:380; *:450 "]);
+        Assert.Equal("2:2;*:0", mapas["TAG42"]);
+        Assert.Equal("380:380;*:450", mapas["TAG46"]);
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimeMapas(["TAG42"]));
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimeMapas(["TAG42="]));
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimeMapas(["=2:2"]));
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimeMapas(["TAG42=2,5:2"]));
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimeMapas(["TAG42=2:2;"]));
+        Assert.Throws<ArgumentException>(() => Cp300Replay.ParseRegimeMapas(["TAG42=2:2", "tag42=0:0"]));
+    }
+
+    [Theory]
+    [InlineData("TAG29=TAG73+TAG43+TAG46", "componente 1")]
+    [InlineData("TAG29=TAG42+TAG73+TAG46", "componente 2")]
+    [InlineData("TAG29=TAG42+TAG43+TAG73", "componente 3")]
+    [InlineData("TAG29=TAG42+TAG60", "componente 2")]
+    [InlineData("TAG29=TAG42+TAG81", "componente 2")]
+    public async Task RegimeCombinado_RecusaRotuloEmQualquerComponente(string regime, string posicao)
+    {
+        var input = WriteBombasCsv();
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Cp300Replay.RunAsync(
+            Options(input, Path.Combine(_root, "x.csv"), tags: ["TAG29"],
+                regimes: Cp300Replay.ParseRegimes([regime], regimeCombinado: true)) with { RegimeCombinado = true }));
+        Assert.Contains("rotulo", ex.Message);
+        Assert.Contains(posicao, ex.Message);
+    }
+
+    [Fact]
+    public async Task RegimeCombinado_RecusaConfiguracoesInvalidas()
+    {
+        var input = WriteBombasCsv();
+        var output = Path.Combine(_root, "x.csv");
+        Cp300ReplayOptions Com(string[] regimes, string[]? mapas = null, bool combinado = true) =>
+            Options(input, output, tags: ["TAG29"], regimes: Cp300Replay.ParseRegimes(regimes, regimeCombinado: true)) with
+            {
+                RegimeCombinado = combinado,
+                MapasRegime = mapas is null ? null : Cp300Replay.ParseRegimeMapas(mapas)
+            };
+
+        // '+' ou mapa sem --regime-combinado (opcoes montadas direto, sem a CLI).
+        var mais = await Assert.ThrowsAsync<ArgumentException>(() =>
+            Cp300Replay.RunAsync(Com(["TAG29=TAG42+TAG43"], combinado: false)));
+        Assert.Contains("--regime-combinado", mais.Message);
+        var mapa = await Assert.ThrowsAsync<ArgumentException>(() =>
+            Cp300Replay.RunAsync(Com(["TAG29=TAG42"], ["TAG42=2:2;*:0"], combinado: false)));
+        Assert.Contains("--regime-combinado", mapa.Message);
+
+        // Componente ausente do CSV, repetido ou igual a tag analisada.
+        var ausente = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Cp300Replay.RunAsync(Com(["TAG29=TAG42+TAG99"])));
+        Assert.Contains("TAG99 nao existe no CSV", ausente.Message);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Cp300Replay.RunAsync(Com(["TAG29=TAG42+tag42"])));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Cp300Replay.RunAsync(Com(["TAG29=TAG42+TAG29"])));
+
+        // Mapa de tag que nao e componente, ou com sintaxe invalida.
+        var semComponente = await Assert.ThrowsAsync<ArgumentException>(() =>
+            Cp300Replay.RunAsync(Com(["TAG29=TAG42+TAG43"], ["TAG46=380:380;*:450"])));
+        Assert.Contains("TAG46", semComponente.Message);
+        await Assert.ThrowsAsync<ArgumentException>(() => Cp300Replay.RunAsync(
+            Com(["TAG29=TAG42+TAG43"]) with
+            {
+                MapasRegime = new Dictionary<string, string> { ["TAG42"] = "2:2;2:0" }
+            }));
+        Assert.False(File.Exists(output));
+    }
+
+    /// <summary>
+    /// Com --regime-combinado e so regimes de 1 componente sem mapa, o runtime
+    /// segue o caminho atual: a saida e o golden da RC-2 mais a coluna
+    /// chave_regime vazia.
+    /// </summary>
+    [Fact]
+    public async Task RegimeCombinado_UmComponenteSemMapa_IgualAoGoldenMaisColunaVazia()
+    {
+        var input = WriteBombasCsv();
+        var output = Path.Combine(_root, $"um-componente-{Guid.NewGuid():N}.csv");
+        await Cp300Replay.RunAsync(
+            Options(input, output, tags: ["TAG29", "TAG30"],
+                regimes: Cp300Replay.ParseRegimes(["TAG29=TAG42", "TAG30=TAG43"], regimeCombinado: true)) with
+            {
+                FimReplay = T.AddMinutes(29),
+                RegimeCombinado = true
+            });
+
+        var linhas = Normalizar(File.ReadAllText(output, Encoding.UTF8)).Split('\n');
+        Assert.Equal(string.Join(',', Cp300Replay.ColunasDaSaida(true)), linhas[0]);
+        Assert.All(linhas.Skip(1).Where(l => l.Length > 0), l => Assert.EndsWith(",", l));
+        Assert.All(ReadOutput(output), r => Assert.Equal("", r["chave_regime"]));
+
+        // Tira a ultima coluna (sempre vazia) e compara com o golden da RC-2.
+        var semColuna = string.Join('\n', linhas.Select((l, i) =>
+            i == 0 ? string.Join(',', Cp300Replay.Colunas) : l.Length == 0 ? l : l[..^1]));
+        var esperado = Normalizar(File.ReadAllText(GoldenPath(GoldenArquivo), Encoding.UTF8));
+        AssertMesmoTexto(esperado, semColuna, "golden " + GoldenArquivo);
+    }
+
+    /// <summary>
+    /// RC-10: golden com --regime-combinado (3 componentes na B-01, 2 na B-02,
+    /// mapas de §6.2). Regravar com IAAPI_ATUALIZAR_GOLDEN=1 (so a execucao sem
+    /// HistoricoCausal grava). Com --historico-causal, mesma referencia.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Golden_BombasComRegimeCombinado_SaidaIdenticaAReferencia(bool historicoCausal)
+    {
+        var input = WriteBombasCsv();
+        var output = Path.Combine(_root, $"golden-combinado-{Guid.NewGuid():N}.csv");
+
+        var summary = await Cp300Replay.RunAsync(OptionsCombinado(input, output, historicoCausal));
+
+        Assert.Equal(2 * 30, summary.Leituras);
+        Assert.Equal(0, summary.LeiturasComErro);
+        Assert.Equal(0, summary.Divergencias);
+
+        var rows = ReadOutput(output);
+        // Regime aplicado: chave no formato de OperationalRegimeKey, valores mapeados.
+        var aplicadas = rows.Where(r => r["origem_baseline"] == "OperationalRegime").ToList();
+        Assert.NotEmpty(aplicadas);
+        Assert.All(aplicadas, r =>
+        {
+            var formato = r["tag"] == "TAG29"
+                ? @"^TAG42=[02]\|TAG43=[02]\|TAG46=(380|450)$"
+                : @"^TAG43=[02]\|TAG42=[02]$";
+            Assert.Matches(formato, r["chave_regime"]);
+        });
+        // Regime nao aplicado: sem chave.
+        Assert.All(rows.Where(r => r["origem_baseline"] != "OperationalRegime"),
+            r => Assert.Equal("", r["chave_regime"]));
+        Assert.Contains(rows, r => r["decisao_final"] == "1");
+
+        CompararComGolden(output, GoldenCombinadoArquivo, podeRegravar: !historicoCausal);
+    }
+
+    [Fact]
+    public async Task RegimeCombinado_LogComCoberturaPorChaveEValoresForaDoMapa()
+    {
+        var input = WriteBombasCsv();
+        var log = new StringWriter();
+        // Mapa da TAG46 sem curinga: 450 fica fora do mapa e passa sem mudanca.
+        await Cp300Replay.RunAsync(OptionsCombinado(input, Path.Combine(_root, "x.csv")) with
+        {
+            MapasRegime = Cp300Replay.ParseRegimeMapas(["TAG42=2:2;*:0", "TAG43=2:2;*:0", "TAG46=380:380"]),
+            Log = log
+        });
+        var linhas = log.ToString().Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+
+        Assert.Contains(linhas, l => l.StartsWith("Regime combinado: ligado"));
+        Assert.Contains("Regime: TAG29 <- TAG42+TAG43+TAG46 | mapas: TAG42=2:2;*:0 TAG43=2:2;*:0 TAG46=380:380", linhas);
+        Assert.Contains("Regime: TAG30 <- TAG43+TAG42 | mapas: TAG43=2:2;*:0 TAG42=2:2;*:0", linhas);
+
+        // Treino = [00:00, 02:00): 120 pontos em 6 classes (3 fases x 2 set-points).
+        var b01 = linhas.Single(l => l.StartsWith("Regime TAG29 <- TAG42+TAG43+TAG46, pontos por chave no treino: "));
+        var classes = System.Text.RegularExpressions.Regex.Matches(b01, @"TAG42=\d\|TAG43=\d\|TAG46=\d+ \((\d+)\)");
+        Assert.Equal(6, classes.Count);
+        Assert.Equal(120, classes.Sum(m => int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)));
+        Assert.Contains("| fora do mapa: TAG46=450 (", b01);
+        Assert.Contains(linhas, l => l.StartsWith("Regime TAG29 <- TAG42+TAG43+TAG46, pontos por chave na primeira janela movel: "));
+
+        var b02 = linhas.Single(l => l.StartsWith("Regime TAG30 <- TAG43+TAG42, pontos por chave no treino: "));
+        Assert.Equal("Regime TAG30 <- TAG43+TAG42, pontos por chave no treino: " +
+                     "TAG43=0|TAG42=2 (40), TAG43=2|TAG42=0 (40), TAG43=2|TAG42=2 (40) | fora do mapa: nenhum", b02);
+    }
 
     /// <summary>
     /// B-01 (TAG29, estado TAG42) e B-02 (TAG30, estado TAG43), set-point TAG46.
@@ -590,7 +804,9 @@ public sealed class Cp300OfflineReplayTests : IDisposable
     {
         var lines = File.ReadAllLines(path, Encoding.UTF8);
         var header = lines[0].Split(',');
-        Assert.Equal(Cp300Replay.Colunas, header);
+        // Formato anterior, ou com chave_regime no fim (so com --regime-combinado).
+        Assert.True(header.SequenceEqual(Cp300Replay.Colunas) ||
+                    header.SequenceEqual(Cp300Replay.ColunasDaSaida(true)), "Cabecalho inesperado: " + lines[0]);
         return lines.Skip(1).Select(line =>
         {
             var fields = SplitCsv(line);

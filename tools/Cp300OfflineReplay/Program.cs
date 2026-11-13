@@ -93,17 +93,25 @@ internal static class Cp300ReplayCli
         "(--treino-ate <yyyy-MM-ddTHH:mm:ss> | --treino-inicio <data> --treino-fim <data> [--inicio <data>]) " +
         "[--fim <yyyy-MM-ddTHH:mm:ss>] [--cliente PK2] [--tags TAG22,TAG23,...] " +
         "[--appsettings appsettings.json] [--horas-historico N] [--historico-inclui-atual] [--historico-causal] " +
-        "[--regime TAGx=TAGy]... [--permitir-falha-no-treino] [--verbose]";
+        "[--regime TAGx=TAGy]... [--regime-combinado [--regime TAGx=TAGa+TAGb+TAGc]... [--regime-mapa \"TAGa=2:2;*:0\"]...] " +
+        "[--permitir-falha-no-treino] [--verbose]";
 
     public static async Task<int> RunAsync(string[] args)
     {
         Dictionary<string, string?> parsed;
         IReadOnlyDictionary<string, string> regimes;
+        IReadOnlyDictionary<string, string> mapas;
         try
         {
             var regimeArgs = new List<string>();
-            parsed = Parse(args, regimeArgs);
-            regimes = Cp300Replay.ParseRegimes(regimeArgs);
+            var mapaArgs = new List<string>();
+            parsed = Parse(args, regimeArgs, mapaArgs);
+            var regimeCombinado = parsed.ContainsKey("regime-combinado");
+            // RC-10: sem --regime-combinado, '+' e --regime-mapa sao recusados.
+            regimes = Cp300Replay.ParseRegimes(regimeArgs, regimeCombinado);
+            if (mapaArgs.Count > 0 && !regimeCombinado)
+                throw new ArgumentException("--regime-mapa exige --regime-combinado.");
+            mapas = Cp300Replay.ParseRegimeMapas(mapaArgs);
         }
         catch (ArgumentException ex)
         {
@@ -145,6 +153,8 @@ internal static class Cp300ReplayCli
                 HistoricoIncluiLeituraAtual = parsed.ContainsKey("historico-inclui-atual"),
                 HistoricoCausal = parsed.ContainsKey("historico-causal"),
                 Regimes = regimes,
+                RegimeCombinado = parsed.ContainsKey("regime-combinado"),
+                MapasRegime = mapas,
                 Log = stdout
             };
 
@@ -184,9 +194,9 @@ internal static class Cp300ReplayCli
         DateTime.ParseExact(text, ["yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd HH:mm:ss"],
             CultureInfo.InvariantCulture, DateTimeStyles.None);
 
-    private static Dictionary<string, string?> Parse(string[] args, List<string> regimeArgs)
+    private static Dictionary<string, string?> Parse(string[] args, List<string> regimeArgs, List<string> mapaArgs)
     {
-        string[] flags = ["historico-inclui-atual", "historico-causal", "verbose", "permitir-falha-no-treino"];
+        string[] flags = ["historico-inclui-atual", "historico-causal", "verbose", "permitir-falha-no-treino", "regime-combinado"];
         string[] valued = ["entrada", "saida", "treino-ate", "treino-inicio", "treino-fim", "inicio", "fim", "cliente", "tags", "appsettings", "horas-historico"];
         var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < args.Length; i++)
@@ -200,6 +210,13 @@ internal static class Cp300ReplayCli
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("Falta valor para --regime");
                 regimeArgs.Add(args[++i]);
+            }
+            else if (string.Equals(name, "regime-mapa", StringComparison.OrdinalIgnoreCase))
+            {
+                // Repetivel, um mapa por opcao: --regime-mapa "TAG42=2:2;*:0".
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("Falta valor para --regime-mapa");
+                mapaArgs.Add(args[++i]);
             }
             else if (flags.Contains(name, StringComparer.OrdinalIgnoreCase))
                 result[name] = null;
