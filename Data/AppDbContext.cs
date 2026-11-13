@@ -18,6 +18,8 @@ public class AppDbContext :
     public DbSet<TagDependenciaIa> TagDependenciasIa { get; set; } = null!;
     // Baseline condicionado por regime operacional.
 public DbSet<TagRegimeOperacionalIa> TagsRegimesOperacionaisIa { get; set; } = null!;
+    // Componentes 2..N do regime combinado (RC-5; só lidos com RegimeCombinado:Habilitado).
+    public DbSet<TagRegimeComponenteIa> TagsRegimesComponentesIa { get; set; } = null!;
     public DbSet<AnomaliaDetectada> AnomaliasDetectadas { get; set; } = null!;
     public DbSet<AnomaliaDependenciaDetectada> AnomaliaDependenciasDetectadas { get; set; } = null!;
     public DbSet<ProcessoIa> ProcessosIa { get; set; } = null!;
@@ -64,6 +66,25 @@ modelBuilder.Entity<TagRegimeOperacionalIa>()
         x.TagName
     })
     .IsUnique();
+
+        // Regime combinado (PLANO_REGIME_COMBINADO.md §6.2, opção (a)):
+        // componentes 2..N de uma configuração de regime; o componente 1
+        // é a TagRegime da própria configuração. Um componente por posição.
+        modelBuilder.Entity<TagRegimeComponenteIa>(entity =>
+        {
+            entity.ToTable("TagsRegimesComponentesIa", table =>
+                table.HasCheckConstraint(
+                    "CK_TagsRegimesComponentesIa_Ordem",
+                    "\"Ordem\" >= 2"));
+
+            entity.HasOne<TagRegimeOperacionalIa>()
+                .WithMany()
+                .HasForeignKey(x => x.ConfiguracaoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new { x.ConfiguracaoId, x.Ordem })
+                .IsUnique();
+        });
 
         modelBuilder.Entity<TagPerfilIa>()
             .HasIndex(x => new { x.ClienteId, x.TagName })

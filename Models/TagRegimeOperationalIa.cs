@@ -89,6 +89,17 @@ public class TagRegimeOperacionalIa
     public double ToleranciaEstado { get; set; } = 0.001;
 
     /// <summary>
+    /// Mapa de estados opcional do componente 1 (esta TagRegime), na sintaxe
+    /// de OperationalRegimeStateMap (ex.: "2:2;*:0"). Nulo por padrão.
+    ///
+    /// Só é usado com AnomalyDetection:RegimeCombinado:Habilitado = true
+    /// (a partir da RC-8). Com a chave desligada, é ignorado e o regime
+    /// continua comparado por ToleranciaEstado, como antes.
+    /// Os componentes 2..N ficam em TagRegimeComponenteIa.
+    /// </summary>
+    public string? MapaEstados { get; set; }
+
+    /// <summary>
     /// Número mínimo de amostras históricas da tag analisada que devem
     /// pertencer ao regime atual para permitir a utilização de um
     /// baseline condicionado.

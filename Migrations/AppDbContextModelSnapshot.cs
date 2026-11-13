@@ -1225,6 +1225,39 @@ namespace IAApi.Migrations
                     b.ToTable("PerfisIa");
                 });
 
+            modelBuilder.Entity("TagRegimeComponenteIa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ConfiguracaoId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("MapaEstados")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TagRegime")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("ToleranciaEstado")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConfiguracaoId", "Ordem")
+                        .IsUnique();
+
+                    b.ToTable("TagsRegimesComponentesIa", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TagsRegimesComponentesIa_Ordem", "\"Ordem\" >= 2");
+                        });
+                });
+
             modelBuilder.Entity("TagRegimeOperacionalIa", b =>
                 {
                     b.Property<int>("Id")
@@ -1246,6 +1279,9 @@ namespace IAApi.Migrations
 
                     b.Property<int>("LagMinutos")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("MapaEstados")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("MinimoAmostrasPorRegime")
                         .HasColumnType("INTEGER");
@@ -1378,6 +1414,15 @@ namespace IAApi.Migrations
                     b.HasOne("TagComportamentoIa", null)
                         .WithMany()
                         .HasForeignKey("TagComportamentoIaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TagRegimeComponenteIa", b =>
+                {
+                    b.HasOne("TagRegimeOperacionalIa", null)
+                        .WithMany()
+                        .HasForeignKey("ConfiguracaoId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

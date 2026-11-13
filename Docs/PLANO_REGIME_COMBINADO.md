@@ -487,7 +487,7 @@ Coluna "muda comportamento":
 | RC-2 | Referência congelada e regressão byte a byte — **concluída em 12/11/2026** | — | não |
 | RC-3 | Resolver com dois ponteiros — **concluída em 13/11/2026** | RC-2 | não (provado) |
 | RC-4 | Chave, mapa de estados e chave de regime (classes isoladas) — **concluída em 13/11/2026** | RC-0 | não |
-| RC-5 | Modelo `TagRegimeComponenteIa` + migration | RC-4 | não |
+| RC-5 | Modelo `TagRegimeComponenteIa` + migration — **concluída em 13/11/2026** | RC-4 | não |
 | RC-6 | Resolver com N componentes | RC-3, RC-4 | não (provado) |
 | RC-7 | Bloqueio de rótulos por cliente (backlog 11) — **concluída em 13/11/2026** | — | não (lista vazia por padrão) |
 | RC-8 | Service e provider com componentes, atrás da chave | RC-5, RC-6, RC-7 | só com a chave |
@@ -578,6 +578,13 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   - RC-2 com 0 diferenças (o replay cria a tabela vazia via `EnsureCreated`);
   - **não aplicar** no banco do PK2 (isso é a RC-12).
 - **Muda comportamento:** não (tabela vazia, nada lê).
+- **Resultado (13/11/2026, sem mudança de comportamento):**
+  - **Modelo:** `Models/TagRegimeComponenteIa.cs` (novo): `Id`, `ConfiguracaoId`, `Ordem`, `TagRegime`, `MapaEstados` (nulo), `ToleranciaEstado` (padrão 0,001). `TagRegimeOperacionalIa` ganhou `MapaEstados` (`string?`, nulo; opção (a) de §6.2). Sem propriedades de navegação (nenhuma consulta existente muda).
+  - **`AppDbContext`:** `DbSet` `TagsRegimesComponentesIa`; FK `ConfiguracaoId` → `TagsRegimesOperacionaisIa.Id` com `Cascade`; índice único (`ConfiguracaoId`, `Ordem`); `CHECK "Ordem" >= 2` (`CK_TagsRegimesComponentesIa_Ordem`). Índice (`ClienteId`, `TagName`) sem mudança.
+  - **Migration:** `Migrations/20261113160248_RC5_AddTagRegimeComponente` (gerada por `dotnet ef migrations add`, que não abre conexão; antes, `has-pending-model-changes` confirmou o snapshot em dia, então ela contém só a RC-5) + `AppDbContextModelSnapshot.cs`. `Up`: `AddColumn MapaEstados` + `CreateTable` + índice. `Down`: `DropTable` + `DropColumn` (no SQLite, recriação da tabela com cópia dos dados).
+  - **Não aplicada em nenhum banco real:** nem no `ia_config.db` local (SHA-256 e data do `.db` e do `-wal` iguais antes e depois) nem no PK2 (RC-12).
+  - **Testes** (`IAApi.Tests/Services/AnomalyDetection/RegimeCombinadoMigrationTests.cs`, 7, só SQLite em memória): modelo sem mudanças pendentes em relação ao snapshot; RC-5 é a última migration, logo depois de `B325_AddRichBehaviorSnapshotIdentity`; `Migrate()` da cadeia inteira num banco vazio cria tabela, colunas, índices e aceita os componentes da configuração alvo (TAG43, TAG46); recusa `Ordem` 0 e 1, `Ordem` repetida e configuração inexistente; remover a configuração remove os componentes; `Down` até a migration anterior apaga a tabela e a coluna, mantém as 11 colunas e o índice antigos e a linha da configuração, e o `Up` seguinte volta com `MapaEstados` nulo; `EnsureCreated` (caminho do replay) cria a tabela vazia.
+  - **Executado:** `dotnet test -c Release` com o filtro da RC-4 (`OperationalRegime|RegimeCombinado|Cp300|PredictionServiceDeadbandWiring|PredictionHistoryReuse|IntelligenceLabBehaviorBaselineEndToEnd|AnomalyDetectionOptions|DependencyInjection`): **212/212** (205 + 7). Sem avisos de compilação nos arquivos novos. `Compare-Replay.ps1 -Configuracao Release`: **0 diferenças** em 6 execuções (`dados/rc2_rodadas/20261113_130511`). **A suíte completa não foi rodada.**
 
 #### RC-6. Resolver com N componentes
 - **Objetivo:** nova sobrecarga `Resolve(configuração, componentes, histórico alvo, séries de regime, instante atual)`:
