@@ -173,28 +173,37 @@ Todos os blocos abaixo estão **confirmados no replay**; o estado da planta em c
 - A idade vai de **0,2 a 17,2 min**. A resolução é de 1 min (o minuto do histórico do PSi4). Somada à cadência de ~10 min por tag (P26), uma falha só seria vista entre 10 e ~27 min depois de começar, no pior caso.
 - **Consequência para o placar da IA real:** com `data_hora` = minuto do processamento, o atraso medido inclui essa idade. Em minutos com falha, uma leitura de antes da falha pode ser contada como "não detectou dentro da falha".
 
-**b) Decisões e notas** (50 decisões, 12 tags, 14:21–15:09; replay no **minuto da leitura**):
+**b) Decisões e notas** (50 decisões, 12 tags, 14:21–15:09; replay no **minuto da leitura**).
 
-| Tag | IA real: nota média / máx. | Sem regime | `rec` | `combs` |
-|---|---|---|---|---|
-| TAG22 | 0,7 / 2,1 | 27,4 / 42,1 | 27,4 / 42,1 | 27,4 / 42,1 |
-| TAG23 | 0,2 / 0,9 | 30,0 / 47,0 | 30,0 / 47,0 | 30,0 / 47,0 |
-| TAG24 | 0,1 / 0,7 | 7,1 / 24,1 | 12,0 / 43,1 | 12,0 / 43,1 |
-| TAG27 | 0,5 / 2,1 | 47,4 / 53,2 | 47,4 / 53,2 | 40,3 / 46,6 |
-| TAG29 | 0,7 / 2,1 | 51,6 / 54,8 | 51,6 / 54,8 | 30,6 / 38,1 |
-| TAG30 | 0,4 / 1,1 | 60,5 / 65,0 (**2 alarmes**) | 3,7 / 7,3 | 3,7 / 7,3 |
-| TAG32 | 0,3 / 1,7 | 63,6 / 65,7 (**5 alarmes**) | 0 / 0 | 0 / 0 |
-| Demais (TAG25, 26, 28, 31, 33) | ≤ 0,7 / ≤ 1,9 | 17–46 | 0–39 | 0–35 |
-| **Alarmes** | **0** | **7** (B-02 parada, P02) | **0** | **0** |
+> **Corrigido em 13/11 (P30).** A primeira versão desta tabela comparava escalas diferentes: para a IA real, usava o `Score` gravado em `AnomaliaDetectada`, que é a **nota ÷ 20** (0–5; `EnsembleDetectionService.cs:406-410`), e para o replay a nota de 0 a 100. Agora **todas as colunas estão na escala 0–100**: a IA real aparece como `Score × 20` (coluna `nota_0_100` da exportação). Fonte da IA real: `dados/ia_real_preset3.csv`; os números batem com `INVENTARIO_PK2.md` §4.3.
 
-- **Decisão:** a IA real não alarmou (0 de 50), como o `rec` e o `combs` nesses minutos. O sem regime teria alarmado 7 vezes, todas na reserva parada (P02).
-- **Notas muito diferentes (confirmado nos dados):** a IA real deu nota **≤ 2,1 em todas as 50 decisões** (38 exatamente 0). O replay deu 20–35 de média, inclusive em tags que não têm regime em nenhuma configuração (TAG22: 27; TAG23: 30). A diferença **não vem do regime**: a IA real não está usando o mesmo perfil ou baseline do replay.
-- **Causas possíveis [hipótese; nenhuma verificada]:**
-  - perfil treinado em outro período e com outra janela (P13), com desvio muito maior;
-  - baseline comportamental ou contexto de tag cadastrado no banco do PK2 (o replay não instancia; README §4);
-  - regras de tipo/aplicabilidade diferentes por `TagContextoIa`.
+| Tag | IA real (0–100): média / máx. das decisões | Decisões válidas / total | Sem regime | `rec` | `combs` |
+|---|---|---|---|---|---|
+| TAG22 | 14,8 / 42,0 | 2 / 4 | 27,4 / 42,1 | 27,4 / 42,1 | 27,4 / 42,1 |
+| TAG23 | 3,7 / 18,6 | 1 / 5 | 30,0 / 47,0 | 30,0 / 47,0 | 30,0 / 47,0 |
+| TAG24 | 2,9 / 14,6 | 1 / 5 | 7,1 / 24,1 | 12,0 / 43,1 | 12,0 / 43,1 |
+| TAG27 | 10,3 / 41,1 | 1 / 4 | 47,4 / 53,2 | 47,4 / 53,2 | 40,3 / 46,6 |
+| TAG29 | 13,7 / 41,1 | 1 / 3 | 51,6 / 54,8 | 51,6 / 54,8 | 30,6 / 38,1 |
+| TAG30 | 7,1 / 21,3 | 1 / 3 | 60,5 / 65,0 (**2 alarmes**) | 3,7 / 7,3 | 3,7 / 7,3 |
+| TAG32 | 6,7 / 33,3 | 1 / 5 | 63,6 / 65,7 (**5 alarmes**) | 0 / 0 | 0 / 0 |
+| Demais (TAG25, 26, 28, 31, 33) | ≤ 11,6 / ≤ 38,6 (TAG33: 0 / 0) | 4 / 21 | 17–46 | 0–39 | 0–35 |
+| **Total** | **7,0 / 42,0** | **12 / 50** (38 com nota 0) | — | — | — |
+| **Alarmes** | **0** | | **7** (B-02 parada, P02) | **0** | **0** |
+
+**Só as 12 decisões válidas** (nota ≠ 0; ciclo de 14:38 e a primeira tag do ciclo de 14:21), lado a lado e na mesma escala (`dados/inventario_pk2/perfil_real_50_decisoes_12nov.csv`):
+
+| | IA real (`Score × 20`) | Replay sem regime, mesmo minuto | Perfil do banco (30/10), mesmo minuto |
+|---|---|---|---|
+| Média (12 decisões) | **29,1** | 36,6 | 34,5 |
+| Faixa | 14,6 – 42,0 | 3,4 – 65,7 | 18,4 – 52,9 |
+| Maiores diferenças real × replay | TAG30 21,3 × 64,1; TAG32 33,3 × 65,7 (B-02 parada; perfil diferente, P32) | | |
+
+- **Decisão:** a IA real não alarmou (0 de 50), como o `rec` e o `combs` nesses minutos. O sem regime teria alarmado 7 vezes, todas na reserva parada (P02). **Mas 38 das 50 decisões não passaram pelos detectores** (entrada inválida, P31), então o "0 alarmes" da IA real não é comparável ao das configurações do replay.
+- **As notas não são "quase zero" (confirmado no código e nos dados).** A afirmação anterior ("IA real ≤ 2,1, replay 20–35") vinha da mistura de escalas. Na mesma escala, as notas válidas da IA real (14,6–42,0, média 29,1) ficam na **mesma faixa do replay**. A diferença que sobra tem duas causas, as duas demonstradas no `INVENTARIO_PK2.md` §4.2:
+  - **38 zeros por entrada inválida** (P31): a leitura do lote é mais antiga que o último ponto do histórico buscado depois, e a IA grava nota 0, "sem anomalia";
+  - **perfil diferente** (P32): o `PerfisIa` do PK2 é de 30/10, com a B-02 parada; por isso TAG30/32 dão 21–33 na IA real e 64–66 no replay.
   
-  Só o inventário do banco do PK2 (BACKLOG 2) e os diagnósticos por detector (PERF_DIAG ou Intelligence Lab) respondem. **Enquanto isso, o replay não representa a configuração da IA real do PK2**, e uma IA real com notas ~0 em operação normal pode também ter sensibilidade baixa a falhas [hipótese].
+  Com o perfil do banco, as 50 decisões foram reproduzidas offline com diferença < 0,1 (INV §4.3). As hipóteses anteriores (baseline comportamental, contexto de tag) foram **descartadas** no PK2: o banco não tem esses cadastros (INV §3).
 - **Cobertura:** 50 decisões em 48 min, 12 tags, a partir das 15:09 nenhuma (P26, P27). A IA real avaliou ~9 % dos minutos-tag do período e nenhum minuto de madrugada. Não dá para comparar alarmes falsos de madrugada com a IA real.
 
 ### 2.5 Falhas não detectadas e motivo (item 5)
@@ -219,7 +228,7 @@ Para orientar a repetição, segue o que o **código** permite prever para cada 
 ### 2.6 Conferência e limitações
 
 - Replay: 0 erros e 0 divergências nas três execuções. Placar: soma das classes = total nas quatro execuções (as três do replay e a IA real).
-- O replay não reproduz Isolation Forest, multivariado, decisão runtime, baseline comportamental, latência nem o ciclo sequencial (README §4). Por isso, as notas do replay **não** são as da IA real (§2.4 b).
+- O replay não reproduz Isolation Forest, multivariado, decisão runtime, baseline comportamental, latência nem o ciclo sequencial (README §4). Por isso, as notas do replay **não** são as da IA real (§2.4 b). Ao comparar notas, usar a mesma escala: a IA real grava `Score` = nota ÷ 20 (P30).
 - As configurações com regime usam a janela móvel de 24 h, como em produção; o período de treino só vale para o perfil (fallback global). As janelas das primeiras 3 h do replay contêm a falha do preset 6 (§1.3).
 - A idade da leitura (§2.4 a) foi obtida casando valores. Ela depende de o minuto comum ser único, e foi único nos 5 ciclos. Medir diretamente exige o PERF_DIAG (BACKLOG 6) ou gravar a hora da leitura (BACKLOG 5).
 
@@ -242,5 +251,5 @@ Para orientar a repetição, segue o que o **código** permite prever para cada 
 5. O que sobra no regime combinado: **picos de demanda** com as duas bombas ligadas, **nível do reservatório nos extremos** (sucção) e **20 min logo após um rodízio noturno**, quando a IA ainda não tem histórico suficiente do novo estado.
 6. **Treinar só com período limpo não basta:** a limpeza do treino ainda joga fora a madrugada inteira da pressão.
 7. Na IA real, descobrimos **quão velha a leitura chega à decisão: até 17 minutos**. A IA lê todas as tags no início do ciclo e decide uma por uma; com o Bridge lento, a última tag decide sobre um dado antigo.
-8. As notas da IA real ficaram perto de zero em todas as tags, bem abaixo das do replay. A configuração real do PK2 não é a do replay e precisa ser inventariada antes de comparar detecção.
+8. As notas da IA real **pareciam** perto de zero, mas era escala: a IA grava a nota dividida por 20 (P30). Na mesma escala, as decisões válidas ficam na faixa do replay. O problema real é outro: **38 de 50 decisões nem chegaram aos detectores** (entrada inválida, P31), e o perfil do PK2 é antigo, de 30/10 (P32).
 9. Próximo passo: **repetir o preset 3** conferindo o início do cenário pelos rótulos, com o log da IAApi em arquivo.

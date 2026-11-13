@@ -531,6 +531,13 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - corrigir a tabela da RES3 §2.4b;
   - verificar como o LiveMonitor exibe o `Score`.
   - **Não mudar** o contrato HTTP nem o valor gravado.
+- **Situação (2026-11-13):** **parcialmente concluída** (detalhe em `PROBLEMAS_ENCONTRADOS.md` P30, "Feito em 13/11").
+  - [x] `Export-AnomaliasIaReal.ps1` grava `nota_0_100` (`score × 20`, no fim da linha; `nota_final` continua 0–5). Escala de cada coluna no cabeçalho do script e no README §1.1. Sintaxe validada no PowerShell 5.1 e teste offline com JSON sintético.
+  - [x] `dados/ia_real_preset3.csv` com `nota_0_100`, **calculada do próprio `nota_final`** (não havia JSON da API guardado; a API não foi chamada). Aceite: 50 de 50 iguais a `nota_real_x20` (dif. máx. 0,004); 13 colunas originais idênticas, então o placar não muda.
+  - [x] RES3 §2.4b refeita na escala 0–100 (e o item 8 do resumo).
+  - [x] Verificar o LiveMonitor (leitura do código): mostra o `score` persistido cru (0–5) e, na fonte de diagnóstico, o `normalizedScore` (0–100) ao lado do threshold. Não verificado na tela.
+  - [ ] Corrigir a exibição no LiveMonitor (rótulo ou × 20 na fonte persistida). **Exige aprovação**; não faz parte desta tarefa.
+  - [ ] Opcional: a exportação poder gravar a resposta JSON bruta (e reler dela), para regenerar o CSV sem chamar a API. Não implementado.
 - **Arquivos:** `tools/Cp300Export/Export-AnomaliasIaReal.ps1`, `tools/Cp300OfflineReplay/README.md`, `Docs/RESULTADO_PRESET3.md`.
 - **Risco:** baixo (não toca no runtime). **Esforço:** P.
 - **Aceite:** export das 50 decisões de 12/11 com `nota_0_100` igual a `nota_real_x20` de `dados/inventario_pk2/perfil_real_50_decisoes_12nov.csv`; placar inalterado.

@@ -47,10 +47,20 @@ dotnet run --project tools/Cp300OfflineReplay -- placar `
 | `data_hora` | minuto de `DataDeteccao − DefasagemMinutos` (processamento) |
 | `cliente`, `tag`, `valor` | `clienteId`, `tagName`, `valor` (`ValorRecebido`) |
 | `decisao_final` | `ehAnomalia` (decisão operacional), 1/0 |
-| `nota_final` | `score` |
+| `nota_final` | `score`, como veio da API. **Escala 0–5 (nota ÷ 20)**, ver o aviso abaixo |
 | `erro` | sempre vazio (a tabela só tem decisões concluídas) |
 | `data_processamento` | `dataDeteccao`, texto original |
 | `base_data_hora`, `id`, `tipo_tag`, `criticidade`, `classificacao_risco` | método da hora; campos de `AnomaliaDetectada` |
+| `nota_0_100` | `score × 20`. **Escala 0–100**, a mesma do `nota_final` do replay (seção 5) e do limiar 60 |
+
+> **Atenção: a coluna `nota_final` NÃO tem a mesma escala nos dois arquivos (P30).**
+>
+> | Arquivo | `nota_final` | Nota 0–100 |
+> |---|---|---|
+> | Saída do replay (seção 5) | nota do ensemble, **0–100** (`ScoreNormalizado`) | a própria `nota_final` |
+> | Exportação da IA real (esta seção) | `AnomaliaDetectada.Score` = **nota ÷ 20, 0–5** | `nota_0_100` |
+>
+> Origem: `Services/AnomalyDetection/EnsembleDetectionService.cs`, `Score = scoreFinalNormalizado / 20.0`; o `PredictionService` grava `resultadoDetector.Score`. Exemplos: 3,0 gravado = nota 60 (limiar); 2,1 = nota 42. **Para comparar notas da IA real com o replay, use `nota_0_100`.** O placar não é afetado: usa só `decisao_final`. O valor gravado e o contrato de `GET /api/anomalias` não mudaram.
 
 O endpoint não expõe as notas por detector, o baseline nem os campos de auditoria do runtime (`LegacyEhAnomalia` etc.); para isso seria preciso outro endpoint (os diagnósticos do Intelligence Lab, que exigem chave).
 

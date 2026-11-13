@@ -29,9 +29,21 @@
 
     Saida (UTF-8, virgula, ponto decimal, booleanos 1/0), uma linha por decisao:
         data_hora,cliente,tag,valor,decisao_final,nota_final,erro,
-        data_processamento,base_data_hora,id,tipo_tag,criticidade,classificacao_risco
+        data_processamento,base_data_hora,id,tipo_tag,criticidade,classificacao_risco,
+        nota_0_100
     O placar exige data_hora, tag e decisao_final; erro sai sempre vazio (a
     tabela so tem decisoes concluidas).
+
+    ESCALA DA NOTA (P30 em Docs/PROBLEMAS_ENCONTRADOS.md):
+      - nota_final = score da API = AnomaliaDetectada.Score = nota do ensemble
+                     DIVIDIDA POR 20 (escala 0-5). Mantida como veio, para nao
+                     mudar o arquivo de quem ja o le.
+      - nota_0_100 = score x 20 = nota do ensemble na escala 0-100, a MESMA do
+                     nota_final do replay offline e do limiar (60).
+      Origem: Services/AnomalyDetection/EnsembleDetectionService.cs,
+      Score = scoreFinalNormalizado / 20.0 e ScoreNormalizado =
+      scoreFinalNormalizado; PredictionService grava resultadoDetector.Score.
+      Para comparar com o replay, use nota_0_100.
 
     Por padrao so aceita ApiUrl em loopback (localhost, 127.0.0.1, ::1).
 
@@ -213,6 +225,9 @@ foreach ($r in $registros) {
     $minuto = New-Object DateTime ($ref.Ticks - ($ref.Ticks % [TimeSpan]::TicksPerMinute))
     $ehAnomalia = Campo $r 'ehAnomalia'
     if ($ehAnomalia -isnot [bool]) { throw "Registro $(Campo $r 'id'): ehAnomalia ausente ou nao booleano." }
+    # P30: score da API = nota / 20 (EnsembleDetectionService). nota_0_100 = score x 20.
+    $score = Campo $r 'score'
+    $nota100 = if ($null -eq $score) { $null } else { [double]$score * 20.0 }
 
     $linhas.Add([pscustomobject]@{
         Ordem = $proc.Data
@@ -224,19 +239,20 @@ foreach ($r in $registros) {
             [string](Campo $r 'tagName'),
             (Campo $r 'valor'),
             $ehAnomalia,
-            (Campo $r 'score'),
+            $score,
             '',
             $proc.Texto,
             $base,
             (Campo $r 'id'),
             (Campo $r 'tipoTag'),
             (Campo $r 'criticidade'),
-            (Campo $r 'classificacaoRisco')
+            (Campo $r 'classificacaoRisco'),
+            $nota100
         ) | ForEach-Object { Csv $_ }
     })
 }
 
-$cabecalho = 'data_hora,cliente,tag,valor,decisao_final,nota_final,erro,data_processamento,base_data_hora,id,tipo_tag,criticidade,classificacao_risco'
+$cabecalho = 'data_hora,cliente,tag,valor,decisao_final,nota_final,erro,data_processamento,base_data_hora,id,tipo_tag,criticidade,classificacao_risco,nota_0_100'
 $conteudo = New-Object System.Text.StringBuilder
 [void]$conteudo.Append($cabecalho).Append("`n")
 foreach ($l in ($linhas | Sort-Object Ordem, Tag, Id)) {
