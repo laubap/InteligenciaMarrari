@@ -593,8 +593,8 @@ Coluna "muda comportamento":
 | RC-8 | Service e provider com componentes, atrás da chave — **concluída em 13/11/2026** | RC-5, RC-6, RC-7 | só com a chave |
 | RC-9 | `RegimeKey` no diagnóstico e no log — **concluída em 13/11/2026** | RC-8 | só com a chave (observabilidade) |
 | RC-10 | Replay com regime combinado — **concluída em 13/11/2026** | RC-8, RC-9 | não (ferramenta) |
-| RC-11 | Equivalência com a etapa 0, critério da TAG29 e custo | RC-0, RC-1, RC-10 | não |
-| RC-12 | Ativação no ambiente de teste do PK2 | RC-11 + aprovação | **sim** |
+| RC-11 | Equivalência com a etapa 0, critério da TAG29 e custo — **aprovada com ressalvas em 16/11/2026 (§7); decisão: 3 componentes (§7.9)** | RC-0, RC-1, RC-10 | não |
+| RC-12 | Ativação no ambiente de teste do PK2 — **não aprovada; depois das tarefas 6 e 27, em sessão acompanhada, junto com o `HistoricoCausal` (§7.9)** | RC-11 + tarefas 6 e 27 + aprovação | **sim** |
 
 RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo depois da RC-2.
 
@@ -863,8 +863,15 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - **Arquivos:** nenhum código. Resultado como §7 deste documento; saídas em `dados/`.
 - **Aceite:** itens 1 a 5, com nível de evidência **confirmado no replay** (sem IF, multivariado nem latência; não é validação em planta).
 - **Muda comportamento:** não.
+- **Resultado (16/11/2026): aprovada com ressalvas** (§7).
+  - Regressão: 0 diferenças, sem e com `-HistoricoCausal`. Equivalência: 0 linhas diferentes em 8 comparações (3 e 2 componentes).
+  - Metas de §3.1 atendidas, com a B-01 de madrugada no limite (30). TAG29 confirmada às 15:37, no limite. CPU +8 %, dentro da variação.
+  - Ressalvas: 174 minutos-tag de fallback por poucos pontos nas bombas (72 com alarme), na primeira noite depois de um rodízio (item 24); custo de I/O não medido.
+  - Tabela com e sem set-point em §7.6. **Decisão da responsável (16/11/2026): 3 componentes** (§7.9).
+  - **RC-12 não aprovada:** fica para depois das tarefas 6 e 27, numa sessão acompanhada, junto com a chave do `HistoricoCausal` (§7.9).
 
 #### RC-12. Ativação no ambiente de teste do PK2 (última etapa; exige aprovação explícita)
+- **Situação (16/11/2026): NÃO aprovada.** Por decisão da responsável (§7.9), vem depois da **tarefa 6** (cadência do ciclo) e da **tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal`. Componentes: os 3 de §6.2.
 - **Objetivo:**
   - aplicar a migration da RC-5 no banco do PK2, com backup antes;
   - cadastrar a lista de rótulos TAG60–TAG81 do PK2 (RC-7);
@@ -884,3 +891,217 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
 - Correções da TAG26, TAG24 e TAG22 (§5.4, item 7) e o item 13 do backlog.
 - O sinal de 13:37–13:38 no preset 1 (§5.4, item 6): só repetir a observação na RC-11; não conta como detecção.
 - Sensibilidade dos detectores dentro do regime (backlog 14) e heterogeneidade do regime "B-01 sozinha" (backlog 15), ambas saídas da RC-1 (§5.6.2).
+
+---
+
+## 7. Resultado da RC-11 (16/11/2026): Opção A real no replay
+
+**Nível de evidência:** **confirmado no replay** (código de produção sobre dados do simulador, `tools/Cp300OfflineReplay`, sem Isolation Forest, multivariado nem latência). **Não é validação em planta nem da IA real.** Nenhum código, configuração, limiar, peso ou gate foi alterado.
+- As contagens de alarme saem do **placar** (`placar`, mapa versionado com `efeitosPorCanal`).
+- O que o placar não separa (B-02 em 16:52–17:11, TAG29 minuto a minuto, fallbacks) foi contado por script de leitura no scratchpad. O script foi conferido contra os números já publicados da RC-0: B-02 no failover 56 / 40 / 0; TAG29 confirmada às 15:34 / 15:37 / 15:37.
+
+### 7.1 Execuções
+
+- **Entrada:** `dados/cp300_09a13nov.csv`, sem séries derivadas (os componentes TAG42, TAG43 e TAG46 vêm do próprio CSV). Mesmas 13 tags de §5.2. Todas as execuções com `--regime-combinado --historico-causal`. Build Debug da árvore limpa em `62298d8`.
+- **Configurações:**
+  - `combr` (3 componentes, configuração alvo de §6.2): `TAG27/29/31=TAG42+TAG43+TAG46`, `TAG28/30/32=TAG43+TAG42+TAG46`, `TAG26=TAG45`, `TAG24=TAG46`; mapas `TAG42=2:2;*:0`, `TAG43=2:2;*:0` e `TAG46=380:380;*:450`. A TAG24 tem 1 componente: segue o caminho atual, e o mapa da TAG46 é ignorado nela (aviso no log);
+  - `comb2r` (2 componentes, **sem set-point**): igual, sem `+TAG46` e sem o mapa da TAG46.
+- **Cenários** (argumentos de §5.2 e da RES3):
+
+| Cenário | Treino | Replay |
+|---|---|---|
+| Preset 1 | `--treino-ate 2026-11-11T12:55` | → 11/11 14:25 |
+| Madrugada de 11/11 | `--treino-ate 2026-11-11T00:00` | → 11/11 05:30 |
+| Preset 6 | `--treino-ate 2026-11-11T15:06 --permitir-falha-no-treino` | → 11/11 17:40 |
+| 18 h normais de 12/11 (RES3 §2) | `--treino-inicio 2026-11-11T18:00 --treino-fim 2026-11-12T14:15 --permitir-falha-no-treino` | 12/11 14:15 → 13/11 07:59 |
+| Preset 3 de 13/11 (RES3 §4) | `--treino-inicio 2026-11-12T15:00 --treino-fim 2026-11-13T15:00` | 13/11 15:00 → 22:59 |
+
+- **Conferência:** 10 de 10 execuções com código 0; **0 erros, 0 divergências** e 0 valores descartados.
+- **Saídas** (não versionadas):
+  - `dados/rc11_<cenário>_{combr,comb2r}.{csv,log}`;
+  - `dados/rc11_placar/`: placar das 10 saídas e das referências `rc0_*`, `p3_*` e `p3b_*` (estas com o prefixo `ref_`).
+- Scripts de leitura no scratchpad da sessão, fora do repositório: `rc11_run.sh`, `rc11_analise.py`, `rc11_classes.py` e `rc11_custo.sh`.
+
+### 7.2 Itens 1 e 2: regressão e equivalência
+
+1. **Regressão (chave desligada):** `Compare-Replay.ps1` deu **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal` (`dados/rc2_rodadas/rc11_sem_hc` e `rc11_com_hc`; CSV comparado por SHA-256, log linha a linha).
+2. **Equivalência:** comparação linha a linha das 29 colunas comuns, fora `valor_regime`, `motivo_baseline` e `chave_regime` (as três que o item 2 permite diferir).
+
+| Execução real | Referência (séries derivadas) | Linhas | Linhas diferentes |
+|---|---|---|---|
+| Preset 1 / madrugada / preset 6, `combr` | `rc0_*_combs` | 7.098 / 25.818 / 12.090 | **0 / 0 / 0** |
+| Preset 1 / madrugada / preset 6, `comb2r` | `rc0_*_comb` | 7.098 / 25.818 / 12.090 | **0 / 0 / 0** |
+| 12/11 normais, `combr` | `p3_combs` | 82.992 | **0** |
+| Preset 3 de 13/11, `combr` | `p3b_combs` | 37.440 | **0** |
+
+- O `rc11_preset3b_combr.csv` é **idêntico byte a byte** ao `p3b_combr.csv` da RES3 §4.3.
+- A lista de "minutos diferentes" da RC-0 era vazia (§5.7.1), e a Opção A real não teve nenhum minuto diferente.
+- As referências `rc0_*` e `p3_*` rodaram sem `--historico-causal` e sobre o CSV derivado. A igualdade confirma de novo que, sem `--historico-inclui-atual`, o recorte causal não muda nada (P31).
+- **CSV de 10–11/11:** não foi rodado de novo nesta tarefa.
+  - Presets 1 e 6: as saídas `rc0_*` já eram iguais às `e0_*` (§5.7.2), então a equivalência vale por transitividade.
+  - Madrugada de 10–11/11 (artefato da primeira noite do arquivo): fica só com os números da etapa 0 (§5.3).
+
+### 7.3 Item 3: metas de §3.1 com a Opção A real (`combr`)
+
+| Medida | Meta | `rec` (hoje) | **`combr`** | |
+|---|---|---|---|---|
+| B-01 (TAG27/29/31), preset 1, fora da falha (placar) | ≤ 5 | 23 | **4** | ✅ |
+| B-01, madrugada de 11/11 | ≤ 30 | 716 | **30** (9 com `Global`) | ✅ **no limite** |
+| B-02 sozinha após o failover, preset 6 (16:52–17:11) | ≤ 5 | 56 | **0** | ✅ |
+| Preset 6, falsos fora da falha, todas as tags | ≤ 27 | 27 (RES6) / 13 (placar) | **20** (critério da RES6; igual a `combs`, pela equivalência) / **13** (placar) | ✅ |
+| Preset 6, TAG29: primeiro alarme | ≤ 15:32 | 15:32 | **15:32** (sinal breve de 1 min) | ✅ |
+| Preset 6, TAG29 antes da falha | 0 | 0 | **0** | ✅ |
+| Conferência | 0 divergências | 0 | **0** | ✅ |
+| Fallbacks para o global | contar e listar; esperar só transições | — | ver §7.5 | ⚠️ **não são só transições** |
+
+- **Totais de alarmes em `combr`:** preset 1 **31**, madrugada **74**, preset 6 **104**, 12/11 normais **297** e preset 3 de 13/11 **324**. São os mesmos de `combs` (§5.3 e §5.7.2; RES3 §2.2 e §4.4).
+- **Placar por evento:**
+  - **Preset 1:** a obstrução não foi detectada. Houve sinal breve nas TAG31/30/32 às **13:37** (2 min). É o sinal de §5.4, item 6 (TAG29–32 às 13:37; TAG31/32 às 13:38), que se repetiu. Como combinado, **não conta como detecção** (§6.4).
+  - **Preset 6:** desbalanceamento detectado na TAG29. A sequência começa às 15:35 e é **confirmada às 15:37**; atraso de 7 min.
+  - **Preset 3 de 13/11:** **5 de 7** falhas (20, 23, 24, 26 e 27), igual à RES3 §4.4.
+- **Madrugada de 13/11** (dentro das 18 h normais de 12/11; 00h–05h pelo placar): B-01 **16**, B-02 **69**, total 113.
+
+### 7.4 Item 4: TAG29 no preset 6
+
+| Min | Valor | Nota final | Decisão | Origem | Chave | Média | Desvio | Pontos |
+|---|---|---|---|---|---|---|---|---|
+| 15:32 | 253 | 64,3 | 1 | `OperationalRegime` | `TAG42=2\|TAG43=0\|TAG46=450` | 169,7 | 27,1 | 433 |
+| **15:33** | 256 | **54,8** | 0 | `OperationalRegime` | `TAG42=2\|TAG43=0\|TAG46=450` | **169,9** | **27,4** | **434** |
+| **15:34** | 249 | **53,5** | 0 | `OperationalRegime` | `TAG42=2\|TAG43=0\|TAG46=450` | **170,1** | **27,7** | **435** |
+| 15:35 | 268 | 61,0 | 1 | `OperationalRegime` | `TAG42=2\|TAG43=0\|TAG46=450` | 170,3 | 27,9 | 436 |
+| 15:37 | 287 | 75,3 | 1 | `OperationalRegime` | `TAG42=2\|TAG43=0\|TAG46=450` | 170,3 | 27,9 | 438 |
+
+- **Chave às 15:33 e 15:34:** B-01 sozinha, com o set-point de dia. Não houve troca de chave nem fallback no intervalo. Pontos (434–435) e notas são os de `combs` (§5.6), como a equivalência previa.
+- **Critério (detecção confirmada até 15:37): ✅ 15:37, exatamente no limite** (decisão (a), §5.6.2). Nenhum limiar, peso ou gate foi ajustado.
+- Em `comb2r`, o mesmo comportamento: chave `TAG42=2|TAG43=0`, 494–495 pontos, notas 56,0 / 55,1 e confirmação às 15:37.
+
+### 7.5 Fallbacks por poucos pontos (`origem_baseline = Global`)
+
+Contagem nas tags com regime (TAG24, TAG26 e TAG27–TAG32). Para conferir a causa, contei os pontos da classe em [t − 24 h, t), usando o estado do mesmo minuto (aproximação do resolver).
+- **Todos estão abaixo de `MinimoAmostrasPorRegime` = 30.**
+- Nenhum foi por componente sem leitura.
+
+| Cenário | `combr`: bombas (com alarme) | Classe e pontos na janela | `comb2r`: bombas | TAG26 (nas duas) |
+|---|---|---|---|---|
+| Preset 1 | 0 | — | 0 | 0 |
+| Madrugada de 11/11 | **18** (**9**, B-01: TAG27/29/31 às 00:43–00:45) | B-01 parada + 380: 27–29; B-02 sozinha + 380: 27–29 | 0 | 1 (01:28; TAG45 = 1, 4 pontos) |
+| Preset 6 | 0 | — | 0 | 0 |
+| 12/11 normais | **156** (**63**, B-02: TAG28/30/32 às 00:52–01:12 de 13/11) | Rodízio de 13/11 00:47: B-02 parada + 380 e B-01 sozinha + 380, de **14 a 29** pontos entre 00:47 e 01:12; 30 às 01:13 | 0 | 7 (TAG45 = 1 ou 3, 1–4 pontos) |
+| Preset 3 de 13/11 | 0 | — | 0 | 4 (TAG45 = 1 ou 3, 3–4 pontos) |
+| **Total** | **174 minutos-tag (72 com alarme)** | | **0** | 12 (iguais em `rec`, que tem o mesmo regime) |
+
+- **Não são só transições.**
+  - **Bombas:** os fallbacks acontecem **na primeira noite com set-point 380 depois de um rodízio** que troca a bomba que fica sozinha ou parada. A classe nova tem poucos pontos na janela móvel de 24 h. É o mecanismo da RC-0 (§5.7.3), agora também na B-02 (RES3 §2.3, P08).
+  - **TAG26:** são minutos de transição da válvula (TAG45 = 1 ou 3) e não dependem do regime combinado.
+- **Destino:** item 24 do backlog (referência estável por regime). Nenhum limiar foi alterado, inclusive `MinimoAmostrasPorRegime`.
+
+### 7.6 Comparação com e sem set-point (dia e madrugada)
+
+Minutos-tag de alarme, pelo placar:
+- `comb2r` = 2 componentes (própria bomba × outra bomba);
+- `combr` = 3 componentes (+ TAG46).
+
+Em negrito, o melhor de cada linha.
+
+| Período | Medida | Sem set-point (`comb2r`) | Com set-point (`combr`) |
+|---|---|---|---|
+| **Dia:** preset 1 | B-01 fora da falha (meta ≤ 5) / total | 6 ❌ / 33 | **4 ✅ / 31** |
+| **Dia:** preset 6 | B-02 sozinha após o failover (meta ≤ 5) / total | 40 ❌ / 144 | **0 ✅ / 104** |
+| **Dia:** preset 6 | TAG29 confirmada / falsos fora (placar) | 15:37 / 13 | 15:37 / 13 |
+| **Dia:** 12/11 14:15–23:59 e 13/11 06:00–07:59 | falsos: B-01 / B-02 / total | **47** / 173 / 281 | 48 / **75** / **184** |
+| **Dia:** preset 3 de 13/11 | falhas detectadas (de 7) / falsos fora | 4 (perde a 26) / 62 | **5 / 37** |
+| **Madrugada** de 11/11 (CSV 09–13/11) | B-01 / B-02 / total | **0** / 14 / **58** | 30 (9 `Global`) / **0** / 74 |
+| **Madrugada** de 13/11 (00h–05h) | B-01 / B-02 / total | 78 / **4** / **110** | **16** / 69 (63 `Global`) / 113 |
+| Madrugada de 11/11, CSV 10–11/11 (etapa 0, §5.3; artefato da 1ª noite) | B-01 / B-02 / total | **6** / 130 / 220 | 82 (79 `Global`) / **32** / **198** |
+| **Soma dos 5 cenários desta tarefa** | total de alarmes | 1.028 | **830** |
+| Fallbacks das bombas | minutos-tag (com alarme) | **0** | 174 (72) |
+
+**Leitura** (confirmado no replay; o mecanismo foi conferido nas médias do regime):
+1. **Sem set-point, quem perde é a bomba que opera sozinha à noite depois de ter operado sozinha de dia.** A classe "sozinha" mistura dia (≈ 450) e noite (≈ 380).
+   - Aconteceu com a B-02 no failover do preset 6 (40 → 0) e na madrugada do CSV de 10–11/11 (130).
+   - Em 13/11, depois do rodízio de 00:47, aconteceu com a **B-01**: TAG31 em 334–346 contra média 438 ± 21 na classe `TAG42=2|TAG43=0`. Foram 77 alarmes da B-01 nessa classe, quase todos entre 00:47 e 01:59.
+   - Na madrugada de 11/11, o efeito não aparece em `comb2r` porque a B-01 já tinha operado sozinha à noite nas 24 h anteriores.
+2. **De dia, o set-point também ajuda**, porque a janela de 24 h leva a noite anterior para dentro da classe "sozinha". No preset 3 sem set-point:
+   - a TAG29 alarmou 4 vezes entre 20:37 e 20:43, antes da falha 26, com a B-01 sozinha (chave `TAG42=2|TAG43=0`, média 160 ± 29);
+   - por isso ficou excluída pela regra do placar, e a falha não contou;
+   - os falsos subiram de 37 para 62.
+3. **Com set-point, o preço são os fallbacks da §7.5:** 72 minutos-tag de alarme (9 + 63), sempre na primeira noite depois de um rodízio. Sem eles, `combr` teria 65 alarmes na madrugada de 11/11 e 50 na de 13/11 [hipótese: supõe que o regime aplicado não alarmaria nesses minutos].
+4. **Saldo:**
+   - com set-point, todas as metas de §3.1 são atendidas, e o total de alarmes é menor (830 contra 1.028), com vantagem em 4 das 5 janelas desta tarefa;
+   - sem set-point, falham duas metas (B-01 no preset 1 e B-02 no failover);
+   - nas madrugadas, cada configuração ganha numa.
+
+**Recomendação:** manter os **3 componentes**. **Decidido pela responsável em 16/11/2026: 3 componentes (§7.9).** A recomendação se apoia em §5.5 e §6.2. O ponto fraco do set-point (os fallbacks) tem solução encaminhada no item 24. O ponto fraco sem set-point (classe "sozinha" misturando dia e noite) não tem.
+
+### 7.7 Item 5: custo
+
+Preset 6 (2.015 leituras), com a mesma entrada (`cp300_09a13nov_derivado.csv`) e `--historico-causal` em todas as execuções.
+- Execuções em sequência, sem outra carga na máquina: uma de aquecimento (descartada) e 3 repetições.
+- Medida: tempo de parede do processo inteiro (leitura do CSV, treino e replay).
+
+| Configuração | Chave | Release (média; faixa) | Debug (média) |
+|---|---|---|---|
+| `sem` (sem regime) | desligada | 16,0 s (15,4–16,7) | 20,8 s |
+| `rec` (regime de hoje) | desligada | 16,1 s (16,0–16,3) | 20,1 s |
+| `combs` (séries derivadas, 1 componente) | desligada | 15,2 s (15,0–15,4) | 18,5 s |
+| **`combr` (3 componentes)** | **ligada** | **16,4 s** (15,9–16,8) | 19,4 s |
+| `comb2r` (2 componentes) | ligada | 17,5 s (16,0–19,5) | 18,7 s |
+
+- **Chave desligada × ligada, com as mesmas classes (`combs` × `combr`):** +1,2 s em Release (+8 %, ≈ 0,6 ms por leitura) e +0,9 s em Debug.
+  - A diferença é da ordem da variação entre repetições (até 3,5 s no `comb2r`).
+  - Contra o regime de hoje (`rec`), a diferença é de +0,3 s.
+  - Conclusão: **custo de CPU desprezível** com a busca de dois ponteiros (RC-3).
+- As 3 repetições deram saídas idênticas entre si, e Release = Debug (conferido com `cmp`).
+- **Não medido aqui: o custo de I/O em produção.**
+  - O provider faz **uma consulta de histórico por componente** (RC-8): 3 consultas por tag de bomba, ou 18 por ciclo nas 6 tags, contra 6 hoje.
+  - No replay, o histórico vem do CSV.
+  - Medir na RC-12 com o PERF_DIAG, junto com o tempo de ciclo (P10, P11 e tarefa 6).
+
+### 7.8 Veredito da RC-11: **aprovada com ressalvas**
+
+| Item | Resultado |
+|---|---|
+| 1. Regressão byte a byte, chave desligada | ✅ 0 diferenças em 12 execuções, sem e com `-HistoricoCausal` |
+| 2. Equivalência com a etapa 0 / RC-0 | ✅ 0 linhas diferentes em 8 comparações (3 e 2 componentes) |
+| 3. Metas de §3.1 | ✅ todas atendidas; ⚠️ B-01 de madrugada exatamente no limite (30) |
+| 3. Fallbacks (`Global`) | ⚠️ 174 minutos-tag nas bombas (72 com alarme), não só transições → item 24 |
+| 4. TAG29 até 15:37 | ✅ 15:37, exatamente no limite; chave, média, desvio e pontos registrados |
+| 5. Custo | ✅ CPU: +8 % no tempo de parede, dentro da variação; ⚠️ I/O de produção não medido |
+| Tabela com e sem set-point | ✅ feita (§7.6); ✅ **decisão da responsável registrada em 16/11/2026: 3 componentes** (§7.9) |
+
+**Ressalvas:**
+1. Duas metas ficaram **sem folga** (B-01 de madrugada = 30; TAG29 = 15:37). Uma variação pequena nos dados pode passar do limite.
+2. Os fallbacks da primeira noite depois de um rodízio vão aparecer também no PK2 enquanto o baseline for de 24 h móveis (item 24).
+3. O custo de I/O das 3 consultas por tag não foi medido.
+4. Simulador, com uma execução de cada cenário; não é planta nem IA real.
+
+**O que falta para a RC-12** (atualizado em 16/11/2026, depois da decisão da §7.9):
+1. ~~Registrar a decisão dos componentes~~ **Feito:** 3 componentes (§7.9).
+2. **Aprovação explícita da RC-12**, que muda a detecção no ambiente de teste do PK2. **Ainda não aprovada** (§7.9).
+3. **Pré-requisitos definidos pela responsável** (§7.9):
+   - **tarefa 6** (cadência do ciclo) concluída: sem ela, o diagnóstico vê ~1 minuto em cada 10 (P26);
+   - **tarefa 27** (retreino do perfil do PK2, P32) concluída: o perfil de 30/10 é o que entra nos fallbacks para o global;
+   - **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25, P31) no mesmo ambiente.
+4. **Na própria RC-12:**
+   - backup do banco e migration da RC-5;
+   - lista de rótulos TAG60–TAG81 (RC-7);
+   - componentes e mapas de §6.2 (3 componentes);
+   - chave ligada só nesse ambiente;
+   - medição do tempo de ciclo com as 3 consultas por tag;
+   - registro como validação no simulador.
+
+### 7.9 Decisão dos componentes (16/11/2026, responsável)
+
+- **Decisão:** o regime das tags das bombas tem **3 componentes**: estado da própria bomba, estado da outra bomba e TAG46 (set-point). É a configuração alvo de §6.2:
+  - TAG27/29/31 = TAG42 + TAG43 + TAG46;
+  - TAG28/30/32 = TAG43 + TAG42 + TAG46;
+  - mapas `2→2; *→0` nas bombas e `380→380; *→450` na TAG46.
+- **Base:** a comparação com e sem set-point da §7.6.
+  - Com set-point, todas as metas de §3.1 são atendidas, e o total de alarmes é menor (830 contra 1.028).
+  - Sem set-point, falham a B-01 no preset 1 e a B-02 no failover.
+- **Custo conhecido, aceito com a decisão:** os fallbacks por poucos pontos na primeira noite depois de um rodízio (§7.5: 174 minutos-tag, 72 com alarme). Ficam com o item 24 do backlog. Nenhum limiar foi alterado.
+- **A RC-12 NÃO está aprovada.** Ela fica para depois:
+  - da **tarefa 6** (cadência do ciclo);
+  - da **tarefa 27** (retreino do perfil do PK2).
+- **Forma:** numa **sessão acompanhada**, junto com a chave `AnomalyDetection:HistoricoCausal`. A aprovação explícita continua sendo exigida nessa sessão.
+- **Nada foi alterado** no código, na configuração nem no banco por esta decisão.
