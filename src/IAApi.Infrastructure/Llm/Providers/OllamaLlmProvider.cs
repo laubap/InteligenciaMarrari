@@ -94,17 +94,17 @@ public sealed class OllamaLlmProvider : ILlmProvider
                 cancellationToken
             );
 
+            // P39: o corpo da resposta não entra no log nem em
+            // LlmResponse.Erro (também registrado em log); só o código HTTP.
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError(
-                    "Ollama retornou HTTP {StatusCode}. Corpo: {ResponseBody}",
-                    (int)response.StatusCode,
-                    responseBody
+                    "Ollama retornou HTTP {StatusCode}.",
+                    (int)response.StatusCode
                 );
 
                 return CriarFalha(
-                    $"Ollama retornou HTTP {(int)response.StatusCode}.",
-                    responseBody
+                    $"Ollama retornou HTTP {(int)response.StatusCode}."
                 );
             }
 
@@ -117,16 +117,14 @@ public sealed class OllamaLlmProvider : ILlmProvider
             if (ollamaResponse is null)
             {
                 return CriarFalha(
-                    "Não foi possível interpretar a resposta do Ollama.",
-                    responseBody
+                    "Não foi possível interpretar a resposta do Ollama."
                 );
             }
 
             if (string.IsNullOrWhiteSpace(ollamaResponse.Message.Content))
             {
                 return CriarFalha(
-                    "O Ollama retornou uma resposta sem conteúdo.",
-                    responseBody
+                    "O Ollama retornou uma resposta sem conteúdo."
                 );
             }
 

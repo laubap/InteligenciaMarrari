@@ -72,7 +72,8 @@ public sealed class LocalLlmAnomalyInterpretationService
                 );
             }
 
-            _logger.LogInformation(
+            // P39: a resposta bruta pode conter dados industriais; so em Debug.
+            _logger.LogDebug(
                 """
 ==================== RESPOSTA BRUTA DA IA ====================
 {Conteudo}

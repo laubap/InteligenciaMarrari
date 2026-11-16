@@ -14,6 +14,8 @@
     So execute numa sessao de teste autorizada.
 
     Passos:
+      0. Recusa subir se a -Url nao for local (localhost, 127.0.0.1 ou [::1]):
+         a IAApi nao tem autenticacao (P34, Docs/PROBLEMAS_ENCONTRADOS.md).
       1. Recusa subir se o PID salvo ainda estiver vivo ou se a porta da -Url
          ja estiver em uso.
       2. dotnet build IAApi.csproj -c <Configuracao> (pule com -SemBuild).
@@ -58,6 +60,8 @@
 .PARAMETER Url
     Endereco de escuta. Padrao: http://localhost:5145 (perfil "http" do
     Properties/launchSettings.json, o mesmo que o LiveMonitor usa).
+    So aceita um endereco http/https em localhost, 127.0.0.1 ou [::1] (P34);
+    0.0.0.0, *, + ou IP da rede sao recusados antes de qualquer acao.
 
 .PARAMETER Ambiente
     ASPNETCORE_ENVIRONMENT. Padrao: Development (o mesmo do launchSettings).
@@ -96,6 +100,25 @@ param(
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+
+# P34: a IAApi nao tem autenticacao. So aceita escutar na propria maquina.
+# Testado por tools\Start-IAApiComLog.Tests.ps1 (le so esta funcao).
+function Test-EnderecoLocal([string]$Endereco) {
+    $uri = $null
+    if (-not [uri]::TryCreate($Endereco, [UriKind]::Absolute, [ref]$uri)) { return $false }
+    if (@('http', 'https') -notcontains $uri.Scheme) { return $false }
+    if ($uri.HostNameType -eq [UriHostNameType]::Dns) { return $uri.Host -eq 'localhost' }
+    # IP: o .NET Framework expande o IPv6 ([::1] vira 0000:...:0001); comparar como endereco.
+    $ip = $null
+    if (-not [System.Net.IPAddress]::TryParse($uri.DnsSafeHost, [ref]$ip)) { return $false }
+    return $ip.Equals([System.Net.IPAddress]::Loopback) -or $ip.Equals([System.Net.IPAddress]::IPv6Loopback)
+}
+
+# 0. Endereco so local (antes de qualquer outra acao).
+if (-not (Test-EnderecoLocal $Url)) {
+    throw (("Endereco '{0}' recusado: a IAApi nao tem autenticacao (P34) e so pode subir em " +
+        "localhost, 127.0.0.1 ou [::1] (ex.: http://localhost:5145). Nao subi nada.") -f $Url)
+}
 
 $raiz = Split-Path -Parent $PSScriptRoot
 $projeto = Join-Path $raiz 'IAApi.csproj'

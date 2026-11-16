@@ -11,6 +11,8 @@
 
 > **Atualização com o inventário do banco do PK2 (13/11/2026, `Docs/INVENTARIO_PK2.md`, INV):** a diferença "IA real ≤ 2,1 × replay 20–35" tem três causas, todas demonstradas: **(a)** o `Score` gravado é a nota ÷ 20 (2,1 = nota 42; problema novo **P30**); **(b)** 38 das 50 decisões foram **entrada inválida** com nota 0, porque a leitura do lote é mais antiga que o histórico buscado depois (**P31**; P19 deixou de ser só teórico); **(c)** o perfil de produção é de 30/10, com ~3 h de dados e a B-02 parada, e TAG28/32 estão colapsadas (**P32**). Com o perfil do banco, as 50 decisões reais foram reproduzidas offline (diferença < 0,1). O banco não tem rótulo ativo, regime, contexto, comportamento nem modelo IF do PK2 (P14 e P15 descartados no PK2).
 
+> **Atualização com a conferência de segurança da auditoria B3.23 (16/11/2026, BACKLOG 29, fase A):** os 8 achados de segurança (B323-01 a 06, 17 e 23) foram conferidos por leitura no HEAD `05c64c3`, sem subir a API nem fazer requisições. **Todos continuam presentes** (o B323-23 em parte) e viraram **P33 a P40**. Não são problemas de detecção, mas ficam aqui pela regra da tarefa 29. Nenhuma correção foi feita; cada uma exige aprovação própria. **Antes de qualquer demo para fora da equipe, tratar pelo menos P33 e P34.**
+
 **Como ler o status**
 
 | Status | Significado |
@@ -55,7 +57,7 @@
 | P20 | Tag com poucos valores distintos pode ser classificada como "discreta" e ter todos os detectores bloqueados | Confirmado no código; ocorreu nos replays com regime do preset 1 (73 min, não relatado na RES) e **[preset 6]** (TAG28/32, B-02 parada; TAG27/31 na config. 3) | TAG44 (RES §2.1); **[preset 6]** RES6 §2.2 | Falha não detectada (hipótese) | Baixa |
 | P21 | Alarmes que caem por acaso no horário da falha parecem acertos | Confirmado no replay (de novo no preset 6, inclusive no failover) | Preset 1 (RES §2.1, §4.2); **[preset 6]** RES6 §2.1, §2.3 | Risco de avaliação errada | Média |
 | P22 | TAG23 (sucção) teve 40 alarmes de madrugada. **[preset 3]** 45 alarmes iguais nas 3 configurações, sempre com o nível do reservatório num extremo; causa: hipótese | Confirmado no replay | Madrugada (RES §4.3); **[preset 3]** RES3 §2.3 | Alarme falso | Baixa |
-| P23 | Código em execução fora de commit | **Parcialmente resolvido**: runtime e ferramentas commitados; faltam os 5 `.patch` da raiz | — (AUD §1; git em 12/11) | Risco | Baixa |
+| P23 | Código em execução fora de commit | **Resolvido**: runtime e ferramentas commitados; os 5 `.patch` estavam incorporados e foram movidos para fora do repositório (16/11) | — (AUD §1; git em 12/11) | Risco | Baixa |
 | **P24** | **[preset 6]** Falha encadeada mascarada: com a nota já saturada, uma segunda falha na mesma tag não muda nada | Confirmado no replay | Preset 6 (RES6 §2.1, §2.2) | Falha não detectada (agravamento invisível) | Média |
 | **P25** | Absorção da falha pelo baseline móvel: uma deterioração longa entra nas 24 h móveis e passa a ser "normal"; com regime, nenhum detector fica ancorado em referência estável | **Hipótese** (mecanismo confirmado no código; efeito a medir com o teste de deriva sintética) | Indício pequeno no preset 6 (RES6 §2.6); proposta em `Docs/PROPOSTA_BASELINE_ESTAVEL.md` | Falha não detectada (deterioração lenta) | **Alta** (medir) |
 | **P26** | A IA real avaliou cada tag do PK2 só 3 a 5 vezes em ~48 min (12/11 14:21–15:09): cerca de uma avaliação a cada ~10 min por tag, enquanto os dados chegam a 1 por minuto. Parte das tentativas estourou o timeout de 60 s do Bridge e ficou sem decisão | Confirmado em log (decisões da API + Event Viewer); efeito na detecção é inferência | IA real em 12/11 (`dados/ia_real_preset3.csv`; o preset 3 não rodou, P29); **[preset 3]** idade da leitura até 17,2 min (RES3 §2.4) | Falha não detectada / atraso (~90% dos minutos sem avaliação) | **Alta** |
@@ -65,6 +67,14 @@
 | **P30** | O `Score` gravado em `AnomaliaDetectada` (e exportado como `nota_final`) é a **nota do ensemble ÷ 20** (0–5), enquanto o replay grava a nota de 0 a 100. A comparação de notas da RES3 §2.4b misturou as escalas. **[13/11] Corrigido nas análises** (não no runtime): a exportação ganhou `nota_0_100` (`Score × 20`), o README §1.1 diz a escala de cada coluna, `dados/ia_real_preset3.csv` tem a coluna e a RES3 §2.4b foi refeita na escala 0–100 | Confirmado no código e nos dados (131 anomalias com `Score` 3,0–3,7); **correção da análise conferida** (50 de 50 iguais ao INV §4.3) | IA real 12/11 (INV §4.2a) | Risco de avaliação errada (o placar não é afetado: usa só a decisão) | Média (barato); **pendente só o LiveMonitor** |
 | **P31** | O valor atual vem do **lote do início do ciclo**, mas o histórico de 24 h é buscado depois. Quando o histórico já tem um ponto mais novo, a entrada é **inválida** e a IA grava nota 0, "sem anomalia" (P19). Em 12/11, **38 de 50** decisões; só ≈ 2 % dos minutos-tag foram de fato avaliados | Confirmado no código; **reproduzido** offline (50 de 50); efeito em outros dias: hipótese (zeros em 67–91 % das decisões desde 05/11) | IA real 12/11 (INV §4.2b, §4.3) | **Falha não detectada** (a maioria das leituras não chega aos detectores) | **Alta** |
 | **P32** | O perfil de produção do PK2 (`PerfisIa`) é de **30/10**, com **161–232 pontos** (~3 h) e a B-02 quase sempre parada: TAG28 (0,35 ± 0,72, deadband 2) e TAG32 (0,03 ± 0,17, deadband 0,04) **colapsadas**. Nunca retreinado | Confirmado nos dados e no código; efeito com a B-02 ligada: hipótese | Inventário (INV §2) | Alarme falso (B-02 ligada) e falha não detectada (desvio inflado em TAG25/26) | **Alta** |
+| **P33** | `POST /api/dev/reset` apaga análises, perfis, configurações, processos, equipamentos, dependências e contextos de **todos os clientes**, sem autenticação e em qualquer ambiente (B323-01) | Confirmado no código (16/11). **Corrigido em 16/11 (BACKLOG 30, sem commit):** 404 fora de Development e fora de loopback, com testes | — (auditoria B3.23; BACKLOG 29, 30) | Risco: perda total da configuração e do histórico de decisões | ~~Alta~~ resolvido no código |
+| **P34** | A API não tem autenticação nem autorização. Fora os endpoints do Intelligence Lab, qualquer um que alcance a porta lê e altera dados de todos os clientes (B323-02) | Confirmado no código (16/11). **Mitigado para a demo em 16/11 (BACKLOG 30, sem commit):** o `Start-IAApiComLog.ps1` recusa endereço que não seja local. A falta de autenticação continua | — (auditoria B3.23; BACKLOG 29, 30) | Risco: exposição e alteração de dados entre clientes | **Alta** (definitiva: G) |
+| **P35** | `GET /api/tags/{tagName}/relacoes` filtra só pelo nome da tag e devolve processos e equipamentos de qualquer cliente com tag de mesmo nome (B323-03) | Confirmado no código (16/11) | — (auditoria B3.23; BACKLOG 29) | Risco: leitura de dados de outro cliente | Média |
+| **P36** | Vincular tag a equipamento usa o `ClienteId` do pedido, sem comparar com o cliente do equipamento (B323-04) | Confirmado no código (16/11) | — (auditoria B3.23; BACKLOG 29) | Risco: vínculo entre clientes diferentes | Média |
+| **P37** | Vincular equipamento a processo confere só se os dois IDs existem, não se são do mesmo cliente (B323-05) | Confirmado no código (16/11) | — (auditoria B3.23; BACKLOG 29) | Risco: vínculo entre clientes diferentes | Média |
+| **P38** | O feedback de anomalia aceita motivo de qualquer cliente (e motivo desativado): confere só o ID (B323-06) | Confirmado no código (16/11) | — (auditoria B3.23; BACKLOG 29) | Risco: taxonomia de falhas misturada entre clientes | Média |
+| **P39** | A resposta bruta da LLM e o corpo de erro HTTP do LM Studio vão para o log; `POST /api/anomalias/tag` escreve no console o pedido e a resposta inteiros e devolve o **stack trace** ao chamador (B323-17) | Confirmado no código (16/11). **Corrigido em parte em 16/11 (BACKLOG 30, sem commit):** sem stack trace na resposta, resposta bruta da LLM só em Debug e erro da LLM sem o corpo. Falta: console com pedido e resposta inteiros e `ex.Message` em outros controllers | — (auditoria B3.23; BACKLOG 29, 30) | Risco: vazamento de dados industriais e de detalhes internos | Média (resto: Baixa) |
+| **P40** | Dependências com alertas: SQLite nativo (alta) na API e em todos os projetos com EF; `System.Security.Cryptography.Xml`/`Pkcs` (alta) nos testes e em 2 ferramentas; `tinypool` (crítica) e `vitest` (moderada) no LiveMonitor, só em desenvolvimento (B323-23) | Confirmado em `dotnet list package --vulnerable` e `npm audit` (16/11) | — (auditoria B3.23; BACKLOG 29) | Risco: falha explorável em biblioteca de terceiros | Média |
 
 ---
 
@@ -400,15 +410,17 @@
   [Hipótese] A sucção acompanha a coluna d'água do reservatório, e o perfil não cobre os extremos de nível. Um regime ou uma relação com a TAG22 resolveria; não testado.
 - **BACKLOG:** não há item.
 
-### P23. Código em execução fora de commit (parcialmente resolvido)
+### P23. Código em execução fora de commit (resolvido em 16/11)
 
 - **O que acontecia.** Na auditoria (AUD §1), parte do que roda não estava em nenhum commit: coleta em lote, PERF_DIAG, reuso de histórico e LiveMonitor (51 entradas). Os resultados valiam só para a árvore local.
 - **Situação em 12/11** (conferido no git):
   - **Resolvido:** o runtime e as ferramentas foram commitados (`c5f575d`, `e3356b7`, `15cbeb9`, `930ec7c` e `15f1ca9`). Isso inclui `Services/Diagnostics/`, `Services/Monitoring/`, os arquivos `PredictionHistoryReuse*`, `tools/IAApi.LiveMonitor/`, `tools/Cp300Export/` e `tools/Cp300OfflineReplay/`.
   - **`.gitignore` corrigido:** `tools/` passa a ser versionado e `dados/` ignorado (dados industriais exportados não entram no repositório).
   - **Remoção dos 3 `Docs/B3.23_*`:** já entrou no commit `15f1ca9`. Os arquivos não existem mais na pasta nem no índice.
-  - **Pendente:** os 5 arquivos `.patch` na raiz, que não estão rastreados: `IAApi_LiveMonitor_clareza_cenario1`, `IAApi_LiveMonitor_sessoes_de_teste`, `IAApi_monitoramento_bridge_em_lote`, `IAApi_observabilidade_temporal` e `IAApi_tempo_por_tag`. Falta decidir se já foram aplicados (e podem ser descartados) ou se devem ser guardados. Não verificamos o conteúdo deles.
-- **BACKLOG:** não há item.
+  - ~~**Pendente:** os 5 arquivos `.patch` na raiz~~ **Resolvido em 16/11.** Os 5 patches (`IAApi_LiveMonitor_clareza_cenario1`, `IAApi_LiveMonitor_sessoes_de_teste`, `IAApi_monitoramento_bridge_em_lote`, `IAApi_observabilidade_temporal` e `IAApi_tempo_por_tag`) estão **inteiramente incorporados** ao código desde `c5f575d`.
+    - Evidência (confirmado no código): `git apply --check`, desfazer em ordem numa cópia e busca dos símbolos. Detalhe em BACKLOG 21.1.
+    - Por decisão da responsável, foram **movidos, sem apagar**, para `C:\Users\Laura Marrari\Documents\IA MARRARI\arquivo_patches_2026-11\`, fora do repositório. O SHA-256 de cada arquivo é o mesmo antes e depois. A raiz não tem mais arquivos não rastreados.
+- **BACKLOG:** item 21.1 (decisão sobre os patches).
 
 ### P24. Falha encadeada mascarada pela saturação [preset 6]
 
@@ -618,6 +630,119 @@
 - **Efeito com a B-02 ligada:** hipótese. TAG28 e TAG32 ficariam a dezenas de desvios da média, com Z e EWMA saturados (alarme falso provável). As 131 anomalias de 30/10–05/11 não foram analisadas.
 - **Solução candidata:** retreinar com período limpo e longo, com aprovação, porque treinar altera a detecção. Depende de BACKLOG 8 (escolha do período) e do regime (P02, P03).
 - **BACKLOG:** 27 (depende de 8 e 25); 2 (feito).
+
+### Problemas de segurança da auditoria B3.23 (P33 a P40)
+
+**Contexto comum** (confirmado no código, HEAD `05c64c3`, 16/11). Conferência só por leitura (BACKLOG 29, fase A): a API não foi iniciada e nenhum endpoint foi chamado. Fonte original: `git show 15f1ca9^:Docs/B3.23_CODEX_AUDIT_RESULT.md`, §9, §11, §12 e §18.
+
+- `Program.cs:7-44` não registra autenticação nem autorização (`AddAuthentication`, `UseAuthorization` e `[Authorize]` não aparecem no projeto). `app.MapControllers()` (`Program.cs:44`) mapeia todos os controllers em qualquer ambiente; só o Swagger depende de `IsDevelopment()` (`Program.cs:34`).
+- A única guarda existente é a do Intelligence Lab (`Controllers/IntelligenceLabLocalReadAccess.cs:35-58`): só em Development, só de loopback e com chave no cabeçalho. Ela não cobre os demais controllers.
+- **O que hoje reduz a exposição** (não é proteção no código): a porta padrão é `localhost` (`Properties/launchSettings.json:8`; `tools/Start-IAApiComLog.ps1`, `-Url` padrão `http://localhost:5145`). Basta subir com `-Url http://0.0.0.0:…` ou um IP da rede, por exemplo numa demo, para tudo abaixo ficar acessível a quem estiver na rede. `AllowedHosts` é `*` (`appsettings.json:113`).
+- O CORS (`Program.cs:10-19`) não substitui autenticação: ele só impede que outra página **leia** a resposta, não que o pedido chegue.
+
+### P33. `POST /api/dev/reset` apaga a base de todos os clientes, sem proteção (B323-01)
+
+- **O que acontece** (confirmado no código): `Controllers/DevController.cs:14-35` remove todas as linhas de `AnomaliasDetectadas`, `PerfisIa`, `TagsIaConfig`, `ProcessoTagsIa`, `ProcessoEquipamentosIa`, `ProcessosIa`, `EquipamentoTagsIa`, `EquipamentosIa`, `TagDependenciasIa` e `TagsContextoIa`, sem filtro de cliente. Não há condição de ambiente, de origem nem de chave. Nada no repositório chama esse endpoint (busca por `dev/reset` fora de `Docs/`).
+- **Risco em uma frase:** quem alcançar a porta da API apaga, com um único pedido sem corpo, a configuração e o histórico de decisões de todos os clientes.
+- **[Hipótese, não testada]** Mesmo com a API só em `localhost`, uma página aberta no navegador da mesma máquina poderia disparar esse POST (pedido "simples", sem corpo; o CORS bloqueia só a leitura da resposta). Navegadores recentes podem bloquear pedidos para a rede local; não foi verificado.
+- **Correção mínima proposta:** remover o `DevController`, ou fazê-lo responder `404` fora de Development e fora de loopback, com a mesma regra já usada em `IntelligenceLabLocalReadAccess` (sem criar guarda nova). Teste unitário com `DefaultHttpContext`, como os do Intelligence Lab (`IAApi.Tests/IntelligenceLab/IntelligenceLabHealthEndpointTests.cs`). **Esforço: P** (< 1 h + teste). Não afeta a detecção. **Rollback:** reverter o commit.
+- **Correção aplicada (16/11, aprovada pela responsável, sem commit; BACKLOG 30):**
+  - `DevController` recebe `IHostEnvironment` e responde `404` sem tocar no banco, a menos que o ambiente seja Development **e** o pedido venha de loopback.
+  - A regra foi extraída do `IntelligenceLabLocalReadAccess` para `Controllers/LocalDevelopmentRequestGuard.cs`, e as duas guardas usam a mesma. O comportamento do Intelligence Lab não muda: os 39 testes dele passam.
+  - Testes: `IAApi.Tests/Security/DevControllerResetGuardTests.cs`, 8 casos (Production, Staging, 3 IPs de fora, sem endereço, loopback IPv4 e IPv6), todos aprovados.
+  - Em Development e na própria máquina, o reset continua funcionando como antes.
+  - **Não muda decisão de anomalia.**
+  - **Rollback:** reverter `Controllers/DevController.cs`, `Controllers/LocalDevelopmentRequestGuard.cs` e `Controllers/IntelligenceLabLocalReadAccess.cs`.
+- **Status:** ~~confirmado no código~~ **corrigido no código** (testes unitários; a API não foi iniciada). **Prioridade:** resolvido. **Origem:** B323-01.
+- **BACKLOG:** 30.
+
+### P34. API sem autenticação: leitura e alteração de dados de todos os clientes (B323-02)
+
+- **O que acontece** (confirmado no código; ver o contexto comum). Exemplos no HEAD:
+  - **leitura global:** `GET /api/anomalias` devolve as anomalias de todos os clientes (`Controllers/AnomaliaController.cs:81-86`); `GET /api/equipamentos` devolve todos os equipamentos com tags e processos (`Controllers/EquipamentoController.cs:51-61`); `GET /api/anomalias/{id}/feedback` sem escopo (`Controllers/FeedbackAnomaliaController.cs:97-103`);
+  - **alteração só por ID:** `PUT`/`DELETE` de motivos (`Controllers/MotivosIAController.cs:67-74`, `:91-100`), e `DELETE` em `AcoesIAController.cs:106`, `CategoriasFalhaIAController.cs:84`, `GrupoAnaliseController.cs:104` e `JanelasTreinamentoController.cs:410`. Ao todo, 25 controllers têm `POST`/`PUT`/`DELETE`.
+- **Risco em uma frase:** com a API acessível na rede, qualquer pessoa vê os dados industriais de todos os clientes e pode mudar configuração, treino, grupos e feedback, sem rastro de quem fez.
+- **Correção mínima proposta**, em dois níveis:
+  1. **antes de demo (mitigação):** manter a API só em `localhost` e fazer o `Start-IAApiComLog.ps1` recusar `-Url` fora de loopback sem uma chave explícita, como o `Export-AnomaliasIaReal.ps1` já faz com `-PermitirRemoto` (`tools/Cp300Export/Export-AnomaliasIaReal.ps1:186`). **Esforço: P.** Não muda código da API;
+  2. **definitiva:** autenticação (por exemplo, chave de API ou token) com política por cliente em todos os controllers e no LiveMonitor. Muda o contrato HTTP de todos os consumidores. **Esforço: G**, com tarefa e aprovação próprias.
+- **Mitigação aplicada para a demo (16/11, aprovada pela responsável, sem commit; BACKLOG 30):**
+  - O `tools/Start-IAApiComLog.ps1` recusa, **antes de qualquer outra ação**, um `-Url` que não seja `http`/`https` em `localhost`, `127.0.0.1` ou `[::1]`. Recusa, por exemplo, `0.0.0.0`, `*`, `+`, `[::]`, IP da rede, nome de máquina e várias URLs separadas por `;`.
+  - Teste: `tools/Start-IAApiComLog.Tests.ps1`, 25 verificações, todas aprovadas. Ele lê o script pela árvore sintática e **não o executa**: testa a função e confere que a checagem é a primeira ação. O script real com `-Url http://0.0.0.0:5145` foi recusado sem criar nenhum arquivo.
+  - **Limites:** só protege quem sobe pelo script. `dotnet run` e o perfil `https` do `launchSettings.json` (`https://localhost:7295;http://localhost:5145`) já são locais, mas uma variável `ASPNETCORE_URLS` definida à mão continua podendo expor a API. **A falta de autenticação continua (correção definitiva, esforço G).**
+  - **Rollback:** reverter `tools/Start-IAApiComLog.ps1` e apagar `tools/Start-IAApiComLog.Tests.ps1`.
+- **Status:** confirmado no código; **mitigado** para subidas pelo script. **Prioridade:** Alta (definitiva). **Origem:** B323-02. Inclui as leituras globais da tabela §9 da B3.23.
+- **BACKLOG:** 30 (mitigação). Correção definitiva: não há item.
+
+### P35. Relações de uma tag sem filtro de cliente (B323-03)
+
+- **O que acontece** (confirmado no código): `Controllers/TagRelacoesController.cs:23-43` busca `ProcessoTagsIa` e `EquipamentoTagsIa` só por `TagName`, embora as duas tabelas tenham `ClienteId` (`Models/ProcessoTagIa.cs:12`, `Models/EquipamentoTagIa.cs:13`).
+- **Risco em uma frase:** tags com o mesmo nome em clientes diferentes (por exemplo, `TAG24`) fazem a resposta misturar processos e equipamentos de outro cliente.
+- **Correção mínima proposta:** receber `clienteId` (rota ou query) e filtrar `x.ClienteId == clienteId` nas duas consultas. Muda o contrato HTTP (parâmetro novo obrigatório): conferir os consumidores antes. **Esforço: P.**
+- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-03.
+- **BACKLOG:** não há item.
+
+### P36. Vínculo equipamento ↔ tag sem conferir o cliente (B323-04)
+
+- **O que acontece** (confirmado no código): `Controllers/EquipamentoController.cs:72-73` busca o equipamento só pelo ID; `:103` grava o vínculo com `request.ClienteId`, sem comparar com `equipamento.ClienteId`.
+- **Risco em uma frase:** um pedido pode ligar a tag de um cliente ao equipamento de outro, e o vínculo fica gravado com um cliente que não é o dono do equipamento.
+- **Correção mínima proposta:** recusar com `400` quando `request.ClienteId != equipamento.ClienteId` (ou gravar sempre o cliente do equipamento). **Esforço: P.**
+- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-04.
+- **BACKLOG:** não há item.
+
+### P37. Vínculo processo ↔ equipamento sem conferir o cliente (B323-05)
+
+- **O que acontece** (confirmado no código): `Controllers/ProcessoEquipamentoController.cs:24-44` confere só se o processo e o equipamento existem. `ProcessoEquipamentoIa` não tem `ClienteId` (`Models/ProcoessoEquipamentoIa.cs`); `ProcessoIa` e `EquipamentoIa` têm, mas não são comparados.
+- **Risco em uma frase:** o processo de um cliente pode ficar ligado ao equipamento de outro.
+- **Correção mínima proposta:** recusar com `400` quando `processo.ClienteId != equipamento.ClienteId`. **Esforço: P.**
+- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-05.
+- **BACKLOG:** não há item.
+
+### P38. Feedback de anomalia aceita motivo de outro cliente (B323-06)
+
+- **O que acontece** (confirmado no código): `Controllers/FeedbackAnomaliaController.cs:34-35` confere só `x.Id == request.MotivoAnomaliaIAId`. `MotivoAnomaliaIA` tem `ClienteId` e `Ativo` (`Models/MotivoAnomaliaIA.cs:5`, `:10`), e nenhum dos dois é conferido.
+- **Risco em uma frase:** o feedback de uma anomalia pode citar o motivo de falha de outro cliente, ou um motivo desativado, e misturar a taxonomia de falhas entre clientes.
+- **Correção mínima proposta:** acrescentar `&& x.ClienteId == anomalia.ClienteId && x.Ativo` na mesma consulta. **Esforço: P.**
+- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-06.
+- **BACKLOG:** não há item.
+
+### P39. Resposta da LLM, corpo de erro e stack trace em log e na resposta HTTP (B323-17)
+
+- **O que acontece** (confirmado no código; nenhum log foi lido):
+  - `Services/AnomalyDetection/Interpretation/LocalLlmAnomalyInterpretationService.cs:75-82` registra em `Information` a **resposta bruta inteira** da LLM;
+  - `src/IAApi.Infrastructure/Llm/Providers/LmStudioLlmProvider.cs:96-101` registra em `Error` o **corpo inteiro** de uma resposta HTTP de erro. O mesmo corpo vai para `Erro` (`CriarFalha`, `:345-360`) e é registrado de novo em `Warning` (`LocalLlmAnomalyInterpretationService.cs:61-67`). O `OllamaLlmProvider.cs:99-103` faz o mesmo, mas não está registrado na DI (só o LM Studio, em `DependencyInjection/Llm/LlmServiceCollectionExtensions.cs:15-17`);
+  - `Controllers/AnomaliaController.cs:33-47` escreve no console o cliente, a tag e a **resposta inteira** de `POST /api/anomalias/tag`; em erro, `:53` escreve `ex.ToString()` e `:55-59` **devolve o stack trace** ao chamador (`stack = ex.ToString()`);
+  - o console vai para arquivo: o `Start-IAApiComLog.ps1` grava stdout em `dados\logs\iaapi_<data>.log` (`tools/Start-IAApiComLog.ps1:155`, `:183`). `dados/` está fora do git.
+  - Os controllers devolvem `ex.Message` em 25 pontos (por exemplo, `Controllers/BridgeTagsController.cs:37`); é menos grave, mas pode expor detalhes internos.
+- **Risco em uma frase:** dados industriais (cliente, tag, valores, equipamento, causas) ficam em arquivos de log sem controle, e o stack trace mostra a estrutura interna da aplicação a quem fizer um pedido inválido.
+- **Correção mínima proposta:** (a) em `AnomaliaController`, devolver só uma mensagem genérica, sem `stack`, e trocar os `Console.WriteLine` por `ILogger` em `Debug`; (b) rebaixar a "RESPOSTA BRUTA DA IA" para `Debug`; (c) nos provedores, registrar só o status HTTP e o tamanho do corpo. Retirar `stack` muda o corpo de erro do contrato HTTP (nada no repositório lê esse campo). Não muda a decisão de anomalia. **Esforço: P.**
+- **Correção aplicada (16/11, aprovada pela responsável, sem commit; BACKLOG 30):**
+  - `POST /api/anomalias/tag`: em erro, devolve `400` só com `{ "erro": "Não foi possível analisar a leitura. O detalhe do erro está no log da IAApi." }`, sem `stack` e sem o texto da exceção. O status continua `400`, e o detalhe continua no log do servidor (`Console.WriteLine(ex)`).
+  - "RESPOSTA BRUTA DA IA" passou de `Information` para `Debug`. Com a configuração atual, ela deixa de aparecer no log.
+  - LM Studio e Ollama: o erro HTTP é registrado só com o código, e o corpo da resposta não vai mais para `LlmResponse.Erro`, que também era registrado em `Warning`. Isso vale também nas 2 (Ollama) ou 3 (LM Studio) falhas por resposta mal formada.
+  - **Custo:** quando a LLM devolve resposta mal formada, o log não mostra mais o corpo. Para diagnosticar, é preciso ligar Debug.
+  - Testes: `IAApi.Tests/Security/SensitiveDataExposureTests.cs`, 6 casos (controller sem stack; LM Studio com erro 500, sem escolha e com resposta válida inalterada; Ollama com erro 502; resposta bruta só em Debug), todos aprovados. O HTTP é falso (`http://llm.test`), sem rede.
+  - **Não muda decisão de anomalia:** a interpretação por LLM vem depois da decisão, e só mudou o que vai para o log e para o corpo de erro.
+  - **Rollback:** reverter `Controllers/AnomaliaController.cs`, `Services/AnomalyDetection/Interpretation/LocalLlmAnomalyInterpretationService.cs` e os dois provedores em `src/IAApi.Infrastructure/Llm/Providers/`.
+- **Falta (fora da aprovação de 16/11):**
+  - `AnomaliaController.cs:33-47` ainda escreve no console o cliente, a tag e a resposta inteira de cada análise (vai para `dados\logs` pelo `Start-IAApiComLog.ps1`);
+  - os controllers ainda devolvem `ex.Message` em 24 pontos (inclui `POST /api/anomalias/tag/valor-atual`).
+- **Status:** **corrigido em parte** (testes unitários; a API não foi iniciada). **Prioridade:** Média para o que falta; Baixa se a API ficar só local (P34). **Origem:** B323-17.
+- **BACKLOG:** 30 (parte feita). O resto: não há item; o console do caminho do monitor está na tarefa 17.
+
+### P40. Dependências com alertas de vulnerabilidade (B323-23)
+
+- **O que acontece** (confirmado em `dotnet list package --vulnerable --include-transitive` e `npm audit`, 16/11, com autorização da responsável; só consulta, nada instalado):
+  - **`SQLitePCLRaw.lib.e_sqlite3` 2.1.11, alta** ([GHSA-2m69-gcr7-jv3q](https://github.com/advisories/GHSA-2m69-gcr7-jv3q)): na **API** (`IAApi`), em `IAApi.Infrastructure`, `IAApi.Tests`, `Cp300OfflineReplay`, `IAApi.Benchmarks` e `IntelligenceLabReplay`. Vem de `Microsoft.EntityFrameworkCore.Sqlite` 10.0.9 → `SQLitePCLRaw.bundle_e_sqlite3` 2.1.11 (`IAApi.csproj:15`, `src/IAApi.Infrastructure/IAApi.Infrastructure.csproj:8`);
+  - **`System.Security.Cryptography.Xml` e `.Pkcs` 10.0.0, alta** ([GHSA-37gx-xxp4-5rgx](https://github.com/advisories/GHSA-37gx-xxp4-5rgx), [GHSA-846f-f764-76mx](https://github.com/advisories/GHSA-846f-f764-76mx) e outros): só em `IAApi.Tests`, `Cp300OfflineReplay` e `IntelligenceLabReplay`. Vêm de `System.ServiceModel.Primitives` (`IAApi.csproj:18-22`). **Na API o pacote é podado** (`obj/project.assets.json`, `packagesToPrune`) e usa o ASP.NET Core instalado (10.0.11), que não aparece com alerta. **Parte corrigida** em relação à B3.23, onde a API também tinha o alerta;
+  - os 4 pacotes `protobuf-net.ServiceModel` e `System.ServiceModel.*` **não têm uso** em nenhum `.cs` (busca por namespaces e atributos);
+  - **LiveMonitor** (`tools/IAApi.LiveMonitor`): `tinypool` ≤ 2.1.1 **crítica** (2 alertas de execução de código) e `@vitest/mocker` moderada, ambos via `vitest` 3.2.7. É **só dependência de desenvolvimento** (`package.json`, `devDependencies`); não entra no build servido.
+- **Risco em uma frase:** a API carrega uma versão do SQLite com falha conhecida de severidade alta; os demais alertas ficam no ambiente de teste e desenvolvimento.
+- **Correção mínima proposta**, em tarefas separadas:
+  1. **SQLite:** referência direta a uma versão do `SQLitePCLRaw.bundle_e_sqlite3` fora da faixa do alerta (conferir a versão no advisory no dia da mudança) e rodar a suíte, os replays e a abertura do banco existente. **Esforço: M.**
+  2. **Xml/Pkcs:** retirar do `IAApi.csproj` os 4 pacotes ServiceModel/protobuf sem uso (testes e ferramentas herdam a correção), confirmando antes com build e suíte. **Esforço: P.**
+  3. **LiveMonitor:** subir o `vitest` para uma versão fora das faixas (o `npm audit` sugere a 5.1.0, que quebra compatibilidade) e rodar os testes do monitor. **Esforço: P–M.** Baixa prioridade (só desenvolvimento).
+- **Status:** confirmado nas consultas de vulnerabilidade. **Prioridade:** Média (SQLite); Baixa (o resto). **Origem:** B323-23.
+- **BACKLOG:** não há item.
 
 ---
 

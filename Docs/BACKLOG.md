@@ -6,6 +6,8 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 > **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. **Atualização 2026-11-13 (inventário do PK2, tarefa 2 concluída):** a nova tarefa **25 (P31, entrada inválida sistemática) passa a ser PRIORIDADE 1, antes de qualquer novo teste da IA real**. Em 12/11, 38 de 50 decisões não chegaram aos detectores; sem corrigir isso, um teste da IA real não mede detecção. A tarefa 6 continua necessária e vem logo depois. Entraram também a 26 (P30, escala da nota) e a 27 (P32, retreino do perfil). Depois, a 28 (P30 no LiveMonitor, para a demo; só planejada). Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
 
+> **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação (tarefa 30, "Pendências").
+
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
 - O inventário do banco (antiga 5) **subiu para 2**: é a forma mais barata de confirmar três achados (rótulo como `TagRegime`, `TipoRepresentacao` e perfil colapsado em zero).
@@ -214,7 +216,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
 | PERF_DIAG (`Services/Diagnostics/PerformanceDiagnostics.cs`) | Tempo por etapa (`Bridge.*`, `Prediction.*`, `Decision.*`) e `Monitoring.Reading` por tag, com idade da leitura. | Só escreve no log. Só liga com `Development` + `IAAPI_PERF_DIAGNOSTICS=1`. Escreve pelo `ILogger`, o mesmo console suspeito na hipótese 1 do P27. Não guarda estado que se possa consultar. | Os **nomes das etapas** (passo 5, opcional) e o padrão "nunca lançar exceção" (`catch { }` com comentário). |
 | Diagnóstico do Intelligence Lab (`BoundedDiagnosticBuffer`, `IntelligenceLabHealthMetrics`, `GET /api/intelligence-lab/health` e `/diagnostics`) | Diagnóstico **por leitura**, capturado dentro de `PredictionService`, e contadores de captura. | Vem desligado (`IntelligenceLab:Enabled = false`). Exige `Development`, loopback, chave com 32 caracteres ou mais e metadados de versão. Não vê o laço, o lote nem as falhas antes de `Detectar`. Pôr o sinal de vida aí o deixaria preso ao modo laboratório. | O padrão do controller (`Cache-Control: no-store`) e o estilo de teste de controller sem servidor (`IntelligenceLabDiagnosticsEndpointTests`). |
 | `MonitoramentoTagsService.ExecuteAsync` | Já mede o tempo do lote (`tempoColeta`) e o de cada tag (`tempoTag`), o status da tag (`Concluída`, `Falha`, `Cancelada`) e conta as `analisadas`. Tudo isso só vai para o log. | Os dados se perdem no log e não podem ser consultados. | **Os pontos de atualização:** o status é preenchido nesses mesmos lugares, com os valores já calculados. |
-| Patches soltos na raiz (`*.patch`) | `tempo_por_tag` e `bridge_em_lote` já estão incorporados ao código (com acréscimos posteriores). `sessoes_de_teste` e `observabilidade_temporal` já foram aplicados. | Nenhum guarda estado do ciclo. `clareza_cenario1` diverge do código atual e não foi analisado a fundo. | — |
+| Patches soltos na raiz (`*.patch`) | Os 5 estão inteiramente incorporados ao código desde `c5f575d`: `bridge_em_lote` e `tempo_por_tag` com acréscimos do `PERF_DIAG`; `clareza_cenario1` só parecia divergir porque o `sessoes_de_teste` foi aplicado por cima (ver 21.1). Movidos para fora do repositório em 16/11. | Nenhum guarda estado do ciclo; nada a reaproveitar além do que já está no código. | — |
 
 **Conclusão:** nenhum mecanismo atual guarda **ciclo, etapa atual e contagens por cliente** num lugar que se possa consultar. O serviço de status é novo, mas reaproveita o modelo do `RuntimeDecisionMetrics`, os pontos de medição que o laço já tem e o painel de saúde do LiveMonitor.
 
@@ -386,6 +388,53 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - contratos HTTP e o formato dos diagnósticos já consumidos (LiveMonitor, `Dump-Diagnostics.ps1`) só mudam de forma aditiva.
 - **Risco:** baixo (só leitura e documento). **Esforço:** M.
 - **Aceite:** todos os itens do escopo estão na tabela, com finalidade, dependências, usos, sobreposições e proposta com motivo, e com cada afirmação marcada como confirmada no código ou hipótese. Nenhum arquivo de código ou de ferramenta foi alterado.
+
+#### 21.1 Os 5 `.patch` soltos na raiz (P23) — ✅ **resolvido (2026-11-16)**
+- **Decisão da responsável (16/11):** **mover sem apagar**. Os 5 arquivos estão em `C:\Users\Laura Marrari\Documents\IA MARRARI\arquivo_patches_2026-11\`, fora do repositório. O SHA-256 de cada arquivo é o mesmo antes e depois, e a raiz não tem mais arquivos não rastreados. P23 marcado como resolvido.
+- A análise que fundamentou a decisão segue abaixo.
+- **Método** (só leitura; nenhum patch aplicado no repositório):
+  - `git apply --check` (aplicar) e `git apply -R --check --ignore-whitespace` (desfazer) contra o HEAD `05c64c3`;
+  - para os patches empilhados, desfazer em ordem numa cópia no scratchpad, fora do repositório;
+  - busca dos símbolos, textos e testes de cada patch no código atual.
+- **Resultado:** os 5 estão **inteiramente incorporados**. Todo o conteúdo entrou no commit `c5f575d` (11/11, "checkpoint IAApi before CP300 detection fixes"). Nenhum aplica mais, e nenhum traz algo que falte no código.
+
+  | Patch (data do arquivo) | O que faz | Incorporado? | Evidência (confirmado no código) | Recomendação |
+  |---|---|---|---|---|
+  | `IAApi_monitoramento_bridge_em_lote` (05/11) | Coleta no Bridge **em lote por cliente** (`MonitoramentoTagsBatchPlanner.CriarLotes` + `BridgeValorAtualService.BuscarValoresAtuais`), `DetectarComValorAtual`, tempo de coleta e de predição por lote no log, cancelamento limpo | **Total**, com acréscimos posteriores | Planner e testes já existem (`already exists`); `MonitoramentoTagsService.cs:45-88,148-153`. O reverso só falha porque o `PERF_DIAG` (`using IAApi.Services.Diagnostics`, `MonitoringReading`) foi intercalado depois | **Descartar** |
+  | `IAApi_tempo_por_tag` (05/11) | Por cima do anterior: log "Predição iniciada/finalizada" por tag, com status (`Concluída`/`Falha`/`Cancelada`) e duração | **Total**, com acréscimos | `MonitoramentoTagsService.cs:97-104,120-144`; o `finally` hoje também alimenta o `PERF_DIAG` | **Descartar** |
+  | `IAApi_observabilidade_temporal` (04/11) | Diagnóstico do Intelligence Lab guarda o horário industrial **sem inventar UTC**: `ReadingTimestampOriginal`, `ReadingTimestampKind`, `ReadingTimestampUtc` anulável; resumo do endpoint com esses campos; 5 testes | **Total** | `DiagnosticContracts.cs:843-866`; `IntelligenceLabDiagnosticsController.cs:80-81,202-203`; os 4 testes nomeados estão em `IAApi.Tests/IntelligenceLab/`. O reverso só falha no contexto de `DiagnosticContractsTests.cs`, que tem os mesmos testes. Teste aprovado só em log histórico (`TestResults/*.trx` de 05/11); **não executado nesta análise** | **Descartar** |
+  | `IAApi_LiveMonitor_clareza_cenario1` (05/11) | LiveMonitor: painel "O que está funcionando agora?" (API × análise recente × histórico × decisões recentes), contagens só de decisões **recentes**, idade (`ageLabel`) da leitura e da análise no cartão, aviso "decisão pode ser antiga", `readingAtBasis` (fuso configurado × UTC conhecido), botão "Exportar decisões (CSV)" | **Total** (corrige a nota da tarefa 28, que dizia "parcial") | Desfazendo primeiro o `sessoes_de_teste` (aplicado por cima), o reverso deste passa **limpo** na cópia. Todos os símbolos estão em `App.tsx`, `TagCard.tsx`, `domain.ts`, `types.ts`, `style.css` e `tests/domain.test.ts` | **Descartar** |
+  | `IAApi_LiveMonitor_sessoes_de_teste` (05/11) | LiveMonitor: "sessões de teste" (intervalo nomeado que filtra as decisões; não dispara nada no CLP), `src/testRuns.ts` + 5 testes | **Total** | `git apply -R --check` passa limpo no HEAD; `testRuns.ts` e `tests/testRuns.test.ts` versionados desde `c5f575d` | **Descartar** |
+
+- **Por que descartar e não guardar nem refazer:**
+  - nenhum tem conteúdo pendente, então não há o que refazer como tarefa;
+  - o histórico do git (`c5f575d`) já guarda tudo. Manter os `.patch` seria uma cópia paralela e desatualizada do código, contra a regra do `CLAUDE.md`. Ela já induziu erro: as notas da tarefa 19.1 e da 28 diziam que o `clareza_cenario1` "diverge" ou foi "parcialmente incorporado".
+- **Tarefa 28:** pode ser implementada direto sobre o código atual, **sem conflito**. A exportação CSV que ela move para `domain.ts` (`App.tsx`, `exportDecisions`) é justamente a que veio do `clareza_cenario1`. Nenhum dos patches mexe na escala da nota.
+- **Ação executada:**
+  - movidos para fora do repositório (nada apagado);
+  - P23 atualizado em `PROBLEMAS_ENCONTRADOS.md`;
+  - linha "Patches soltos" da tabela 19.1 corrigida.
+  - **Rollback:** nenhum código mudou. Os arquivos estão na pasta acima, e o conteúdo também está em `c5f575d`.
+
+#### 21.2 Os 3 `Docs/B3.23_*` removidos — ✅ **decidido (2026-11-16)**
+- **Decisão da responsável:** **não restaurar**. A remoção em `15f1ca9` fica como está. O registro de achados será conferido na **tarefa 29**, que é só de leitura e começa pela segurança.
+- A análise que fundamentou a decisão segue abaixo.
+- **Situação no git** (confirmado): a remoção **já está commitada** em `15f1ca9` (12/11). Ela entrou junto com "Replay: opção --regime…", sem justificativa no commit. O `git status` atual não mostra os arquivos como apagados, então **não há `git rm` a fazer**.
+- **O que eram** (versão `15f1ca9^`), todos da fase B3.23 (set/2026, base de 147 testes):
+  - `B3.23_CONTEXT_AND_GUARDRAILS.md` (627 linhas): contexto e regras para a auditoria. Avisa que `Benchmark/` contém runtime real, define a auditoria como só leitura e as regras de evidência.
+  - `B3.23_CODEX_AUDIT_PROMPT.md` (763 linhas): o prompt dado ao Codex para essa auditoria.
+  - `B3.23_CODEX_AUDIT_RESULT.md` (995 linhas): o relatório da auditoria, com mapa do fluxo, dependências Benchmark ↔ runtime, multi-cliente, configuração, LLM, segurança e dependências, o **registro de 30 achados (B323-01 a B323-30)** e o plano B3.24.
+- **Ainda é útil?**
+  - CONTEXT e PROMPT: **não**. São instruções a outro agente para uma fase encerrada, e o `CLAUDE.md` e o `IAAPI_HANDOFF_CLAUDE.md` substituem essas regras.
+  - RESULT: **em parte**. O retrato do código é de setembro, e parte dos achados já foi resolvida ou absorvida (histórico a validar). Mas o registro de achados tem itens que **não aparecem em nenhum documento atual**. Conferido por amostra no código de hoje:
+    - **B323-07** (campos de deadband perdidos após gap crítico): **corrigido**. `CreateContiguousRuntimeInput` copia os 3 campos, e há teste em `RuntimeFunctionalDecisionContextProviderTests.cs`.
+    - **B323-08** (envelope do Increasing Noise calculado e não usado na supressão do ROC): **ainda presente**. Em `RegimeEvidenceAdapter.cs:186-200`, `currentWithinIncreasingNoiseEnvelope` só vai para o diagnóstico (linha 737). Isso afeta a detecção, prioridade 2 do `CLAUDE.md`. Não está provado que tenha relação com as falhas do CP300.
+    - **B323-01** (`POST /api/dev/reset` sem autenticação): o endpoint continua em `DevController.cs:14`, e `MapControllers` não está condicionado ao ambiente (`Program.cs:44`). Se isso é proteção suficiente fica **a validar**.
+    - Sem registro atual também: B323-02 a B323-06 (multi-cliente e autenticação), B323-17 (vazamento pelo LLM e stack trace) e B323-23 (dependências com alertas). B323-09, B323-21 e B323-29 têm correspondência nas tarefas 5, 22 e 6/19.
+- **Recomendação:**
+  - **manter a remoção** (não restaurar os 3 arquivos em `Docs/`): restaurar devolveria uma auditoria antiga em paralelo à documentação atual, contra a regra do `CLAUDE.md`;
+  - **aproveitar o registro de achados**: abrir uma tarefa de triagem que confira cada B323-xx no código atual, marque o que foi resolvido e mande os vivos para o BACKLOG ou para o `PROBLEMAS_ENCONTRADOS.md`, citando a fonte por `git show 15f1ca9^:Docs/B3.23_CODEX_AUDIT_RESULT.md`. Prioridade: B323-08 (detecção) e B323-01/02 (segurança). A tarefa só lê e documenta; cada correção exige aprovação própria.
+  - **Rollback:** nada muda no repositório. Se a responsável preferir restaurar, basta `git checkout 15f1ca9^ -- Docs/B3.23_*.md`.
 
 ---
 
@@ -616,7 +665,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   | Componentes | não criar | Sem infraestrutura de teste de componente; os textos do `TagCard` são conferidos no `npm run build` (o `tsc` checa os tipos) e na tela |
 
 - **Arquivos:** `tools/IAApi.LiveMonitor/src/domain.ts`, `src/types.ts`, `src/TagCard.tsx`, `src/App.tsx`, `tests/domain.test.ts` (e talvez `tests/csv.test.ts`), `README.md`. **Não toca** em `server/proxy.ts`, na IAApi, no `appsettings.json` nem na exportação `tools/Cp300Export`.
-- **Atenção, patch pendente:** `IAApi_LiveMonitor_clareza_cenario1.patch` (raiz, não versionado) mexe em `App.tsx`, `TagCard.tsx`, `domain.ts`, `types.ts` e `tests/domain.test.ts`. Ele **não está aplicado e não aplica mais** (`git apply --check` falha nos três primeiros); parte dele já parece incorporada (`readingAtBasis`). Ele não muda a escala da nota. Decidir antes se ele será descartado ou refeito, para não implementar a 28 em cima de um conflito.
+- **Atenção, patch pendente:** `IAApi_LiveMonitor_clareza_cenario1.patch` (raiz, não versionado) mexe em `App.tsx`, `TagCard.tsx`, `domain.ts`, `types.ts` e `tests/domain.test.ts`. Ele **não está aplicado e não aplica mais** (`git apply --check` falha nos três primeiros); parte dele já parece incorporada (`readingAtBasis`). Ele não muda a escala da nota. Decidir antes se ele será descartado ou refeito, para não implementar a 28 em cima de um conflito. **Atualização de 2026-11-16 (tarefa 21.1):** o patch está **inteiramente incorporado**. Ele só falhava no reverso porque o `sessoes_de_teste` foi aplicado por cima. A recomendação é descartá-lo, e a 28 não tem conflito com ele.
 - **Risco:** baixo. É uma ferramenta local de leitura e não muda decisão, contrato nem dado gravado. O risco residual é o backend mudar o fator 20 no futuro; a conferência do item 2 e o teste (d) cobrem isso.
 - **Esforço:** **P**, cerca de 2 a 3 h com os testes (~40–60 linhas de código e ~60 de teste).
 - **Aceite:**
@@ -625,6 +674,158 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - no CSV exportado, `nota_0_100` coerente entre as fontes.
 - **Rollback:** reverter o commit. Não há migração, dado nem configuração a desfazer.
 - **Depende de:** nada no backend. Para a demo, vem depois das 19 e 20 (sinal de vida), mas é barata o bastante para entrar no mesmo pacote do LiveMonitor.
+
+---
+
+*Item 29 acrescentado em 2026-11-16, por decisão da responsável a partir da tarefa 21.2. Os `B3.23_*` não serão restaurados; o registro de achados é lido pelo git. Tarefa só de leitura. **Fase A concluída em 2026-11-16; fases B e C pendentes.***
+
+### 29. (Conferência, só leitura) Os 30 achados da auditoria B3.23 contra o código atual — **segurança (fase A) = PRIORIDADE ALTA: antes de qualquer demo para fora da equipe**
+- **Andamento:** 🟡 **fase A (segurança) ✅ concluída em 16/11; fases B e C ⏳ pendentes.**
+  - **Resumo da fase A:** os 8 achados **continuam presentes** (o B323-23 em parte). Viraram **P33 a P40** no `PROBLEMAS_ENCONTRADOS.md`, cada um com a correção mínima proposta e o esforço. **Antes de qualquer demo para fora da equipe, tratar pelo menos P33 (`/api/dev/reset`) e P34 (sem autenticação)**; a mitigação de P34 para a demo é manter a API só em `localhost` (esforço P). **Atualização:** P33 corrigido, P34 mitigado e P39 corrigido em parte pela **tarefa 30** (16/11, sem commit). P35 a P38, P40 e o resto de P34/P39 continuam abertos.
+  - **Como foi feito:** leitura do código no HEAD `05c64c3`; a API não foi iniciada e nenhum endpoint foi chamado. Para o B323-23, a responsável **autorizou** `dotnet list package --vulnerable --include-transitive` (13 projetos) e `npm audit` no LiveMonitor; ambos só consultam, nada foi instalado nem alterado.
+
+  | Achado | Situação | Evidência (HEAD `05c64c3`) | Nível | Destino |
+  |---|---|---|---|---|
+  | B323-01 | **Ainda presente** | `Controllers/DevController.cs:14-35`; `Program.cs:44` (sem condição de ambiente) | Confirmado no código | **P33** |
+  | B323-02 | **Ainda presente** | `Program.cs:7-44` sem autenticação; ex.: `AnomaliaController.cs:81-86`, `EquipamentoController.cs:51-61`, `MotivosIAController.cs:67-100`. Só o Intelligence Lab tem guarda (`IntelligenceLabLocalReadAccess.cs:35-58`) | Confirmado no código | **P34** |
+  | B323-03 | **Ainda presente** | `Controllers/TagRelacoesController.cs:23-43` | Confirmado no código | **P35** |
+  | B323-04 | **Ainda presente** | `Controllers/EquipamentoController.cs:72-73`, `:103` | Confirmado no código | **P36** |
+  | B323-05 | **Ainda presente** | `Controllers/ProcessoEquipamentoController.cs:24-44` | Confirmado no código | **P37** |
+  | B323-06 | **Ainda presente** | `Controllers/FeedbackAnomaliaController.cs:34-35` | Confirmado no código | **P38** |
+  | B323-17 | **Ainda presente** | `LocalLlmAnomalyInterpretationService.cs:75-82`; `LmStudioLlmProvider.cs:96-101`; `AnomaliaController.cs:33-59` (stack trace na resposta) | Confirmado no código | **P39** |
+  | B323-23 | **Ainda presente, em parte** | SQLite 2.1.11 (alta) na API e em 5 projetos; Xml/Pkcs 10.0.0 (alta) só em testes e 2 ferramentas (**na API, corrigido** pela poda do pacote); `tinypool` (crítica) e `vitest` (moderada) só em desenvolvimento no LiveMonitor | Confirmado nas consultas de vulnerabilidade | **P40** |
+  | B323-07 a 16, 18 a 22, 24 a 30 | ⏳ fases B e C | — | — | — |
+- **Problema:** a auditoria B3.23 (set/2026, 147 testes) registrou 30 achados (B323-01 a B323-30). Os arquivos foram removidos em `15f1ca9`, e vários achados não aparecem em nenhum documento atual. Pela amostra de 16/11 (tarefa 21.2):
+  - o B323-07 já foi corrigido;
+  - o B323-08 continua presente (`RegimeEvidenceAdapter.cs:186-200`);
+  - o B323-01 (`POST /api/dev/reset`, `DevController.cs:14`) parece continuar exposto, a validar.
+
+  Sem a conferência, a demo pode mostrar uma API com falhas de segurança conhecidas, e um defeito de detecção fica sem registro.
+- **Fonte:** `git show 15f1ca9^:Docs/B3.23_CODEX_AUDIT_RESULT.md`. A tabela está em §18 ("Findings Register"); o detalhe de cada achado, nas seções 5 a 17. Os links do relatório apontam para outra pasta (`IA MARRARI/IAApi/`) e números de linha antigos: **localizar pelo símbolo**, não pela linha.
+- **Ordem obrigatória:**
+
+  | Fase | Achados | Tema (como descrito na B3.23) |
+  |---|---|---|
+  | **A: segurança (prioridade alta)** | B323-01 | Sem autenticação; `POST /api/dev/reset` global |
+  | | B323-02 | Endpoints globais sem autenticação (exposição ou modificação entre clientes) |
+  | | B323-03 | `TagRelacoesController` filtra só por `TagName` (leitura de dados de outro cliente) |
+  | | B323-04 | Vínculo equipamento ↔ tag não compara clientes |
+  | | B323-05 | Processo ↔ equipamento vinculados só por IDs |
+  | | B323-06 | Motivo de feedback validado só por ID |
+  | | B323-17 | Resposta bruta do LLM, corpo de erro e stack trace devolvidos ou logados (vazamento de dado industrial) |
+  | | B323-23 | Dependências com alertas de severidade alta |
+  | **B: detecção** | B323-08 | Envelope do Increasing Noise calculado e não usado na supressão do ROC (um spike real pode ser escondido) |
+  | **C: demais** | B323-07, 09–16, 18–22, 24–30 | Bug pós-gap (corrigido na amostra; confirmar), persistência e contrato da API, multivariado fora do fluxo, configuração, observabilidade, encoding, código morto. Correspondências já conhecidas: **B323-09 ↔ tarefa 5**, **B323-21 ↔ tarefa 22 (P28)**, **B323-29 ↔ tarefas 6 e 19**, **B323-20 ↔ P31/tarefa 25 (a confirmar)** |
+
+- **Para cada achado, registrar:**
+  - **situação:** **ainda presente**, **corrigido**, **não se aplica** (o código mudou de forma que o achado perdeu sentido) ou **inconclusivo** (só por leitura não dá para decidir; dizer o que faltaria);
+  - **evidência:** `arquivo:linha` no HEAD conferido, com o commit anotado. No caso de "corrigido", também o teste que cobre a correção, se houver;
+  - **nível da evidência:** confirmado no código, confirmado em teste/log ou histórico a validar (regra do `CLAUDE.md`);
+  - **destino:**
+    - P novo, para os presentes que ainda não têm registro;
+    - P ou tarefa existente, quando já houver (citar);
+    - nenhum, para corrigidos ou que não se aplicam.
+- **Saída:**
+  1. Tabela com os 30 achados neste item, ou em `Docs/CONFERENCIA_B323.md` (decidir na aprovação). Essa tabela substitui a lista da B3.23 como referência viva; o relatório antigo fica só no git.
+  2. **Cada achado confirmado como presente vira problema no `PROBLEMAS_ENCONTRADOS.md`** (a partir do P33), no formato atual:
+     - o que acontece e evidência;
+     - impacto;
+     - origem (`B323-xx`);
+     - "BACKLOG: não há item", até haver proposta aprovada.
+  3. Resumo da fase A **antes** de começar a B. Se houver achado de segurança presente, avisar a responsável na hora, sem esperar o fim da tarefa.
+- **Restrições:**
+  - **só leitura;** nenhum código, configuração ou dependência alterado. Nenhuma correção nesta tarefa; cada uma vira tarefa própria, com aprovação;
+  - **não executar nada para provar falha de segurança:** não subir a API, não chamar `/api/dev/reset` nem outros endpoints, não montar requisição entre clientes. A conferência é por leitura do código, do `Program.cs` (pipeline, `MapControllers`, `UseAuthentication`/`UseAuthorization`, condições de ambiente) e da configuração;
+  - **B323-23:** `dotnet list package --vulnerable` consulta o nuget.org, ou seja, manda nomes e versões de pacotes para fora, e **exige autorização antes de rodar**. Sem ela, conferir só por leitura dos `.csproj` e do `obj/project.assets.json` e marcar como "inconclusivo: falta consulta de vulnerabilidades";
+  - **B323-17:** ao citar trechos de log ou de resposta, não reproduzir dados industriais nem segredos;
+  - testes automatizados só se forem comprovadamente offline (regra do `CLAUDE.md`), e só para mostrar que um teste de correção existe e passa.
+- **Risco:** baixo (leitura e documento). **Esforço:** M (fase A: P; fase B: P; fase C: M).
+- **Aceite:**
+  - os 30 achados na tabela, na ordem A → B → C, cada um com situação, `arquivo:linha`, nível da evidência e destino;
+  - todo achado presente tem P no `PROBLEMAS_ENCONTRADOS.md` ou aponta para um registro existente;
+  - nenhum arquivo de código, configuração ou dependência alterado (`git status` só com `Docs/`).
+- **Rollback:** reverter o commit de documentação.
+- **Depende de:** nada. **Prioridade:**
+  - a **fase A** vem antes de qualquer demo para fora da equipe (tarefas 17–20 e 28);
+  - as fases B e C seguem a ordem normal. O B323-08 entra junto com a investigação de detecção (prioridade 2 do `CLAUDE.md`), sem passar à frente da tarefa 25.
+
+### 30. (Segurança, demo) Correções mínimas de P33, P39 e mitigação de P34 — ✅ **CONCLUÍDA (2026-11-16, sem commit)**
+- **Origem:** tarefa 29, fase A. **Aprovada pela responsável em 16/11:** P33 (reset só em Development e local, com a mesma proteção do Intelligence Lab); P39 (erro genérico sem stack trace, resposta bruta da LLM só em Debug, erro da LLM só com o código HTTP); P34 (o `Start-IAApiComLog.ps1` recusa endereço que não seja local). Sem mudar nenhuma decisão de anomalia; sem commit.
+- **Arquivos alterados:**
+  - **P33:** `Controllers/DevController.cs`; `Controllers/LocalDevelopmentRequestGuard.cs` (**novo**); `Controllers/IntelligenceLabLocalReadAccess.cs`.
+    - Por que um arquivo novo: é a regra "Development + loopback" **extraída** do `IntelligenceLabLocalReadAccess`, que passa a chamá-la. Não é uma proteção paralela: existe uma só regra, usada pelas duas guardas.
+  - **P39:** `Controllers/AnomaliaController.cs`; `Services/AnomalyDetection/Interpretation/LocalLlmAnomalyInterpretationService.cs`; `src/IAApi.Infrastructure/Llm/Providers/LmStudioLlmProvider.cs` e `OllamaLlmProvider.cs`. O Ollama não está registrado na DI, mas tinha o mesmo vazamento; o ajuste evita que ele volte se o provedor for ligado.
+  - **P34:** `tools/Start-IAApiComLog.ps1` (função `Test-EnderecoLocal` e checagem como primeira ação).
+  - **Testes novos:**
+    - `IAApi.Tests/Security/DevControllerResetGuardTests.cs` (8);
+    - `IAApi.Tests/Security/SensitiveDataExposureTests.cs` (6);
+    - `tools/Start-IAApiComLog.Tests.ps1` (25 verificações). É o primeiro teste de script do repositório, porque não havia infraestrutura para isso (o Pester 3.4 do Windows não é usado). Ele lê o script pela árvore sintática **sem executá-lo**.
+- **Efeito na detecção:** nenhum. A interpretação por LLM é chamada depois da decisão final (`PredictionDecisionOrchestrationService.cs:117-147`), e só mudou o que vai para o log e para o corpo de erro HTTP. O replay confirma (abaixo).
+- **Mudanças de contrato:**
+  - o corpo de erro `400` de `POST /api/anomalias/tag` perdeu o campo `stack`, e `erro` passou a ser uma mensagem fixa. Nada no repositório lia esses campos;
+  - `POST /api/dev/reset` responde `404` fora de Development e local.
+- **Execução (16/11, tudo offline; a API não foi iniciada e o Bridge não foi acessado):**
+  - **Testes relacionados:** `dotnet test --filter` com `IAApi.Tests.Security` e os testes de endpoint do Intelligence Lab: **53 aprovados, 0 falhas**. São 14 novos e 39 do Intelligence Lab, que provam que a guarda extraída não mudou o comportamento.
+  - **Script:** `tools/Start-IAApiComLog.Tests.ps1`: **25 de 25**. Na primeira rodada, o teste pegou um defeito: o .NET Framework expande `[::1]` (corrigido comparando como endereço IP). O script real com `-Url http://0.0.0.0:5145` foi recusado sem criar arquivo.
+  - **Compare-Replay**, só as 6 execuções originais, sobre `dados/cp300_10a11nov_derivado.csv` (as `rc0_*` ficaram de fora; ver "Pendências"):
+    - **0 diferenças em 6 execuções** (CSV e log iguais, referência do commit `d89eb0c`);
+    - saídas em `dados/rc2_rodadas/20261116_111201`;
+    - a rodada `20261116_111137` não vale: 0 execuções, ver "Pendências".
+  - **Suíte completa:** **1024 aprovados, 0 falhas**.
+  - Sem avisos de compilação novos nos arquivos alterados. Continuam os avisos NU1902/NU1903 de pacotes (P40).
+- **Ficou de fora** (registrado em P34 e P39):
+  - autenticação de verdade (P34, esforço G);
+  - o `Console.WriteLine` com pedido e resposta inteiros em `AnomaliaController.cs:33-47`;
+  - `ex.Message` em 24 pontos dos controllers;
+  - P35 a P38 e P40.
+- **Rollback:** reverter os arquivos listados e apagar os 3 arquivos de teste e o `LocalDevelopmentRequestGuard.cs`. Nada foi commitado.
+- **Pendências abertas nesta tarefa:**
+  - ⏳ **Referência `rc0_*` do `Compare-Replay.ps1` a conferir e regenerar.** Em 16/11, a exportação estava acrescentando dados ao `dados/cp300_09a13nov.csv`, a origem do `dados/cp300_09a13nov_derivado.csv` usado pelas 6 execuções `rc0_*`. Por isso, a tarefa 30 rodou o Compare-Replay **só com as 6 execuções originais** (`dados/cp300_10a11nov_derivado.csv`). **Quando a exportação terminar:**
+    1. regenerar o derivado;
+    2. conferir que as `rc0_*` dão resultado **idêntico** no trecho que usam. O arquivo de entrada muda (o SHA-256 do manifesto deixa de bater e o script sai com código 2), mas o trecho 09/11 12:30 → 13/11 07:59 deve ser o mesmo;
+    3. regenerar a referência dessas 6 execuções (`-Gerar -Sobrescrever`, que hoje regrava as 12; registrar o commit). Sem isso, as `rc0_*` não servem de regressão.
+  - ✅ **`Compare-Replay.ps1` aceitava 0 execuções como sucesso. Corrigido em 16/11 (aprovado pela responsável, sem commit).**
+    - **O problema:** `powershell -File … -Somente a,b,c` passava a lista como um único texto. Nenhuma execução casava, e o script terminava com "0 diferenças em 0 execuções" e **código 0**. A rodada foi refeita com `-Command` e uma lista de verdade.
+    - **A correção**, só em `tools/Cp300OfflineReplay/Compare-Replay.ps1`:
+      - o `-Somente` aceita array **ou** texto separado por vírgula (inclusive misturados, com espaços);
+      - a função `Selecionar` aplica o filtro nos dois modos (comparar e `-Gerar`) e sai com **código 2**, com a mensagem "Nenhuma execucao selecionada; nada foi rodado", o que foi pedido e as execuções disponíveis, quando não sobra nenhuma;
+      - um `-Somente` só com vírgulas ou espaços também sai com código 2;
+      - a ajuda (`.EXAMPLE` e códigos de saída) foi atualizada.
+    - **Testes de uso** (o script chamado de verdade; nenhum roda execução):
+
+      | Caso | Chamada | Código |
+      |---|---|---|
+      | A | `-File -Somente nao_existe` | 2 |
+      | B | `-File -Somente "nao_existe,outro"` | 2 |
+      | C | `-Command -Somente @('nao_existe','outro')` | 2 |
+      | D | `-Command -Somente nao_existe,outro` | 2 |
+      | F | `-File -Somente " , "` | 2 |
+      | G | `-Command -Gerar -Manifesto <scratchpad> -Somente @('nao_existe')` | 2 |
+
+      - No caso G, nenhuma pasta foi criada.
+      - Em todos os casos, `dados/rc2_referencia/manifesto.json` ficou intacto (SHA-256 igual) e nenhuma pasta nova apareceu em `dados/rc2_rodadas`.
+      - **Caso E**, `-File -Somente ""`: código **1**. O Windows PowerShell 5.1 descarta o `""` ao montar a linha de comando, e o próprio PowerShell recusa ("Missing an argument for parameter 'Somente'") antes de o script começar. Nada roda, e o erro não se passa por aprovação. Não dá para tratar dentro do script.
+    - **Rodadas completas das 6 execuções originais**, com a referência do commit `d89eb0c`; as `rc0_*` ficaram de fora pela pendência acima:
+      - `-File -Somente "preset1_sem,preset1_rec,madrugada_sem,madrugada_rec,preset6_sem,preset6_rec"`: **0 diferenças em 6 execuções**, código 0 (`dados/rc2_rodadas/t30_file`);
+      - `-Command -Somente @('preset1_sem', …, 'preset6_rec')`: **0 diferenças em 6 execuções**, código 0 (`dados/rc2_rodadas/t30_command`).
+    - **Rollback:** reverter `tools/Cp300OfflineReplay/Compare-Replay.ps1`.
+    - ✅ **Complemento aprovado e feito em 16/11: nome desconhecido no `-Somente`.**
+      - **Antes:** um erro de digitação junto com nomes certos rodava só as execuções que casavam.
+      - **Agora:** qualquer nome que não exista no manifesto (ou na lista padrão, no `-Gerar`) faz o script sair com **código 2**, sem rodar nada. A mensagem diz "Nome(s) desconhecido(s) no -Somente: …; nada foi rodado. Execucoes disponiveis: …", com cada nome desconhecido uma vez só.
+      - A comparação de nomes não diferencia maiúsculas de minúsculas, como antes.
+      - **Testes de uso:**
+
+        | Caso | Chamada | Código |
+        |---|---|---|
+        | H | `-File -Somente "preset1_sem,preset6_se"` | 2 (lista `preset6_se` e as 12 disponíveis) |
+        | I | `-Command -Somente @('preset1_sem','preset6_se','xpto','xpto')` | 2 (lista `preset6_se, xpto`) |
+        | J | `-Command -Gerar -Manifesto <scratchpad> -Somente @('preset1_sem','nao_existe')` | 2, sem criar pasta |
+
+        - Os casos A, C, D e F repetidos dão 2. A, C e D agora caem na mensagem de nome desconhecido.
+        - O manifesto da referência ficou intacto, e nenhuma pasta nova apareceu em `dados/rc2_rodadas`.
+      - **6 execuções originais de novo, referência `d89eb0c`:**
+        - `-File`, lista como texto: **0 diferenças em 6**, código 0 (`dados/rc2_rodadas/t30b_file`);
+        - `-Command`, lista como array: **0 diferenças em 6**, código 0 (`dados/rc2_rodadas/t30b_command`).
 
 ---
 

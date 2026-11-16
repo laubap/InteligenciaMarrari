@@ -6,6 +6,9 @@ using System.Text.Json;
 [Route("api/anomalias")]
 public class AnomaliaController : ControllerBase
 {
+    public const string MensagemErroAnalise =
+        "Não foi possível analisar a leitura. O detalhe do erro está no log da IAApi.";
+
     private readonly PredictionService _predictionService;
     private readonly AppDbContext _context;
     private readonly FeedbackAnomaliaAnaliseService _feedbackAnomaliaAnaliseService;
@@ -50,12 +53,13 @@ Console.WriteLine("========================================");
     }
     catch (Exception ex)
     {
+        // O detalhe fica so no log do servidor (P39): o chamador recebe uma
+        // mensagem generica, sem stack trace nem texto da excecao.
         Console.WriteLine(ex.ToString());
 
         return BadRequest(new
         {
-            erro = ex.Message,
-            stack = ex.ToString()
+            erro = MensagemErroAnalise
         });
     }
 }

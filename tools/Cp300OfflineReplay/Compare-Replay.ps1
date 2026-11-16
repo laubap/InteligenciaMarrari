@@ -22,7 +22,8 @@
     dados/ (fora do Git).
 
     Codigo de saida: 0 = 0 diferencas; 1 = diferencas ou falha de execucao;
-    2 = uso incorreto (manifesto ausente, entrada alterada etc.).
+    2 = uso incorreto (manifesto ausente, entrada alterada, nome desconhecido
+    no -Somente, nenhuma execucao selecionada etc.).
 
 .EXAMPLE
     # Uma vez, no codigo de referencia:
@@ -34,6 +35,11 @@
     # P31: as mesmas execucoes com a chave HistoricoCausal ligada no replay
     # (acrescenta --historico-causal); a referencia continua a mesma:
     .\tools\Cp300OfflineReplay\Compare-Replay.ps1 -HistoricoCausal
+
+    # So algumas execucoes. Os dois jeitos funcionam (com -File, a lista chega
+    # como um texto so, separado por virgula):
+    .\tools\Cp300OfflineReplay\Compare-Replay.ps1 -Somente preset1_sem,preset1_rec
+    powershell -File .\tools\Cp300OfflineReplay\Compare-Replay.ps1 -Somente "preset1_sem,preset1_rec"
 #>
 [CmdletBinding()]
 param(
@@ -46,7 +52,9 @@ param(
     [string]$Entrada = 'dados\cp300_10a11nov_derivado.csv',
     # Pasta das saidas desta rodada. Padrao: dados\rc2_rodadas\<data_hora>.
     [string]$Pasta,
-    # Restringe a algumas execucoes pelo nome (ex.: preset6_rec).
+    # Restringe a algumas execucoes pelo nome (ex.: preset6_rec). Aceita array
+    # ou texto separado por virgula. Sai com codigo 2, sem rodar nada, se algum
+    # nome nao existir ou se nenhuma execucao for selecionada.
     [string[]]$Somente,
     [string]$Configuracao = 'Debug',
     # Nao recompila o replay antes de rodar.
@@ -72,6 +80,41 @@ function Caminho([string]$p) {
 function ErroDeUso([string]$mensagem) {
     Write-Error $mensagem -ErrorAction Continue
     exit 2
+}
+
+# -Somente: com "powershell -File", a lista a,b,c chega como UM texto
+# ("a,b,c"); com -Command ou chamada direta, chega como array. Normaliza os
+# dois casos (e misturas) para uma lista de nomes sem espacos nem vazios.
+if ($PSBoundParameters.ContainsKey('Somente')) {
+    $Somente = @(@($Somente) | ForEach-Object { "$_" -split ',' } |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($Somente.Count -eq 0) {
+        ErroDeUso '-Somente foi informado vazio. Passe ao menos um nome de execucao (ex.: -Somente preset1_sem,preset1_rec).'
+    }
+}
+
+# Aplica o -Somente, sempre antes de rodar qualquer execucao (tarefa 30 do BACKLOG):
+#  - codigo 2 se algum nome do -Somente nao existir (um erro de digitacao
+#    rodaria so parte das execucoes e pareceria uma rodada completa);
+#  - codigo 2 se nao sobrar nenhuma execucao (uma rodada vazia terminaria com
+#    "0 diferencas em 0 execucoes" e codigo 0, parecendo aprovada).
+function Selecionar($todas) {
+    $todas = @($todas)
+    $nomes = @($todas | ForEach-Object { $_.nome })
+    $disponiveis = if ($nomes.Count -gt 0) { $nomes -join ', ' } else { '(nenhuma)' }
+    $escolhidas = $todas
+    if ($Somente) {
+        $desconhecidos = @($Somente | Where-Object { $nomes -notcontains $_ } | Select-Object -Unique)
+        if ($desconhecidos.Count -gt 0) {
+            ErroDeUso ("Nome(s) desconhecido(s) no -Somente: {0}; nada foi rodado. Execucoes disponiveis: {1}." -f
+                ($desconhecidos -join ', '), $disponiveis)
+        }
+        $escolhidas = @($todas | Where-Object { $Somente -contains $_.nome })
+    }
+    if ($escolhidas.Count -eq 0) {
+        ErroDeUso ("Nenhuma execucao selecionada; nada foi rodado. Execucoes disponiveis: {0}." -f $disponiveis)
+    }
+    return $escolhidas
 }
 
 function Sha256([string]$p) { (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLowerInvariant() }
@@ -153,8 +196,7 @@ try {
         if ((Test-Path -LiteralPath $manifestoPath) -and -not $Sobrescrever) {
             ErroDeUso "Ja existe $manifestoPath. Use -Sobrescrever para gerar outra referencia."
         }
-        $execucoes = @(ExecucoesPadrao $Entrada)
-        if ($Somente) { $execucoes = @($execucoes | Where-Object { $Somente -contains $_.nome }) }
+        $execucoes = @(Selecionar @(ExecucoesPadrao $Entrada))
         foreach ($ent in @($execucoes | ForEach-Object { $_.entrada } | Select-Object -Unique)) {
             if (-not (Test-Path -LiteralPath (Caminho $ent))) { ErroDeUso "Entrada ausente: $(Caminho $ent)" }
         }
@@ -199,8 +241,7 @@ try {
         ErroDeUso "Manifesto ausente: $manifestoPath. Gere a referencia com -Gerar."
     }
     $m = Get-Content -LiteralPath $manifestoPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $execucoes = @($m.execucoes)
-    if ($Somente) { $execucoes = @($execucoes | Where-Object { $Somente -contains $_.nome }) }
+    $execucoes = @(Selecionar @($m.execucoes))
 
     # Confere todas as entradas antes de rodar qualquer execucao.
     $conferidas = @{}

@@ -1,3 +1,4 @@
+using IAApi.Controllers;
 using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
@@ -5,15 +6,25 @@ using Microsoft.AspNetCore.Mvc;
 public class DevController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IHostEnvironment _environment;
 
-    public DevController(AppDbContext context)
+    public DevController(AppDbContext context, IHostEnvironment environment)
     {
         _context = context;
+        _environment = environment;
     }
 
     [HttpPost("reset")]
     public IActionResult ResetarBancoTeste()
     {
+        // P33: apaga dados de todos os clientes. So responde em Development e
+        // para pedidos da propria maquina (mesma regra do Intelligence Lab);
+        // fora disso, 404 sem tocar no banco.
+        if (!LocalDevelopmentRequestGuard.IsAllowed(HttpContext, _environment))
+        {
+            return NotFound();
+        }
+
         _context.AnomaliasDetectadas.RemoveRange(_context.AnomaliasDetectadas);
         _context.PerfisIa.RemoveRange(_context.PerfisIa);
         _context.TagsIaConfig.RemoveRange(_context.TagsIaConfig);

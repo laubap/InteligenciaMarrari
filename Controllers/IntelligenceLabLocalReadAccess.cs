@@ -1,4 +1,3 @@
-using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using IAApi.Infrastructure.Observability;
@@ -35,8 +34,7 @@ internal static class IntelligenceLabLocalReadAccess
         if (!environment.IsDevelopment() ||
             !configuration.GetValue<bool>("IntelligenceLab:Enabled") ||
             buffer is not { Enabled: true } ||
-            controller.HttpContext.Connection.RemoteIpAddress is not { } remoteAddress ||
-            !IPAddress.IsLoopback(remoteAddress))
+            !LocalDevelopmentRequestGuard.IsAllowed(controller.HttpContext, environment))
         {
             return new NotFoundResult();
         }

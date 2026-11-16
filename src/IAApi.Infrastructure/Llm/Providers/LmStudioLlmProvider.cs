@@ -91,19 +91,22 @@ public sealed class LmStudioLlmProvider : ILlmProvider
                     cancellationToken
                 );
 
+            /*
+             * P39: o corpo da resposta (de erro ou não) pode trazer dados
+             * industriais do prompt. Ele não entra no log nem em
+             * LlmResponse.Erro, que também é registrado em log; só o
+             * código HTTP.
+             */
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError(
-                    "LM Studio retornou HTTP {StatusCode}. " +
-                    "Corpo: {ResponseBody}",
-                    (int)response.StatusCode,
-                    responseBody
+                    "LM Studio retornou HTTP {StatusCode}.",
+                    (int)response.StatusCode
                 );
 
                 return CriarFalha(
                     $"LM Studio retornou HTTP " +
-                    $"{(int)response.StatusCode}.",
-                    responseBody
+                    $"{(int)response.StatusCode}."
                 );
             }
 
@@ -117,8 +120,7 @@ public sealed class LmStudioLlmProvider : ILlmProvider
             {
                 return CriarFalha(
                     "Não foi possível interpretar a resposta " +
-                    "do LM Studio.",
-                    responseBody
+                    "do LM Studio."
                 );
             }
 
@@ -128,8 +130,7 @@ public sealed class LmStudioLlmProvider : ILlmProvider
             if (escolha is null)
             {
                 return CriarFalha(
-                    "O LM Studio não retornou nenhuma escolha.",
-                    responseBody
+                    "O LM Studio não retornou nenhuma escolha."
                 );
             }
 
@@ -161,8 +162,7 @@ public sealed class LmStudioLlmProvider : ILlmProvider
             if (string.IsNullOrWhiteSpace(conteudo))
             {
                 return CriarFalha(
-                    "O LM Studio retornou uma resposta sem conteúdo JSON válido.",
-                    responseBody
+                    "O LM Studio retornou uma resposta sem conteúdo JSON válido."
                 );
             }
 
