@@ -8,6 +8,8 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 > **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). ~~Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação~~ **feito em 16/11: resultado idêntico; referência das `rc0_*` regenerada; 0 diferenças em 12 execuções** (tarefa 30, "Pendências"). **Ainda em 16/11:** pela tarefa **31**, foram corrigidos P35 a P38, sem commit. No P35, o `clienteId` é opcional, e sem ele a resposta é `400` só quando a tag existe em mais de um cliente (opção (a)). **Ainda em 16/11:** a tarefa 6 ganhou as subtarefas **6.0 a 6.5** (janela de histórico incremental e cadência de 1 min, ligadas às tarefas 22 e 25). O PERF_DIAG da 6.0 foi aprovado, e o `Start-IAApiComLog.ps1` ganhou `-PerfDiag` (sem commit). De 6.1 a 6.5, nada está aprovado. **Ainda em 16/11:** a tarefa **22** (P28) foi feita nos passos 1 e 2, sem commit. Os serviços de valor atual e de tags recebem o `HttpClient` pela DI, com `Bridge:BaseUrl`; os testes são offline, com `FakeBridgeHandler`; suíte com 1079/1079 e replay com 0 diferenças. Isso destrava os testes offline do laço (19, passo 2; 18; 6.3). Falta o aceite (e), com o Bridge.
 
+> **Atualização 2026-11-16 (tarefa 27 planejada):** plano em 8 passos (27.0 a 27.7), registrado na tarefa 27. Ele absorve a tarefa 8. A recomendação é ter período opcional e simulação por padrão no `treinar-perfil`, e o replay ganhar `--perfis <json>` para medir o perfil do banco contra o candidato antes de gravar. Por enquanto, só o perfil global. Só o 27.6 (gravar) muda a decisão. Nada aprovado.
+
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
 - O inventário do banco (antiga 5) **subiu para 2**: é a forma mais barata de confirmar três achados (rótulo como `TagRegime`, `TipoRepresentacao` e perfil colapsado em zero).
@@ -230,6 +232,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Risco:** médio. Não muda a lógica de decisão, mas o baseline resultante muda a detecção. Treinar ou promover exige aprovação.
 - **Esforço:** P
 - **Aceite:** sem parâmetros, comportamento idêntico ao atual (teste); com período, usa só aquele intervalo.
+- **[2026-11-16] Absorvida pela tarefa 27, passo 27.3**: `inicio`/`fim` opcionais, recorte `[inicio, fim)` e simulação por padrão (só grava com `Gravar = true`). Escolhida a opção do endpoint, e não as `JanelasTreinamentoTagsIa`. Motivos na tarefa 27, Q1.
 
 ### 9. (Correção, nova) Tags de bomba reserva e perfil colapsado em zero
 - **Opções a avaliar no replay (tarefa 3) antes de escolher:** (a) usar o **regime operacional já existente**, com a tag de estado da bomba (ex.: TAG44, que é medição de estado, **não** rótulo) como `TagRegime`: só configuração; (b) proteger o cálculo IQR para séries com maioria de zeros.
@@ -790,6 +793,134 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - aprovação da responsável antes do retreino real.
 - **Depende de:** 25 (para medir o efeito na IA real) e 8.
 - **Bloqueia a RC-12** (decisão de 2026-11-16, `PLANO_REGIME_COMBINADO.md` §7.9): a ativação do regime combinado no PK2 só vem depois desta tarefa e da 6. Quando a classe do regime tem menos de 30 pontos na janela de 24 h, a tag cai no perfil global. Isso aconteceu em 174 minutos-tag das bombas no replay da RC-11 (§7.5), e o perfil global hoje é o de 30/10, com a B-02 colapsada.
+
+#### 27 — Plano detalhado (2026-11-16; só planejado, **nada aprovado nem implementado**)
+*Feito só com leitura, com a IAApi em sessão de medição: nada compilado, nenhum teste ou replay rodado, a API não foi chamada.*
+
+**Fatos do código que o plano usa** (confirmados no código):
+- `PerfilTagService.TreinarPerfil` (`Services/PerfilTagService.cs:34-204`):
+  - busca `BuscarHistorico`, isto é, as últimas `Bridge:HorasHistorico` horas;
+  - calcula com o `TagProfileStatisticsCalculator` e **grava na hora** (`SaveChanges`). **Não tem modo de simulação.**
+  - `treinar-perfil` e `retreinar-perfil` (`Controllers/PerfilTagController.cs:22-52`, `143-171`) chamam o mesmo método, e o corpo só tem `ClienteId` e `TagName`.
+- `IHistoricoService.BuscarHistoricoPorPeriodo` já existe:
+  - no Bridge (`BridgeHistoricoService.cs:95-193`), chama `/historico?inicio&fim`, o mesmo caminho da exportação do CSV;
+  - filtra com `>= inicio` e `<= fim` (**fim inclusivo**) e dá erro quando não há pontos;
+  - é usado pelo IF (`DadosTreinamentoTagService`) e pelo provider de regime.
+- O replay treina por período com o mesmo `PerfilTagService`, sobre uma fonte fixa `[A, B)` (`FixedWindowHistorySource`, `tools/Cp300OfflineReplay/Cp300Replay.cs:1303`). Ali o **fim é exclusivo**.
+- O `PerfisIa` tem índice único `(ClienteId, TagName)` (`AppDbContextModelSnapshot.cs:1222`):
+  - uma linha por tag, sobrescrita a cada retreino;
+  - não guarda o período usado;
+  - `DataTreinamento = DateTime.Now`.
+- A predição lê o perfil do banco a cada leitura (`PredictionContextLoader.BuscarPerfil`), sem cache. O perfil novo vale a partir da leitura seguinte, tag a tag.
+- A detecção usa só 4 campos do perfil: `Media`, `DesvioPadrao`, `VariacaoMinimaRelevante` e `ConfiancaDeadband` (`PredictionDetectionPreparationService.cs:116-125`). Os demais são lidos por telas e serviços auxiliares (`EquipamentoInteligenciaService`, `ProcessoInteligenciaService`, `TagTendenciaController`, `AnaliseRelacionadasService`).
+- `GET /api/tags/perfis` **não devolve** `VariacaoMinimaRelevante`, `ConfiancaDeadband`, `DeadbandSugerido` nem a justificativa. **Por isso não serve de backup.**
+- `POST /api/dev/reset` apaga todos os `PerfisIa`. Pelo P33, só responde em Development e na própria máquina. É mais um motivo para manter o backup.
+- **O período do exemplo (12/11 15:00 a 13/11 15:00) já é o treino limpo da RES3 §4.3** (confirmado no replay):
+  - TAG73 = 0 em todo o período, segundo a trava;
+  - 1.437 min por tag;
+  - uma noite inteira (TAG46 = 380 em 299 min) e todos os estados das bombas;
+  - o IQR remove 302 pontos da TAG24 (a madrugada inteira, P01);
+  - os perfis candidatos já estão impressos em `dados/p3b_sem.stdout` (linhas `Perfil TAGnn`).
+
+**Q1. Como retreinar com um período escolhido: parâmetro opcional no endpoint, com simulação (é a tarefa 8)**
+
+| Opção | O que reaproveita | Contra |
+|---|---|---|
+| **(a) Recomendada.** `inicio`/`fim` opcionais em `treinar-perfil`, com simulação | `BuscarHistoricoPorPeriodo`, `TagProfileStatisticsCalculator`, `AtualizarPerfil`; mesmo endpoint de hoje. Serve para qualquer cliente. **É a tarefa 8**, que esta absorve | Muda o código do runtime. A mudança é pequena e fora do caminho da decisão |
+| (b) `JanelasTreinamentoTagsIa` + `DadosTreinamentoTagService`, como o IF | Tabela e CRUD (cadastro, consulta, alteração e exclusão) já existem | 12 linhas de configuração no banco. A mesma janela passaria a valer para o IF. Sem janela, volta em silêncio para as 24 h (`UsouFallbackHistoricoRecente`). O período fica escondido na configuração |
+| (c) O replay grava o perfil direto no `ia_config.db`, a partir do CSV | Zero mudança no runtime; o perfil gravado é idêntico ao validado | Grava no banco real por fora da API, com a API parada. Depende de CSV exportado e não serve para planta real. A ferramenta passaria a conhecer o banco de produção |
+
+- (c) fica só como plano B, se o Bridge não devolver mais o histórico de 12/11.
+- **Desenho de (a):**
+  - `TreinarPerfilRequest` ganha os campos opcionais `Inicio`, `Fim` e `Gravar`.
+    - **Sem `Inicio`/`Fim`**: o mesmo código e a mesma resposta de hoje; `Gravar` é ignorado.
+  - **Com período: simula por padrão.** O endpoint calcula e devolve o perfil, sem `SaveChanges`, e só grava com `Gravar = true`. O caminho novo é seguro por padrão e o antigo não muda.
+  - O recorte é `[inicio, fim)`, como no replay: filtrar `< fim` depois de `BuscarHistoricoPorPeriodo`. **Não mudar o método compartilhado**: o regime e o IF dependem do fim inclusivo.
+  - Validações, com valores a aprovar:
+    - `fim > inicio` e `fim <= agora`;
+    - duração máxima, por exemplo 7 dias, por causa da carga no Bridge (P10);
+    - mínimo de pontos, por exemplo ≥ 720, para não repetir o treino de ~3 h de 30/10.
+  - A resposta traz:
+    - o período e os pontos recebidos, usados e removidos como outliers;
+    - **todos** os campos do perfil, inclusive os 4 da detecção;
+    - `gravado` (sim ou não);
+    - **o perfil anterior completo**, o que torna cada retreino auto-documentado.
+  - No `PerfilTagService`, criar um método novo (por exemplo, `TreinarPerfilPorPeriodo(clienteId, tag, inicio, fim, gravar)`) que reaproveita o calculador e o `AtualizarPerfil`. **Não refatorar** o `TreinarPerfil` atual.
+  - **Sem trava de TAG73 no runtime:** a TAG73 é o gabarito do simulador e só existe no PK2. A regra é a das tarefas 11 e 12: um rótulo nunca entra no runtime. A limpeza do período é conferida pela trava do replay no CSV do mesmo período, antes de pedir a gravação.
+  - **Sem migração agora:** o período não fica no `PerfisIa`; fica na resposta e no registro da execução. Guardar período e versão é trabalho da F1.
+- **Chave:** a mudança não precisa de chave de configuração, porque sem os campos novos nada muda. O que muda o comportamento é **gravar** (passo 27.6). Isso já é protegido por `Gravar = true`, pela aprovação e pelo backup.
+  - Uma chave de verdade, que trocasse entre o perfil antigo e o novo sem reescrever a linha, exigiria guardar versões de perfil e escolher entre elas na `PredictionContextLoader`. Isso é a F1+F3; fica fora desta tarefa.
+
+**Q2. Validar antes de gravar**
+- **Perfil candidato × perfil do banco, campo a campo, por tag** (offline):
+  - candidato: `--treino-inicio 2026-11-12T15:00 --treino-fim 2026-11-13T15:00`, já em `p3b_sem.stdout`;
+  - banco: a cópia de 13/11 (`dados/inventario_pk2/`);
+  - colunas: média, desvio, deadband, confiança, pontos usados, outliers e % de zeros.
+- **Replay com o perfil fixo:** opção nova `--perfis <json>` no replay (passo 27.1). Ela substitui o treino pelos perfis do arquivo e não combina com `--treino-*`.
+  - Reaproveita o rascunho do inventário (`dados/inventario_pk2/perfil_real_harness_Program.cs.txt`, entrada `perfil_real_entrada.json`), que hoje vive fora do repositório.
+  - O mesmo JSON serve de backup (Q3).
+- **Execuções** (sem regime, como o PK2 hoje, e com `--historico-causal`, o estado esperado depois da tarefa 25): banco × candidato, nas mesmas janelas.
+  - **Fora da amostra** (os perfis nunca são avaliados no período em que foram treinados):
+    - presets 1 e 6 e a madrugada de 11/11 (as `e0_*`);
+    - preset 3 de 13/11, das 15:00 às 22:59.
+    - Em 11/11, o candidato foi treinado com dados *posteriores*. Isso serve para comparar perfis fixos, não para medir o treino em produção.
+  - Placar (`placar`, mapa atual): detecções, atraso e **falsos fora das falhas por tag**. Separar os falsos das tags da B-02 (TAG28/30/32) pelo estado da B-02 (ligada ou parada), para testar a hipótese do P32.
+  - **Atenção a dois efeitos [hipóteses a medir]:**
+    - **TAG24 à noite:** o candidato tira a madrugada pelo IQR (P01). Sem regime, a TAG24 pode alarmar a noite inteira (set-point 380 contra a média diurna). O replay da madrugada decide.
+    - **B-02:** um perfil global misturado troca o "alarma com a B-02 ligada" (perfil de 30/10) por "alarma com a B-02 parada" (P02: 7 alarmes no trecho de 12/11). Sem regime, o candidato já deu 211 falsos (7,1 %) em 13/11 15:00–22:59 (RES3 §4.4). Falta medir o perfil do banco no mesmo trecho.
+  - **A decisão é por tag:** o endpoint treina uma tag por vez, então é possível retreinar só onde o candidato é melhor (alvo principal: TAG28 e TAG32) e manter as outras.
+- **Simulação em produção** (passo 27.5, sessão autorizada com o Bridge):
+  - chamar `treinar-perfil` com período e **sem** `Gravar`, para as tags escolhidas;
+  - aceite: os pontos recebidos batem com o CSV do mesmo período (1.437 por tag) e a média, o desvio e o deadband batem com `p3b_sem.stdout` (diferença só de arredondamento);
+  - se não bater (fuso, buracos, escala), **parar**.
+  - Isso prova que o perfil que será gravado é o mesmo validado no replay.
+
+**Q3. Backup e rollback**
+- **Backup completo, imediatamente antes de gravar** (passo 27.5, com aprovação de acesso ao banco):
+  - cópia do `ia_config.db` com `-wal` e `-shm`, feita com a API parada, como no inventário;
+  - a partir da cópia, um JSON com as **linhas inteiras** do `PerfisIa` do PK2 (todas as colunas, inclusive `Id` e `DataTreinamento`), com SHA-256.
+  - A cópia de 13/11 serve para a medição offline, mas não para o backup: só vale se ninguém retreinou depois, e isso precisa ser conferido na hora.
+  - A resposta do endpoint traz o perfil anterior (Q1). É uma segunda cópia, **não substitui** o backup.
+- **Rollback:**
+  - um script, gerado do JSON de backup, com `UPDATE PerfisIa SET <todas as colunas> WHERE ClienteId='PK2' AND TagName=…`, só nas tags retreinadas, executado **com a API parada**;
+  - **nunca restaurar o arquivo `.db` inteiro**: isso apagaria as anomalias e configurações gravadas depois;
+  - conferir os 4 campos da detecção na cópia restaurada (a listagem `GET /perfis` não mostra todos);
+  - o código (27.3) volta com a reversão do commit e não afeta os dados.
+- **Critério para voltar atrás (a aprovar):** na sessão de observação (27.7), mais falsos por tag-hora que o replay previu, ou alarme contínuo da TAG24 à noite.
+- O `dados/` é ignorado pelo git: guardar o backup também fora da máquina de testes.
+
+**Q4. Relação com a referência estável (F1 da `PROPOSTA_BASELINE_ESTAVEL.md`): agora, só o perfil global**
+- **Motivos para não fazer por regime agora:**
+  - o runtime não tem quem use um perfil treinado por regime: o provider recalcula das 24 h móveis, e a seleção da referência treinada é a F3, que não existe;
+  - perfis por regime agora exigiriam migração e versão e ficariam gravados sem uso.
+- **Motivos para fazer o global agora:**
+  - no PK2 não há regime: o global é **toda** a referência do Z e do EWMA;
+  - depois da RC-12, ele é o fallback (174 minutos-tag das bombas na RC-11), e o colapsado de 30/10 é o pior fallback possível com a B-02 ligada.
+- **Ficar compatível com a F1:**
+  - o método por período desta tarefa **é a parte global da peça A** da proposta;
+  - a F1 acrescenta, com o mesmo método e o mesmo período, o perfil por chave de regime numa tabela aditiva;
+  - o período escolhido já cobre todos os estados (RES3 §4.3; contagem por chave do `combr` na trava do treino).
+  - O "relatório de pontos por regime no treino" exigido no aceite sai do replay (`--regime-combinado`), não do endpoint.
+- **Decisão a tomar depois de 27.2:** se, sem regime, **nenhum** dos dois perfis globais for aceitável nas tags da B-02, o retreino delas deve **acompanhar a RC-12**, porque ali o global é só fallback. Nesse caso, não deve vir antes dela.
+
+**Passos (cada um pequeno, reversível e com aprovação própria)**
+
+| Passo | O que | Muda a decisão? | Aceite |
+|---|---|---|---|
+| 27.0 | Este plano (só documentação) | Não | Feito em 16/11 |
+| 27.1 | Replay: `--perfis <json>` (traz o rascunho do inventário para o repositório). Só ferramenta | Não. **Sem a opção, a saída é idêntica, byte a byte** | `Compare-Replay.ps1` com 0 diferenças; golden intacto; com o JSON do banco, reproduzir a INV §4.3 (média 32,2, máx. 53,0, 0 alarmes nas 50 leituras) |
+| 27.2 | Medição offline: perfil do banco × candidato (Q2) | Não | Tabela por tag + placar nas janelas fora da amostra; **decisão da responsável: quais tags retreinar** |
+| 27.3 | Código: período e simulação no endpoint (Q1). Absorve a tarefa 8 | Não: sem os campos novos, igual a hoje; com período, só simula por padrão | Testes offline com `IHistoricoService` falso: sem período, chamada e resposta iguais; com período, só `[inicio, fim)`, sem gravar se `Gravar` não vier, gravando com `Gravar = true` e devolvendo o perfil anterior; validações. Suíte completa e `Compare-Replay.ps1` com 0 diferenças |
+| 27.4 | (Opcional) O replay por período passa a chamar o mesmo método novo, para o replay e a produção usarem o mesmo código | Não | `Compare-Replay.ps1` e golden com 0 diferenças |
+| 27.5 | Sessão autorizada: backup (Q3) e simulação no Bridge | Não | Pontos e estatísticas iguais ao candidato offline; backup com SHA-256 |
+| 27.6 | **Gravar** (`Gravar = true`) só nas tags aprovadas; anotar a hora de cada uma | **Sim** | Aprovação explícita; `PerfisIa` conferido; hora registrada (num ciclo do monitor podem conviver perfis antigos e novos por alguns minutos) |
+| 27.7 | Observação com o simulador, com a chave `HistoricoCausal` ligada (tarefa 25) | — | Falsos e notas compatíveis com o replay do 27.2; senão, rollback (Q3) |
+
+- **Depende de:**
+  - 25, para medir o efeito na IA real (27.7);
+  - 8, que esta tarefa absorve no 27.3.
+  - 27.1 e 27.2 podem ser feitos sem o Bridge, sem a API e sem a 25.
+- **Continua valendo:** P01 (IQR na TAG24) e P02 (reserva parada) não se resolvem com o retreino; ver as tarefas 9, 12 e 24.
 
 ### 28. (LiveMonitor, demo) Toda nota exibida na escala 0–100, ao lado do limiar na mesma escala (P30)
 *Planejada em 2026-11-13; **não implementada, exige aprovação**. Liga-se ao P30 (pendência da tarefa 26) e à demo (mesma regra das tarefas 17–20: não muda decisão, pesos, limiares nem contratos HTTP).*
