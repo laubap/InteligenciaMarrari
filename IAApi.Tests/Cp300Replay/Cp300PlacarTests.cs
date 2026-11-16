@@ -33,12 +33,14 @@ public sealed class Cp300PlacarTests : IDisposable
             "1": { "nome": "B-01", "corrente": "TAG27", "vibracao": "TAG29", "temperaturaMancal": "TAG36" },
             "2": { "nome": "B-02", "corrente": "TAG28", "vibracao": "TAG30", "temperaturaMancal": "TAG37" }
           },
-          "canaisSensor": { "1": "TAG22", "4": "TAG25" },
+          "canaisSensor": { "1": "TAG22", "3": "TAG24", "4": "TAG25" },
+          "efeitosPorCanal": { "3": [ "TAG27", "TAG28" ] },
           "falhas": {
             "2":  { "nome": "Obstrucao", "tags": [ "ALVO.corrente", "OUTRA.corrente", "OUTRA.vibracao" ] },
             "9":  { "nome": "Lubrificacao", "tags": [ "ALVO.temperaturaMancal", "ALVO.vibracao" ] },
             "10": { "nome": "Desbalanceamento", "tags": [ "ALVO.vibracao" ] },
-            "21": { "nome": "Drift", "tags": [ "CANAL" ] }
+            "21": { "nome": "Drift", "tags": [ "CANAL" ] },
+            "24": { "nome": "Ganho", "tags": [ "CANAL" ] }
           }
         }
         """;
@@ -256,6 +258,55 @@ public sealed class Cp300PlacarTests : IDisposable
         Assert.Equal(["TAG25"], e.TagsAfetadas);
         Assert.Equal(15, e.AtrasoMinutos);
         Assert.Equal("sensor 4 (negativo)", e.AlvoDescricao);
+        // Canal 4 nao tem efeitosPorCanal: nada extra, nenhuma observacao.
+        Assert.Empty(e.Observacoes);
+    }
+
+    [Fact]
+    public void Placar_FalhaDeSensor_CanalComEfeitos_ContaTagsDaMalha_SoNesseCanal()
+    {
+        // P41: ganho errado no canal 3 (sentido negativo). A tag do sensor fica normal
+        // (fora do replay aqui) e o efeito aparece na TAG27, que o mapa inclui para o canal 3.
+        var g = new Gabarito();
+        g.Falha("A", codigo: 24, alvo: 103, inicio: 30, fim: 59);
+        g.Falha("B", codigo: 21, alvo: 4, inicio: 100, fim: 129);
+        var alarmes = new Alarmes()
+            .Add("TAG27", Range(30, 59))    // malha: conta na falha do canal 3
+            .Add("TAG27", Range(100, 110)); // mesma tag na falha do canal 4: so coincidencia
+
+        var r = Run(g, alarmes);
+
+        var canal3 = r.Eventos.Single(e => e.Codigo == 24);
+        Assert.Equal(["TAG24", "TAG27", "TAG28"], canal3.TagsAfetadas);
+        Assert.Equal(["TAG24"], canal3.TagsForaDoReplay);
+        Assert.True(canal3.Detectado);
+        Assert.Equal(["TAG27"], canal3.TagsDeteccao);
+        Assert.Equal(0, canal3.AtrasoMinutos);
+        Assert.Equal(30, canal3.MinutosTagAtribuidos);
+        Assert.Contains(canal3.Observacoes, o => o.Contains("efeitosPorCanal", StringComparison.Ordinal));
+
+        var canal4 = r.Eventos.Single(e => e.Codigo == 21);
+        Assert.Equal(["TAG25"], canal4.TagsAfetadas);
+        Assert.False(canal4.Detectado);
+        Assert.Equal(11, canal4.MinutosTagCoincidencia);
+        Assert.Empty(canal4.Observacoes);
+    }
+
+    [Theory]
+    [InlineData("\"9\": [ \"TAG27\" ]", "nao existe em 'canaisSensor'")]
+    [InlineData("\"3\": [ \"ALVO.corrente\" ]", "token invalido")]
+    [InlineData("\"3\": [ \"CANAL\" ]", "token invalido")]
+    [InlineData("\"3\": [ \"TAG73\" ]", "rotulo")]
+    public void Mapa_EfeitosPorCanal_RecusaCanalDesconhecidoTokenERotulo(string efeitos, string mensagem)
+    {
+        var path = Path.Combine(_root, "mapa_efeitos.json");
+        File.WriteAllText(path,
+            "{ \"slots\": [ { \"nome\": \"A\", \"codigo\": \"TAG61\", \"alvo\": \"TAG62\", \"severidade\": \"TAG63\", \"fase\": \"TAG64\" } ], " +
+            "\"bombas\": { \"1\": { \"corrente\": \"TAG27\" } }, \"canaisSensor\": { \"3\": \"TAG24\" }, " +
+            "\"efeitosPorCanal\": { " + efeitos + " }, \"falhas\": { \"24\": { \"nome\": \"x\", \"tags\": [ \"CANAL\" ] } } }");
+
+        var ex = Assert.Throws<InvalidDataException>(() => Cp300MapaFalhas.Load(path));
+        Assert.Contains(mensagem, ex.Message);
     }
 
     [Fact]
@@ -334,6 +385,18 @@ public sealed class Cp300PlacarTests : IDisposable
         // Preset 1: obstrucao com B-01 principal -> TAG27/31/33 e a auxiliar B-02.
         Assert.Equal(["TAG27", "TAG31", "TAG33", "TAG28", "TAG30", "TAG32"], mapa.ResolverTags(mapa.Falhas["2"], 1, 0, TagsReplay, obs));
         Assert.Empty(obs);
+
+        // P41: falhas de sensor no PT-02 (canal 3, nos dois sentidos) contam tambem as tags da malha.
+        string[] malha = ["TAG24", "TAG25", "TAG27", "TAG28", "TAG31", "TAG32", "TAG33"];
+        Assert.Equal(malha, mapa.ResolverTags(mapa.Falhas["20"], null, 3, TagsReplay, obs));
+        Assert.Equal(malha, mapa.ResolverTags(mapa.Falhas["24"], null, 103, TagsReplay, obs));
+        Assert.Equal(2, obs.Count);
+        // Outros canais do preset 3 continuam so com a tag do sensor.
+        var obsOutros = new List<string>();
+        Assert.Equal(["TAG25"], mapa.ResolverTags(mapa.Falhas["21"], null, 4, TagsReplay, obsOutros));
+        Assert.Equal(["TAG29"], mapa.ResolverTags(mapa.Falhas["26"], null, 8, TagsReplay, obsOutros));
+        Assert.Equal(["TAG23"], mapa.ResolverTags(mapa.Falhas["27"], null, 2, TagsReplay, obsOutros));
+        Assert.Empty(obsOutros);
     }
 
     // ---------------------------------------------------------------- helpers

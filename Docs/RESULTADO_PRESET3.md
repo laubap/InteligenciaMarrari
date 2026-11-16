@@ -1,5 +1,7 @@
 # Resultado — Preset 3 (falhas de sensor, teste de 12/11/2026)
 
+> **Atualização (16/11/2026):** o preset 3 foi **repetido em 13/11 e rodou** (início às 15:02, fim às 22:12, 8 falhas nos slots). O resultado está na **§4, "Preset 3 de 13/11"**. As §1 a §3 abaixo continuam valendo para o teste de 12/11, que não rodou.
+
 > **Conclusão principal: o preset 3 não rodou.** No histórico exportado (`dados/cp300_09a13nov.csv`, até 13/11 07:59), o simulador nunca entrou no preset 3. Em 12/11 às 14:20, o estado do cenário foi de "concluído" para "parado", mas o preset 3 não começou: o TAG74 ficou em 6 e o TAG76 não foi a 1. Também não houve reset da planta, nenhum slot de falha foi preenchido, o TAG73 ficou em 0 e nenhuma medição mostra assinatura de falha de sensor. **Não há falha para detectar nesse período**, e nenhum resultado de detecção do preset 3 pode ser afirmado (P29).
 >
 > O que este documento entrega no lugar disso:
@@ -253,3 +255,187 @@ Para orientar a repetição, segue o que o **código** permite prever para cada 
 7. Na IA real, descobrimos **quão velha a leitura chega à decisão: até 17 minutos**. A IA lê todas as tags no início do ciclo e decide uma por uma; com o Bridge lento, a última tag decide sobre um dado antigo.
 8. As notas da IA real **pareciam** perto de zero, mas era escala: a IA grava a nota dividida por 20 (P30). Na mesma escala, as decisões válidas ficam na faixa do replay. O problema real é outro: **38 de 50 decisões nem chegaram aos detectores** (entrada inválida, P31), e o perfil do PK2 é antigo, de 30/10 (P32).
 9. Próximo passo: **repetir o preset 3** conferindo o início do cenário pelos rótulos, com o log da IAApi em arquivo.
+
+---
+
+## 4. Preset 3 de 13/11
+
+> **Conclusão principal: desta vez o preset 3 rodou**, das 15:02 às 22:12 de 13/11, com as 8 falhas de sensor nos horários previstos. Com treino limpo de 24 h, **3 das 7 falhas em tags monitoradas foram detectadas** pela regra do placar em cada configuração, mas **não as mesmas**: a saturação da sucção (27) e o nível intermitente (23) em todas; o circuito aberto da vibração (26) só com regime combinado; o ruído da corrente (22) só sem regime e com o regime recomendado, e aí ele coincide com a parada da B-02 (provável coincidência). O sensor congelado (20) passou sem nenhuma reação na própria tag (**P12, agora confirmado no replay**). Com o regime combinado, as duas falhas do sensor de pressão (20 e 24) aparecem nas bombas. Pela regra antiga do placar elas não contavam; com o **mapa estendido** (P41, aprovado em 16/11), contam, e o combinado chega a **5 de 7**. Fora das falhas, os alarmes falsos foram **211 sem regime, 248 com o recomendado e 37 com o combinado**. O regime combinado real (Opção A, `--regime-combinado`) deu **saída idêntica** à das séries derivadas.
+
+**Nível de evidência:** **confirmado nos dados** (CSV exportado do Bridge/PSi4) e **confirmado no replay** (código de produção sobre os dados do simulador, sem Isolation Forest, multivariado nem latência; **não é validação em planta** nem da IA real). Hipóteses estão marcadas. Nenhum código de runtime, configuração, limiar ou peso foi alterado. Só a ferramenta de avaliação mudou, com aprovação (16/11): o mapa do placar (`placar_falhas_cp300.json`) ganhou a seção `efeitosPorCanal` e o placar passou a usá-la (P41; §4.4).
+
+### 4.1 Resumo para apresentação
+
+1. **O preset 3 rodou em 13/11.** Começou às 15:02 (o simulador reiniciou o nível do reservatório, como esperado) e terminou às 22:12. As 8 falhas de sensor aparecem nos rótulos exatamente nos minutos da tabela do cenário.
+2. **Teste limpo:** a IA foi treinada com as 24 h anteriores (12/11 15:00 → 13/11 15:00), sem nenhuma falha no período, e reavaliada minuto a minuto das 15:00 às 22:59, em quatro configurações.
+3. **Detecção pelo placar (alarme ≥ 3 min seguidos, sem alarme nos 20 min antes), em duas leituras:** a **regra antiga** procura a falha só na tag do sensor; o **mapa estendido** (P41) também conta as bombas quando o sensor com defeito é o da pressão, que comanda as bombas.
+
+   | Falha | Sem regime | Regime recomendado | Regime combinado |
+   |---|---|---|---|
+   | 27 Saturação da sucção | **No 1º minuto** | **No 1º minuto** | **No 1º minuto** |
+   | 23 Nível intermitente | 16 min | 16 min | 16 min |
+   | 26 Circuito aberto da vibração | Alarmou aos 3 min, mas não conta (a tag já alarmava antes) | Igual | **No 1º minuto** |
+   | 22 Ruído na corrente | 8 min, mas provavelmente por coincidência (a outra bomba parou nesse minuto) | Igual | Não |
+   | 20 Pressão congelada | Não | Não | Regra antiga: não. **Mapa estendido: 14 min** (frequência da B-02) |
+   | 24 Ganho errado na pressão | Não | Não | Regra antiga: não. **Mapa estendido: no 1º minuto** (correntes) |
+   | 21 Drift da vazão | Não | Não | Não |
+   | 25 Temperatura sem atualização | Tag não monitorada | — | — |
+   | **Detectadas (de 7)** | **3** nas duas leituras | **3** nas duas leituras | **3** (regra antiga) → **5** (mapa estendido) |
+
+4. **Com o regime combinado, as falhas da pressão aparecem nas bombas:** a pressão congelada (20) aos 14 min, pela frequência da B-02; o ganho errado (24) no 1º minuto, pelas correntes. A pressão tem controle automático: o controle "acredita" no sensor errado e muda a bomba. A regra antiga não contava isso, porque só olhava a tag do sensor; o mapa do placar foi atualizado para contar (P41). Sem regime e com o recomendado, nada muda: a referência larga das bombas não separa essa mudança.
+5. **Por que as outras não foram detectadas:**
+   - **Pressão congelada:** a IA não tem detector de "valor parado" (P12). O sensor travou exatamente no set-point, e a nota da IA ficou em zero.
+   - **Drift da vazão:** a vazão subiu, mas continuou dentro da faixa normal do dia. Só a relação vazão × potência mostra o erro (≈ 4,5 desvios).
+   - **Ganho errado na pressão:** o controle corrige a leitura de volta ao set-point; a tag da pressão fica normal.
+   - **Ruído na corrente:** com a referência certa (regime combinado), os valores ruidosos ficam dentro do normal da bomba; os detectores que pegam ruído pesam pouco na média (P07).
+6. **Alarmes falsos nos intervalos normais** (3 h 50 min fora das falhas): sem regime **211**, regime recomendado **248**, regime combinado **37** (−82 % e −85 %). Nesta tarde o regime recomendado foi **pior** que o sem regime, por causa da B-02 operando sozinha (P03).
+7. **Madrugada:** o cenário rodou de tarde e à noite; a madrugada ficou no treino. O teste de madrugada continua sendo o de 12/11 (§2.2).
+8. **O regime combinado programado (Opção A) deu exatamente o mesmo resultado** das séries de teste usadas até agora, minuto a minuto.
+9. **Próximos passos:** detector de valor congelado (P12); regime combinado no PK2 (RC-11 e RC-12); relação entre tags para drift e para sensores dentro de malha de controle (P06, P41); repetir o preset 3 com a IA real gravando em arquivo.
+
+### 4.2 Rótulos: início do cenário e de cada falha (item 1)
+
+**Início do cenário** (confirmado nos dados, `dados/cp300_09a13nov.csv`, agora até 13/11 22:59):
+
+| Minuto | TAG74 (preset) | TAG75 (passo) | TAG76 (estado) | TAG77/78 (tempo) | Leitura |
+|---|---|---|---|---|---|
+| 13/11 até 15:01 | 6 | 5 | 0 (parado) | 2 h 1800 s (parado) | Continua o estado de 12/11 14:20 (§1.2) |
+| **15:02** | **3** | 0 | **1 (rodando)** | **0 h 21 s** | **Preset 3 iniciado** (≈ 15:01:39, pelos 21 s); reset do nível: TAG22 672 → **602** |
+| 15:22 → 21:52 | 3 | 1 → 16 | 1 | 0 h 1221 s → 6 h 3021 s | Passos a cada 20, 30 ou 40 min, como na tabela do CENARIOS §4 |
+| **22:12** | 3 | 17 | **3 (concluído)** | 7 h 600 s (= 430 min) | Fim do cenário (430 min depois de 15:02) |
+
+- O passo (TAG75) e o relógio (TAG77/78) andam juntos com a tabela do CENARIOS §4: minuto 20 = 15:22, minuto 70 = 16:12, e assim por diante. **Nenhuma divergência.**
+- O reset não parou as bombas: a B-02 seguiu sozinha (TAG43 = 2, TAG42 = 0) antes e depois de 15:02.
+
+**Falhas** (slot A; slots B e C vazios; TAG73 = 1 exatamente nesses intervalos e em nenhum outro minuto desde 11/11 17:17):
+
+| Falha (TAG61) | Alvo (TAG62) → tag | Início → fim | Duração | Severidade (TAG63) | Fase (TAG64) | Minuto do cenário | Bombas no período (TAG42/TAG43) | Leitura da tag alvo |
+|---|---|---|---|---|---|---|---|---|
+| 20 Congelado | 3 → TAG24 (PT-02) | 15:22 → 15:51 | 30 min | 1000 ‰ | 3 (plena) | 20–50 | B-01 parada, B-02 sozinha | **450 fixo** (= set-point; antes: 445–458) |
+| 21 Drift | 4 → TAG25 (FT-01) | 16:12 → 16:51 | 40 min | **5 → 590 ‰** | 2 (rampa) o tempo todo | 70–110 | B-02; a B-01 (auxiliar) liga e desliga 4 vezes | 608–869 (antes: 584–746) |
+| 22 Ruído | 6 → TAG27 (IT-01) | 17:12 → 17:41 | 30 min | 800 ‰ | 3 | 130–160 | B-01 ligada (principal); B-02 em paralelo, **parada 17:17–17:28** | 149–268 |
+| 23 Intermitente | 1 → TAG22 (LT-01) | 18:02 → 18:41 | 40 min | 1000 ‰ | 3 | 180–220 | As duas; **a B-02 desarma em 18:18, 18:20 e 18:41** | Quedas a **0** (4 min) e saltos a **1000** (4 min); no resto, o nível real caindo de 697 a 327 |
+| 24 Ganho − | 103 → TAG24 (sentido negativo) | 19:02 → 19:31 | 30 min | 300 ‰ | 3 | 240–270 | As duas em paralelo | **445–453 (normal)** |
+| 25 Sem atualização | 13 → TAG34 (TT-01) | 19:52 → 20:31 | 40 min | 500 ‰ | 3 | 290–330 | As duas | 529 fixo (tag não monitorada) |
+| 26 Circuito aberto | 8 → TAG29 (VT-01) | 20:52 → 21:11 | 20 min | 1000 ‰ | 3 | 350–370 | B-01 sozinha até 21:04; **rodízio às 21:05**: B-01 parada | **0** (B-01 parada normal: 21–45) |
+| 27 Saturação | 2 → TAG23 (PT-01) | 21:32 → 21:51 | 20 min | 1000 ‰ | 3 | 390–410 | B-02 sozinha | **2500** fixo (antes: 1275–1330) |
+
+**Observações dos dados** (confirmado nos dados; causa marcada quando é hipótese):
+- **Nenhuma fase de recuperação (4)** apareceu nos minutos do histórico; cada falha passa direto de "plena" (ou "rampa") para 0.
+- **Falha 23 mexeu no processo real.** O nível medido caiu de 697 para 327–410 durante a falha e só voltou a ~400 por volta de 19:40 (TAG22 mínimo de 332 depois da falha, o menor do arquivo). A sucção (TAG23) caiu junto (1300 → ~1160) e a válvula de entrada (TAG45) mudou de estado 8 vezes. **A B-02 aparece parada em 3 dos 4 minutos com leitura 0.** [Hipótese] O controle de nível e a proteção de nível baixo usam o LT-01 com defeito.
+- **Falhas 20 e 24 aparecem nas bombas, não no sensor.** Na 20, com a leitura parada no set-point, a frequência da B-02 desce em rampa de 438 a 303 (−5 por minuto), com vazão e potência caindo junto, e volta a 437 no minuto em que a falha acaba (15:52). Na 24, às 19:02 a frequência sobe +35 (404 → 439), a corrente +25, a potência +48 e a vazão +168, enquanto a TAG24 fica em 450. [Hipótese] A malha de pressão segue a leitura errada (o CENARIOS §4 já previa isso para o congelamento).
+- **Escala do LT-01:** o intermitente vai a 0 e a **1000** (% × 10), não a 4095 como diz o CENARIOS §4 (4095 seria a contagem bruta do CLP).
+
+### 4.3 Execuções (item 2)
+
+**Treino limpo:** [12/11 15:00, 13/11 15:00) = 1.437 min por tag (`--treino-inicio/--treino-fim`, `PerfilTagService` real).
+- **TAG73 = 0 em todo o treino** (trava da ferramenta: "0 min com TAG73 = 1"; e nos dados, o primeiro TAG73 = 1 depois de 11/11 é às 13/11 15:22).
+- **Janela móvel de 24 h antes do replay também limpa** (trava: 0 min). Desta vez **não foi preciso `--permitir-falha-no-treino`**. Os 250 min de falha do replay entram nas janelas das leituras seguintes, como em produção.
+- O treino contém uma noite inteira (TAG46 = 380 em 299 min) e todos os estados de bomba: B-01 parada + B-02 sozinha 457 min, B-01 sozinha 385, paralelo 595.
+- **IQR (P01), de novo:** **302 pontos da TAG24 removidos** (a madrugada inteira); nada nas bombas.
+
+**Replay:** 13/11 15:00 → 22:59 (480 leituras por tag, 6.240 no total), mesmas 13 tags da §2.1, com `--historico-causal` nas quatro:
+
+```powershell
+$exe = 'tools\Cp300OfflineReplay\bin\Debug\net10.0\IAApi.Cp300OfflineReplay.exe'   # build de 16/11 12:59, posterior ao último commit de código
+$comum = '--entrada dados\cp300_09a13nov_derivado.csv --cliente PK2 --tags TAG22,...,TAG33,TAG44 ' +
+         '--treino-inicio 2026-11-12T15:00 --treino-fim 2026-11-13T15:00 --inicio 2026-11-13T15:00 --fim 2026-11-13T22:59 --historico-causal'
+# sem:   $comum --saida dados\p3b_sem.csv
+# rec:   $comum --regime TAG28=TAG43,TAG30=TAG43,TAG32=TAG43,TAG26=TAG45,TAG24=TAG46 --saida dados\p3b_rec.csv
+# combs: $comum --regime TAG27=RB01S,TAG29=RB01S,TAG31=RB01S,TAG28=RB02S,TAG30=RB02S,TAG32=RB02S,TAG26=TAG45,TAG24=TAG46 --saida dados\p3b_combs.csv
+# combr: $comum --regime-combinado --regime TAG27=TAG42+TAG43+TAG46 --regime TAG29=TAG42+TAG43+TAG46 --regime TAG31=TAG42+TAG43+TAG46 `
+#        --regime TAG28=TAG43+TAG42+TAG46 --regime TAG30=TAG43+TAG42+TAG46 --regime TAG32=TAG43+TAG42+TAG46 --regime TAG26=TAG45 --regime TAG24=TAG46 `
+#        --regime-mapa "TAG42=2:2;*:0" --regime-mapa "TAG43=2:2;*:0" --regime-mapa "TAG46=380:380;*:450" --saida dados\p3b_combr.csv
+# regra antiga:   $exe placar --replay dados\p3b_<cfg>.csv --gabarito dados\cp300_09a13nov.csv --mapa <mapa do commit 226fca9> --saida dados\placar_p3b_antigo_<cfg>
+# mapa estendido: $exe placar --replay dados\p3b_<cfg>.csv --gabarito dados\cp300_09a13nov.csv --saida dados\placar_p3b_p41_<cfg>   # mapa versionado atual (P41)
+```
+
+- `combr` usa a configuração alvo do PLANO_REGIME_COMBINADO §6.2 (3 componentes e os mapas). A TAG24 ← TAG46 tem 1 componente: segue o caminho atual e o mapa da TAG46 é ignorado nela (aviso no log).
+- **Conferência:** 4 de 4 execuções com código 0; em cada uma, 6.240 leituras, **0 erros, 0 divergências**, 0 valores descartados. Rodaram em paralelo, 80–96 s cada. O CSV derivado tem as mesmas 273.996 leituras do original (0 diferenças), mais as 6 séries de regime.
+- **Combinado real = combinado das séries derivadas (confirmado no replay):** `p3b_combr.csv` e `p3b_combs.csv` têm as mesmas 37.440 linhas, **iguais em todas as colunas** exceto `valor_regime`, `motivo_baseline` e `chave_regime` (as três que o PLANO §6.3, RC-11 item 2, permite diferir). Mesmos placares. É mais um período para a equivalência da RC-11; a RC-11 completa (presets 1 e 6, madrugada, TAG29, custo) **não** foi feita aqui.
+- **Fallback para o perfil global** nas tags com regime: só 4 leituras, todas na TAG26 (15:40, 18:04, 18:35, 22:29). Nenhum nas bombas (P08 não ocorreu).
+
+### 4.4 Placar das quatro configurações (item 3)
+
+**Regra:** a do placar (README §6.1; P21): detecção = alarme numa tag afetada pela falha (mapa `placar_falhas_cp300.json`), ≥ 3 min seguidos, sem alarme dessa tag nos 20 min antes. Atraso = início da sequência − início da falha. "Sinal breve" = sequência < 3 min antes da detecção. `combr` deu **o mesmo placar** que `combs` em todos os campos, nas duas leituras; por isso as duas aparecem numa coluna.
+
+**Duas leituras** (as mesmas saídas do replay; muda só o mapa):
+- **Regra antiga:** mapa até o commit `226fca9`. Falha de sensor (20–27) = só a tag do canal (aqui, a TAG24 nas falhas 20 e 24).
+- **Mapa estendido (P41, aprovado e versionado em 16/11):** a seção nova `efeitosPorCanal` faz qualquer falha de sensor no **canal 3 (PT-02, TAG24)** contar também **TAG25, TAG27, TAG28, TAG31, TAG32 e TAG33** (vazão, corrente e frequência das duas bombas e potência), que o controle de pressão mexe. Os outros canais não mudam. No preset 3, só as falhas 20 e 24 são no canal 3, e **só elas mudaram**: os outros 6 eventos têm resultado idêntico nas duas leituras (conferido campo a campo).
+
+| Falha | Tag(s) | Sem regime | Regime recomendado (`rec`) | Combinado + set-point (`combs` = `combr`) |
+|---|---|---|---|---|
+| 20 Congelado — regra antiga | TAG24 | Não (nota máx. 3,4) | Não (3,4) | Não (3,4) |
+| 20 Congelado — **mapa estendido** | TAG24 + malha | Não (TAG27/31 excluídas: alarmavam antes, B-01 parada; TAG32 sem alarme) | Não (TAG27/28/31/32 excluídas) | **Sim**, **TAG32** às **15:36**, atraso **14 min**, 1000 ‰, 16 min seguidos (frequência da B-02 em rampa de descida) |
+| 21 Drift | TAG25 | Não (máx. 53,4) | Não (53,4) | Não (53,4) |
+| 22 Ruído | TAG27 | **Sim**, 17:20, atraso **8 min**, 800 ‰. Sinal breve 17:17 (2 min, atraso 5) | **Sim**, igual ao sem regime | Não. Sinal breve 17:31 (1 min, atraso 19, 800 ‰) |
+| 23 Intermitente | TAG22 | **Sim**, 18:18, atraso **16 min**, 1000 ‰. Sinal breve 18:04 (1 min, atraso 2) | **Sim**, igual | **Sim**, igual |
+| 24 Ganho − — regra antiga | TAG24 | Não (máx. 5,1) | Não (5,1) | Não (5,1) |
+| 24 Ganho − — **mapa estendido** | TAG24 + malha | Não. Sinal breve TAG33 às 19:02 (1 min, atraso 0, 300 ‰) | Igual ao sem regime | **Sim**, **TAG27 + TAG28** às **19:02**, atraso **0**, 300 ‰ (4 min seguidos). TAG31/32 alarmaram 28 dos 30 min, mas ficaram excluídas por **1 alarme cada às 18:53** |
+| 25 Sem atualização | TAG34 | Fora do replay (não monitorada) | — | — |
+| 26 Circuito aberto | TAG29 | Não pela regra: TAG29 **excluída** (alarmou 20:41–20:43); alarme contínuo desde **20:55** (atraso 3) | Igual ao sem regime | **Sim**, 20:52, atraso **0**, 1000 ‰ (20 min seguidos) |
+| 27 Saturação | TAG23 | **Sim**, 21:32, atraso **0**, 1000 ‰ (20 min) | **Sim**, igual | **Sim**, igual |
+| **Detectadas** (de 7 monitoradas) — regra antiga | | **3** (22, 23, 27) | **3** (22, 23, 27) | **3** (23, 26, 27) |
+| **Detectadas** — **mapa estendido** | | **3** (22, 23, 27) | **3** (22, 23, 27) | **5** (20, 23, 24, 26, 27) |
+
+**Cuidado ao ler o mapa estendido:** os sinais nas bombas vêm do processo real (§4.2), mas a mesma combinação de tags também alarma em picos de demanda (P03; §2.3). A regra dos 20 min antes protege em parte: na falha 24, TAG31/32 ficaram fora justamente por um alarme de demanda às 18:53. Cada detecção pelo mapa estendido aparece no relatório do placar com a observação `efeitosPorCanal, P41`.
+
+**Alarmes (minutos-tag), classificados pelo placar** (a soma dá o total; atribuídos e coincidências em "regra antiga → mapa estendido"; o total e os falsos fora não dependem do mapa):
+
+| Configuração | Total | Atribuídos às falhas | Coincidências (falha ativa, outra tag) | **Falsos fora das falhas** | Tarde (15h–17h) | Noite (18h–22h) | Madrugada (00h–05h) |
+|---|---|---|---|---|---|---|---|
+| Sem regime | 568 | 38 → 45 | 319 → 312 | **211** (7,1 %) | 125 (12,0 %) | 86 (4,4 %) | **—** |
+| Regime recomendado | 595 | 38 → 45 | 309 → 302 | **248** (8,3 %) | 190 (18,3 %) | 58 (3,0 %) | **—** |
+| Combinado + set-point | 324 | 53 → **119** | 234 → **168** | **37** (1,2 %) | 15 (1,4 %) | 22 (1,1 %) | **—** |
+| Combinado real (`combr`) | 324 | 53 → **119** | 234 → **168** | **37** (1,2 %) | 15 (1,4 %) | 22 (1,1 %) | **—** |
+
+- **Base:** 2.990 minutos-tag fora das falhas (230 min × 13 tags): 1.040 à tarde e 1.950 à noite. Pela definição do placar, tudo isso é "dia" (06h–23h).
+- **Madrugada: não se aplica.** O replay vai de 15:00 a 22:59; a madrugada de 13/11 está no treino, e usá-la no replay seria avaliar sobre os dados de treino. O resultado de madrugada com treino limpo é o de 12/11 (§2.2).
+- **Coincidências** misturam efeitos reais da falha em outras tags (bombas nas falhas 20 e 24; sucção e bombas com o nível baixo na 23) e alarmes de estado (bomba parada ou sozinha). Com o mapa estendido, as do `combs` caem de 234 para 168. As que sobram estão quase todas em duas falhas. Na **24 (94)**: TAG31/32, excluídas pela regra dos 20 min, e sucção e válvula de entrada com o nível ainda baixo. Na **23 (56)**: sucção e bombas com o nível real baixo e a B-02 desarmando; o mapa não estende essa falha.
+
+**Falsos fora das falhas, por tag e causa:**
+
+| Tag | Sem regime | `rec` | `combs` | Quando e por quê |
+|---|---|---|---|---|
+| TAG27/29/31 (B-01) | 25 / 56 / 61 | 25 / 56 / 61 | 0 / 0 / 0 | B-01 **parada** (15:00–15:21, 15:52–16:03, 16:52–17:04, 21:12–21:31) e B-01 **sozinha** (20:39–20:43): **P02/P03**. A B-01 não tem regime no `rec` |
+| TAG28/30/32 (B-02) | 9 / 13 / 7 | **34 / 22 / 19** | 2 / 1 / 2 | `rec`: B-02 **sozinha** com a B-01 parada (15:00–16:03, 16:52–17:04, 21:13–21:17), regime "B-02 ligada" dominado pelo paralelo: **P03**. `combs`: 16:00–16:03, B-02 sozinha em carga alta logo antes de a auxiliar partir (16:04) [hipótese: demanda, P03] |
+| TAG26 vazão de entrada | 32 | 23 | 23 | 15:07–15:17 (11 no `rec`/`combs`): logo depois do reset de 15:02, vazão de entrada 889 → 966 com a válvula aberta, até ela fechar às 15:18 [hipótese: transitório de partida, CENARIOS §3.4]. O resto: abertura e fechamento da válvula (**P04**) |
+| TAG22 nível | 4 | 4 | 4 | 18:42–18:45, logo depois da falha 23, com o nível real ainda no mínimo (≈ 347): efeito residual da falha |
+| TAG23 sucção | 4 | 4 | 4 | 18:53 e 19:35–19:37, nível real ainda baixo depois da falha 23 (**P22**) |
+| TAG31/32 em `combs` | — | — | 1 / 1 | 18:53: pico de demanda (vazão 948) com o nível baixo (P03, P22) |
+| **Total** | **211** | **248** | **37** | |
+
+- No `combs`, **11 dos 37** vêm do transitório do reset e **10** do efeito residual da falha 23. Os outros **16** são falsos "de operação": válvula de entrada (12) e B-02 sozinha em carga alta (4).
+- Contra o teste de 12/11 (§2.2, só os minutos de dia), a taxa de falsos caiu nas três configurações (sem regime ≈ 11 % → 7,1 %; `combs` ≈ 2,0 % → 1,2 %). Os períodos têm estados diferentes, então a comparação é só de ordem de grandeza.
+
+### 4.5 Falhas não detectadas e motivo (item 4)
+
+| Falha | Configurações sem detecção | Motivo | Evidência |
+|---|---|---|---|
+| 20 Congelado (TAG24) | Todas pela regra antiga; sem regime e `rec` também com o mapa estendido | **P12**: não há detector de valor congelado. A leitura congelou em **450**, o próprio set-point e a média do perfil (449,5): Z, MAD, EWMA, persistência e mudança de patamar ficaram em **0 nos 30 min**; nota máx. 3,4. Efeito real só nas bombas (P41): com o mapa estendido, o `combs` detecta na TAG32 aos 14 min; sem regime e `rec`, não | Confirmado no replay e nos dados |
+| 21 Drift (TAG25) | Todas | A vazão subiu, mas ficou **dentro da faixa normal** (máx. 869; p99 do treino 924; desvio do perfil 216,6, inflado pela demanda do dia): mesma família do **P06**. EWMA (99,7) e mudança de patamar (100) reagiram às 16:43, mas Z (31) e MAD (20) não: nota **53,4**, abaixo de 60 (**P07**). A TAG25 não tem regime em nenhuma configuração. A severidade ficou em rampa e não passou de 590 ‰ | Confirmado no replay. **Na relação vazão × potência** (ajuste linear no treino, resíduo σ = 23,7), o desvio vai a **+106 (≈ 4,5 σ)** na segunda metade da falha, contra −30 antes e −26 depois [análise de dados, não é detector da IA] |
+| 22 Ruído (TAG27) | `combs`/`combr` | Com o regime certo, os valores ruidosos ficam **dentro do normal do regime**: B-01 sozinha 240,6 ± 14,5 com leituras de 227–268; no paralelo (178,8 ± 7,0), o Z chega a 100 em minutos soltos, mas o **EWMA fica em 0** (ruído de média zero) e a persistência em 0–10: nota máx. 62,8, só 2 alarmes (**P07**, como previsto na §2.5) | Confirmado no replay |
+| 22 Ruído (TAG27) | Sem regime / `rec` (detecção pela regra) | **Provável coincidência (P21, P03)** [hipótese forte]: os 7 alarmes caem só em 17:17–17:27, exatamente com a **B-02 parada** e a B-01 sozinha em carga maior (TAG27 227–268 contra o perfil global 121,7 ± 85,9), e param quando a B-02 volta (17:29). A B-01 sozinha alarma igual **sem** a falha (20:57 e 20:59, mesmo replay) | Coincidência no tempo confirmada nos dados e no replay; a causa é hipótese |
+| 23 Intermitente (TAG22) | — (todas detectaram, com 16 min) | O primeiro salto a 1000 (18:04) deu 1 min de alarme (sinal breve). A sequência de 5 min começa em **18:18**, com as leituras a 0 | Confirmado no replay |
+| 24 Ganho − (TAG24) | Todas pela regra antiga; sem regime e `rec` também com o mapa estendido | **A malha corrige a leitura**: a TAG24 fica em 445–453 (nota máx. 5,1). O erro vai para as bombas (P41). Com o mapa estendido, o `combs` detecta no 1º minuto (TAG27/28); sem regime e `rec`, o perfil largo da B-01/B-02 não separa o degrau (+35 na frequência) | Confirmado no replay e nos dados |
+| 25 Sem atualização (TAG34) | Todas | **Tag não monitorada** (`IaAtiva`; fora do replay). Congelou em 529 por 40 min; mesmo monitorada, cairia no P12 | Confirmado nos dados |
+| 26 Circuito aberto (TAG29) | Sem regime / `rec` | **Regra P21 + P03:** a TAG29 alarmou 20:41–20:43 com a **B-01 sozinha** (B-02 parada 20:35–20:43), então ficou excluída. A falha em si foi vista: alarme **contínuo de 20:55 a 21:11** (atraso 3 min; MAD 100, Z 64). **Bomba parada:** a B-01 parou no rodízio das 21:05, no meio da falha. No `combs`, o alarme continuou mesmo assim, porque a vibração da B-01 parada não é 0 (31 ± 6 no regime) e o circuito aberto dá 0. O risco do P20 (bomba parada bloqueando os detectores) **não** se concretizou aqui | Confirmado no replay e nos dados |
+
+**Resumo dos motivos:**
+- **P12 (sem detector de valor congelado):** 20 (e 25, se fosse monitorada).
+- **Falha dentro da faixa normal / diluição (P06, P07):** 21; 22 com regime combinado.
+- **Sensor dentro de malha fechada (P41):** 20 e 24 não aparecem na própria tag. Com o mapa estendido, o combinado as detecta nas bombas; sem regime e o `rec`, não.
+- **Tag não monitorada:** 25.
+- **Regra de avaliação + estado da bomba (P21, P03):** 26 sem regime e com o `rec`; e a "detecção" da 22 nessas duas configurações é provavelmente coincidência.
+
+### 4.6 Conferência e limitações
+
+- Replay: 4 execuções, 0 erros, 0 divergências. Placar: soma das classes = total nas 8 execuções (4 com a regra antiga e 4 com o mapa estendido). `combr` = `combs` em todas as colunas comparáveis.
+- **Regra antiga reproduzida:** o placar com o mapa de `226fca9` e o código novo deu `_eventos.csv`, `_por_tag.csv` e `_falsos_por_hora.csv` **idênticos byte a byte** aos da primeira análise, nas 4 configurações. Ou seja, o código novo não muda nada para um mapa sem `efeitosPorCanal`.
+- **Mudança na ferramenta (16/11, aprovada):** `tools/Cp300OfflineReplay/Cp300Placar.cs` (seção opcional `efeitosPorCanal`: validação de canal existente e só `TAGnn` sem rótulos; inclusão das tags quando o token `CANAL` resolve para o canal; observação no evento), `placar_falhas_cp300.json` (canal 3) e `README.md` §6. Testes em `IAApi.Tests/Cp300Replay/Cp300PlacarTests.cs`: 1 teste de placar (canal 3 conta a malha, canal 4 não), 4 casos de validação e asserções do P41 no teste do mapa do repositório. `dotnet test --filter Cp300`: **49/49**. Sensibilidade: sem a inclusão das tags extras (mutação temporária, restaurada e conferida com `cmp`), 2 testes falham. Runtime da IAApi: sem mudança.
+- **Simulador e replay, não planta nem IA real.** O replay não reproduz Isolation Forest, multivariado, latência, o ciclo sequencial (P11, P26) nem a entrada inválida (P31). **As decisões da IA real de 13/11 não foram exportadas**, então não há comparação com ela.
+- O mapa estendido usa as tags que o controle de pressão mexe. Essas tags também reagem à demanda (P03), então uma detecção por elas é menos específica que uma detecção na tag do sensor. Por isso as duas leituras ficam lado a lado.
+- A ligação entre a falha 23, a queda real do nível e o desarme da B-02 está confirmada no tempo; o mecanismo (controle e proteção usando o LT-01) é hipótese, a confirmar no código do simulador (`Docs/Simulador/SIM_ANOMALIAS_CP300.c`).
+- Uma execução só, com uma semente do simulador. Atrasos com resolução de 1 min.
+
+*Scripts de análise (fora do repositório, no scratchpad da sessão):* `p3b_rotulos.py`, `p3b_falhas.py`, `p3b_det.py`, `p3b_alvo.py`, `p3b_min.py`, `p3b_coinc.py`, `p3b_eq.py`, `p3b_run.sh`, `placar_estendido.json` (cópia usada antes da aprovação, também com o nível na falha 23; substituída pelo mapa versionado) e `placar_mapa_HEAD.json` (mapa de `226fca9`, para a regra antiga). Saídas em `dados/p3b_{sem,rec,combs,combr}.{csv,stdout}` e `dados/placar_p3b_*` (não versionados).

@@ -113,6 +113,14 @@ public sealed class Cp300MapaFalhas
     public List<Cp300SlotGabarito> Slots { get; set; } = [];
     public Dictionary<string, Dictionary<string, string>> Bombas { get; set; } = new();
     public Dictionary<string, string> CanaisSensor { get; set; } = new();
+
+    /// <summary>
+    /// Opcional (P41): tags extras afetadas quando o canal de uma falha de sensor
+    /// (token CANAL) e a chave. Ex.: canal 3 (PT-02, dentro da malha de pressao) ->
+    /// tags das bombas que o controle mexe. Sem a secao, CANAL resolve so a tag do canal.
+    /// </summary>
+    public Dictionary<string, List<string>> EfeitosPorCanal { get; set; } = new();
+
     public Dictionary<string, Cp300FalhaMapeada> Falhas { get; set; } = new();
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -168,6 +176,20 @@ public sealed class Cp300MapaFalhas
                     throw new InvalidDataException($"Falha {codigo}: {token} e rotulo do simulador e nao pode ser tag afetada.");
             }
         }
+
+        foreach (var (canal, tags) in EfeitosPorCanal)
+        {
+            if (!CanaisSensor.ContainsKey(canal))
+                throw new InvalidDataException($"efeitosPorCanal: canal '{canal}' nao existe em 'canaisSensor'.");
+            foreach (var tag in tags ?? [])
+            {
+                // So tags literais: o efeito da malha nao depende da bomba alvo da falha de sensor.
+                if (string.IsNullOrWhiteSpace(tag) || !tag.StartsWith("TAG", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"efeitosPorCanal, canal {canal}: token invalido '{tag}' (so TAGnn).");
+                if (Cp300Replay.IsLabelTag(tag))
+                    throw new InvalidDataException($"efeitosPorCanal, canal {canal}: {tag} e rotulo do simulador e nao pode ser tag afetada.");
+            }
+        }
     }
 
     private static string? TokenCampo(string token)
@@ -203,6 +225,11 @@ public sealed class Cp300MapaFalhas
                 var canal = (alvo % 100).ToString(CultureInfo.InvariantCulture);
                 if (CanaisSensor.TryGetValue(canal, out var tag)) Add(tag);
                 else observacoes.Add($"canal de sensor {canal} sem tag no mapa");
+                if (EfeitosPorCanal.TryGetValue(canal, out var extras) && extras is { Count: > 0 })
+                {
+                    foreach (var extra in extras) Add(extra);
+                    observacoes.Add($"canal {canal}: inclui {string.Join("/", extras)} (efeitosPorCanal, P41)");
+                }
             }
             else if (token.StartsWith("ALVO.", StringComparison.OrdinalIgnoreCase) ||
                      token.StartsWith("OUTRA.", StringComparison.OrdinalIgnoreCase))
