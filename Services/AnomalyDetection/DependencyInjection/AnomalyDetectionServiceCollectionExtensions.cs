@@ -31,6 +31,17 @@ public static class AnomalyDetectionServiceCollectionExtensions
             configuration.GetSection(
                 HistoricoCausalOptions.SectionName));
 
+        // BACKLOG 33 (passo 1): chaves dos detectores de evidência
+        // independente; Habilitado = false e lista vazia se a seção não
+        // existir (padrão). Nenhum detector as lê ainda (passos 2 e 4).
+        services.Configure<ValorCongeladoOptions>(
+            configuration.GetSection(
+                ValorCongeladoOptions.SectionName));
+
+        services.Configure<RuidoExcessivoOptions>(
+            configuration.GetSection(
+                RuidoExcessivoOptions.SectionName));
+
         return services;
     }
 
@@ -40,6 +51,14 @@ public static class AnomalyDetectionServiceCollectionExtensions
         services.AddSingleton<
             IValidateOptions<AnomalyDetectionOptions>,
             AnomalyDetectionOptionsValidator>();
+
+        services.AddSingleton<
+            IValidateOptions<ValorCongeladoOptions>,
+            EvidenciaIndependenteOptionsValidator<ValorCongeladoOptions>>();
+
+        services.AddSingleton<
+            IValidateOptions<RuidoExcessivoOptions>,
+            EvidenciaIndependenteOptionsValidator<RuidoExcessivoOptions>>();
 
         return services;
     }

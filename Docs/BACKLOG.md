@@ -222,6 +222,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 ### 7. (Correção) Ajustar a agregação do ensemble ou os pesos
 - Sem mudança, mas agora depende da tarefa **3**. Lembrete: sem IF, Z+MAD+EWMA saturados já chegam exatamente a 60. **Risco:** alto. **Esforço:** G.
+- **[2026-11-16]** Para congelamento e ruído, a tarefa **33** propõe evitar a diluição **sem mexer nos pesos**. Os dois detectores ficam como evidência independente, fora da média, combinada por "OU". Um detector a mais na média nunca chegaria a 60 sozinho (máx. 57,1 com peso 1) e diluiria as detecções atuais.
 
 ### 8. (Correção, nova) Treino do perfil por período
 - **Objetivo:** permitir que `POST /api/tags/treinar-perfil` aceite `inicio`/`fim` opcionais ou use as `JanelasTreinamentoTagsIa`, como o IF já faz (`DadosTreinamentoTagService`). Assim dá para treinar com o preset 5 (validando TAG73 = 0).
@@ -239,6 +240,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Objetivo:** hoje nenhum detector reage a valor parado (falhas 20, 30, 32, 33). Avaliar um detector de "sem variação além do normal" e/ou o uso do heartbeat (TAG40).
 - **Risco:** alto (novo detector muda a decisão e o volume de alarmes). **Esforço:** M–G.
 - **Aceite:** definido depois da tarefa 3.
+- **[2026-11-16] Proposta detalhada na tarefa 33** (33.C valor congelado; 33.R ruído excessivo), com reaproveitamento do `FrozenSensorEvidenceCalculator` existente. Ele hoje só serve ao canário PK7 e não dispararia na TAG24, que o resolver classifica como `Unknown`. O heartbeat (TAG40) e o "sem dados" (tarefa 18) ficam fora da 33.
 
 ---
 
@@ -1086,6 +1088,131 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - os casos de uso da tarefa 30 (nome desconhecido, seleção vazia: código 2, sem criar nada) continuam iguais;
   - `Compare-Replay.ps1` com as 12 execuções dá 0 diferenças, e `dados/rc2_referencia/manifesto.json` fica intacto durante os testes (SHA-256 antes e depois).
 - **Esforço:** P. **Efeito na detecção:** nenhum (só a ferramenta de regressão). **Rollback:** reverter `tools/Cp300OfflineReplay/Compare-Replay.ps1`.
+
+### 33. (Correção, proposta) Detectores de qualidade do sinal: valor congelado (33.C) e ruído excessivo (33.R) — ⏳ **ABERTA (registrada em 2026-11-16)**; ✅ **passo 1 concluído (2026-11-16, sem commit)**; passos 2 a 6 não aprovados
+
+Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer nos pesos** (tarefa 7). A proposta saiu da leitura do código e de uma checagem offline no CSV do simulador. A IAApi não foi chamada.
+
+> **Decisões da responsável (2026-11-16):** (1) quando o "OU" dispara, nota final = **máximo entre a média e a nota do detector** (opção (a) da 33.1); (2) orçamento de falsos da 33.R aprovado como sugerido (≤ 10 minutos-tag nas 18 h de 12/11 e ≤ 4 fora das falhas no preset 3); (3) P12 atualizado com os achados da 33.0; (4) **passo 1 aprovado e feito** (ver 33.P1).
+
+#### 33.0 O que já existe (regra "reaproveitar antes de criar")
+
+| O que | Onde | Situação |
+|---|---|---|
+| Lógica de congelamento | `src/IAApi.Engine/Runtime/Regime/Evidence/FrozenSensorEvidenceCalculator.cs` (B3.22.4). Cauda de valores idênticos com ≥ `FrozenMinimumPoints` (10) e ≥ `FrozenMinimumMinutes` (10). Antes dela, nos 30 pontos anteriores, a taxa de passos iguais tem de ser ≤ 0,60. Exige sinal `Continuous` | Confirmado no código. **Sem estado**: dá para chamar de dentro de um detector |
+| Lógica de ruído | `.../Evidence/IncreasingNoiseEvidenceCalculator.cs` (B3.22.5). Compara a escala robusta (MAD) dos últimos 30 pontos com uma referência. Exige razão ≥ 3 e centro estável (≤ 2 escalas) | Confirmado no código. **Com estado**: a referência fica presa ao `ActiveRegimeId` do `RegimePolicyEngine`, que é um regime interno, não o regime operacional TAG42/43/46. Mede a dispersão dos **valores**, então também reage a variação lenta de demanda |
+| Uso dessas lógicas | `RuntimeFunctionalDecisionContextProvider` → `RuntimeFunctionalDecisionCandidateFactory.Create` (`FrozenSensor` ⇒ `EmitAnomaly`; `IncreasingNoise` ⇒ `NewAnomaly`) | Confirmado no código. **Só o canário PK7** (`RuntimeDecision.AllowedClientIds`). No PK2 e no replay (`Enabled = false`), o contexto é calculado e descartado |
+| Família | `DetectorFamily.DataQuality = 7` ("qualidade, ausência, congelamento…") | Existe e ninguém usa |
+| Precedente de regra fora da média | `EnsembleDetectionService.Detectar`, `ExperimentalPersistenceTemporalConfirmationEnabled` (desligada por padrão, exclui resultados da soma com `AggregationExclusionReasonCode`) | Confirmado no código |
+
+**Por que não basta ligar o canário runtime no PK2:** isso ligaria de uma vez a recuperação de falso negativo, a política de regime e o baseline duplo, o que não é um passo pequeno nem reversível. Além disso, **o calculador de congelamento não dispararia na falha 20**: no replay `dados/p3b_{sem,combs}.csv`, a TAG24 tem `tipo_tag = Unknown` (confiança 0) nos 480 minutos, inclusive nos 30 da falha, e o calculador devolve `signal-not-continuous` (confirmado no replay e no código; o adaptador recebe a mesma entrada quando não há gap crítico). Só TAG22 e TAG25 saem `Continuous`.
+
+**Por que não basta um detector a mais na média (P07):** com os pesos do `appsettings.json` (soma 0,75 sem IF), um detector novo saturado (100) com todos os outros em 0, que é o caso do congelamento no set-point, dá no máximo `100·w/(0,75 + w)` = **57,1 com w = 1**, o máximo que o validador aceita. Nunca chega a 60. Pior: em leituras normais, ele entraria na média com nota 0 e **diluiria todas as detecções atuais**. Exemplo: Z + MAD + EWMA saturados, que hoje dão 60, cairiam para 50 com w = 0,15, e a TAG29 do preset 6 (60,9) deixaria de alarmar. Cálculo sobre o código; não rodado.
+
+#### 33.1 Desenho comum aos dois (como entra no ensemble sem diluir)
+
+- **Evidência independente, fora da média.** Novo valor `DetectorEvidenceRole.IndependentEvidence` e família `DataQuality`. No `EnsembleDetectionService`, resultados com esse papel:
+  - **nunca** entram em `somaPesos`/`somaScoresPonderados`. Ficam em `DetalhesDetectores` com `AggregationExclusionReasonCode = ExcludedIndependentEvidence`. Assim a nota dos outros detectores não muda em nenhuma leitura;
+  - quando um deles confirma (`EhAnomalia = true`), a decisão final é anomalia, um **"OU"** com a média. Fica `AggregationPolicy = "WeightedMeanOrIndependentEvidence"`, mais as métricas `evidenciaIndependente = 1` e o nome do detector;
+  - **só podem acrescentar alarmes, nunca removê-los** (aceite: nenhum minuto passa de 1 para 0).
+- **Nota final quando o "OU" dispara** (decisão da responsável): (a) `max(média, nota do detector)`, que mantém a regra "nota ≥ limiar ⇔ alarme" usada no LiveMonitor (tarefa 28). Ou (b) manter a média e expor a nota do detector só nos detalhes. **Recomendação: (a).**
+- **Chaves (desligadas por padrão), no padrão do `RegimeCombinado`:** `AnomalyDetection:ValorCongelado:Habilitado = false` e `AnomalyDetection:RuidoExcessivo:Habilitado = false`, cada uma com `ClientesHabilitados = []` (vazia = nenhum cliente) e com os seus parâmetros, com validador.
+  - Com a chave desligada, o detector **nem é registrado** na DI. Isso entra em `LegacyAnomalyDetectionServiceCollectionExtensions`, com uma sobrecarga que recebe `IConfiguration`, como `IsolationForestServiceCollectionExtensions` já faz. O ensemble fica idêntico: mesma lista de detectores, mesma saída e mesmo CSV do replay. Mudar a chave exige reiniciar a API.
+  - Cliente fora da lista ⇒ `NaoAplicavel("cliente-fora-da-lista")`.
+- **V2:** mapear os dois nomes para `DetectorFamily.DataQuality` em `LegacyDetectorResultV2Adapter.ResolveFamily` e em `EnsembleV2Simulator`. Hoje um nome desconhecido vira `Unknown`, e `DetectorResultV2` recusa `Unknown`.
+- **Replay:** `BuildDetectors` (`tools/Cp300OfflineReplay/Cp300Replay.cs:840`) ganha as opções `--detector-congelado` e `--detector-ruido`. Sem elas, a lista atual fica igual.
+- **Pré-requisitos para a IA real (não para o replay):** tarefa **25** (P31: hoje a maioria das leituras para na validação e não chega a nenhum detector) e tarefa **6** (cadência). Os dois detectores olham o histórico de 1 min vindo do Bridge, não a sequência de avaliações, então a cadência de ~10 min (P26) não os impede, só atrasa a decisão.
+
+#### 33.C Valor congelado
+
+- **Lógica.** Detector `ValorCongeladoDetector : IAnomalyDetector` que **chama o `FrozenSensorEvidenceCalculator` sem alterá-lo**, com duas diferenças, as duas dentro do detector:
+  1. **Tipo do sinal:** aceita `Continuous` **e `Unknown`**. Bloqueia `Discrete`, `Counter` e `Setpoint` em qualquer confiança (estados, comandos, set-points). Isso resolve a TAG24 = `Unknown`.
+  2. **Guarda "repouso conhecido"** (nova): não alarma se o valor parado já apareceu parado por ≥ `MinutosRepouso` (padrão 10) no histórico usado na decisão. Cobre bomba parada (0), válvula fechada e qualquer valor em que a tag legitimamente fica parada. Com regime, o histórico já é o do regime, e a guarda de "variação anterior" do próprio calculador também protege.
+- **Parâmetros (padrões propostos):** `MinimoPontos = 10`, `MinimoMinutos = 10` e `JanelaAnteriorPontos = 30` (os mesmos de `RegimeShadowOptions`), `TaxaMaximaPassosIguaisAntes = 0,60`, `MinutosRepouso = 10`, tolerância de igualdade exata (1e-12; a V1 não trata micro-oscilação). Nota: `100 × min(1, duração / MinimoMinutos)`; confirma com `HasEvidence`.
+- **Checagem offline** (`dados/cp300_09a13nov.csv`, sem a IAApi; confirmado nos dados, simulador). Períodos normais: 12/11 14:15 → 13/11 07:59 e 13/11 15:00–22:59, fora das falhas:
+  - maior sequência de valor idêntico **≠ 0** nas TAG22–33: **2 a 4 min** (margem de 2,5× até 10 min);
+  - sequências **= 0** (bomba parada ou válvula fechada): TAG32 **119 min**, TAG31 67, TAG28 24, TAG27 21, TAG26 9. Sem a guarda de repouso e sem regime, cada parada viraria alarme falso;
+  - falha 20: TAG24 parada **30 min** ⇒ detecção prevista aos **10 min** (15:31), contra 14 min hoje só pela TAG32 no `combs` (P41) [previsão; medir no replay];
+  - taxa de passos iguais da TAG24 em operação normal: 0,11 (bem abaixo de 0,60).
+- **Riscos de alarme falso e como cada um é coberto:**
+  - bomba parada e válvula fechada: guarda de repouso, histórico do regime e taxa anterior;
+  - tags de estado e set-point (TAG41–46, TAG44 `Discrete`): bloqueio por tipo; a TAG46 constante por horas também cai em "variação anterior baixa";
+  - sensor de resolução grossa que às vezes fica parado mais de 10 min: medir a sequência máxima por tag na operação normal antes de habilitar a tag;
+  - limite físico legítimo (nível no máximo, válvula 100 %, saturação do controle): passa pela guarda de repouso se já tiver ocorrido no histórico; se não, alarma (é aceitável sinalizar);
+  - histórico contaminado por um congelamento anterior (P13/P25): a guarda aprende o congelamento como "repouso" ⇒ **falso negativo**. Depende das tarefas 8 e 27.
+- **Fora do escopo:** Bridge sem pontos novos (gap) ⇒ o calculador devolve `critical-gap`, não aplicável. Isso é da tarefa **18** ("sem dados"). Bridge repetindo o último valor ⇒ é detectado como congelado (desejado).
+- **Testes (unitários, offline):** congelado num valor normal com variação antes ⇒ confirma no 10º min, não no 9º; `Unknown` aceito e `Discrete`/`Setpoint`/`Counter` bloqueados; zero longo já visto no histórico ⇒ não alarma; zero sem repouso no histórico ⇒ alarma; taxa anterior > 0,60 ⇒ não alarma; gap crítico ⇒ não aplicável; cliente fora da lista ⇒ não aplicável. Ensemble: papel independente fora da soma (nota idêntica com e sem o detector), "OU" com a chave ligada e nunca removendo alarme; DI com a chave desligada sem registro. Mutação: sem a guarda de repouso, o teste da bomba parada falha.
+
+#### 33.R Ruído excessivo
+
+- **Lógica.** Detector `RuidoExcessivoDetector : IAnomalyDetector`, **sem estado**, baseado na escala robusta das **diferenças de 1 min**. Diferenças não mudam com a variação lenta de demanda nem com o nível da tag, e pegam ruído de média zero, que o EWMA não vê (P07, falha 22).
+  - `recente` = 1,4826·MAD das diferenças nos últimos `JanelaMinutos`;
+  - `referência` = mesma medida no histórico de 24 h (o do regime, quando houver), sem a janela recente, descartando as diferenças que atravessam um gap maior que 2× a cadência (o histórico do regime é concatenado);
+  - `razão = recente / max(referência, piso)`. O piso vem de `BaselineProtectionProfile.RelativeScaleFloor` ou da resolução do sensor; isso protege a bomba parada e sinais quantizados com MAD 0;
+  - confirma se a razão ficar ≥ `RazaoMinima` em ≥ M das últimas P janelas (calculadas do próprio histórico, por isso sem estado), **e** se o centro recente estiver estável (≤ 2 escalas da referência, a mesma guarda do `IncreasingNoiseEvidenceCalculator`, para não confundir com degrau ou transição).
+  - **Reaproveitamento:** usa `DetectorMath.Median`/`Mad` e as guardas do calculador existente. **Não** usa o próprio calculador, por três motivos: ele tem estado, usa o regime interno e mede os valores, não as diferenças. **Plano registrado (regra do CLAUDE.md):** se a 33.R for aprovada e validada, extrair o núcleo comum e avaliar trocar o `IncreasingNoiseEvidenceCalculator` (PK7) por ele, numa tarefa própria, com regressão do canário. Até lá, as duas lógicas convivem.
+- **Parâmetros iniciais (a varrer):** `JanelaMinutos` 10, 15 ou 20; `RazaoMinima` 3, 4 ou 5; M-de-P = 3 de 5; mínimo de 10 diferenças válidas na janela e de 60 na referência.
+- **Checagem offline (crua: sem M-de-P, sem guarda de centro, estado = TAG42/43/46 sem a TAG45; confirmado nos dados, simulador):**
+  - falha 22 (TAG27, 800 ‰): razão máx. **5,7**, mediana **2,3**, **11 de 29 min ≥ 3**. O sinal existe, mas é **marginal**;
+  - minutos-tag normais acima do limiar: **134 com 3**, 61 com 4, 22 com 5. A maior parte na TAG22 (58 com 3; nível) e na TAG26 (38 com 3; a válvula TAG45 não estava na chave de estado).
+  - **Conclusão: viabilidade incerta.** Há um único exemplo positivo (falha 22) e uma única semente. O risco de escolher parâmetros que só servem a esses dados é alto.
+- **Riscos de alarme falso:** transições de regime e partida ou parada de bomba (diferenças grandes; MAD robusto, guarda de centro, histórico do regime); malhas oscilando (nível TAG22 e válvula TAG26, vistos acima); quantização (piso); referência contaminada por ruído anterior nas 24 h (P25) ⇒ falso negativo; o ruído do simulador pode não ser como o da planta (sem validação em planta).
+- **Testes (unitários, offline):** ruído de média zero com a razão acima do limiar em 3 de 5 janelas ⇒ confirma (e o EWMA continua em 0); degrau limpo ⇒ não confirma (guarda de centro); rampa lenta ⇒ não confirma (diferenças constantes); sinal quantizado com MAD 0 ⇒ piso, sem divisão por zero; diferenças que atravessam gap ⇒ descartadas; bomba parada (referência ≈ 0) ⇒ não alarma com variação de 1 unidade; poucas diferenças ⇒ não aplicável. Mutação: sem o piso, o teste da bomba parada falha.
+
+#### 33.M Como medir no replay (antes de qualquer ativação)
+
+- **Períodos** (todos com `--historico-causal` e treino limpo, como na RC-11): preset 3 de 13/11 (15:00–22:59), preset 6 e **18 h normais de 12/11** (12/11 14:15 → 13/11 07:59, com a madrugada). **Configurações:** `sem`, `rec` e `combr`, cada uma com o detector desligado (execuções já existentes) e ligado.
+- **Métrica principal: a diferença entre ligado e desligado**, minuto a minuto (`decisao_final`):
+  - **minutos ganhos** (0 → 1), classificados pelo placar: na falha e na tag-alvo, coincidência ou **falso fora das falhas**;
+  - **minutos perdidos** (1 → 0): têm de ser **0**, por construção;
+  - nota dos outros detectores e `nota_final` sem o "OU": **idênticas**;
+  - contagem por motivo de não aplicável ou não confirmado (`signal-not-continuous`, `historically-low-variation`, repouso conhecido, piso…), para ver as guardas funcionando nas paradas de bomba.
+- **Aceite proposto (para aprovação):**
+  - **33.C:** falha 20 detectada **na TAG24** em ≤ 11 min nas 3 configurações; **0 minutos ganhos falsos** nas 18 h de 12/11 e no preset 6, nas 3 configurações; preset 6 com a TAG29 ainda às 15:32 (sem regime) e às 15:37 (`combr`).
+  - **33.R:** falha 22 detectada **na TAG27** pela regra do placar (≥ 3 min seguidos) no `combr`; falsos ganhos ≤ orçamento a definir pela responsável (sugestão: ≤ 10 minutos-tag nas 18 h de 12/11 e ≤ 4 fora das falhas no preset 3, cerca de 10 % dos 37 atuais do `combr`). Se nenhuma combinação de parâmetros atender, **a 33.R para** e o resultado é documentado.
+- **Regressão:** com as duas chaves desligadas, `Compare-Replay.ps1` com **0 diferenças nas 12 execuções** (sem e com `-HistoricoCausal`) e suíte completa verde.
+
+#### 33.P Passos (cada um com aprovação própria; nenhum altera a decisão com as chaves desligadas)
+
+| Passo | O que | Arquivos | Muda a decisão |
+|---|---|---|---|
+| C0 | ✅ Checagem offline do congelamento (feita em 16/11, acima). Script fora do repositório | — | não |
+| 1 | ✅ **Feito em 16/11, sem commit (33.P1).** Infra: `IndependentEvidence`, exclusão da soma e "OU" atrás das chaves, opções e validadores, família `DataQuality` no V2. Testes com um detector falso | `DetectorEvidenceRole`, `EnsembleDetectionService.cs`, opções novas, `LegacyDetectorResultV2Adapter.cs`, `EnsembleV2Simulator.cs` | não (sem detector registrado) |
+| 2 | `ValorCongeladoDetector` + registro condicional na DI + `--detector-congelado` no replay. Testes unitários | detector novo, `LegacyAnomalyDetectionServiceCollectionExtensions.cs`, `Cp300Replay.cs` | só com a chave |
+| 3 | Medição 33.M do congelamento (9 execuções ligadas) e registro na RES3 e em `PROBLEMAS_ENCONTRADOS.md` (P12) | — | não |
+| R0 | Varredura offline do ruído (Python, sem código da IAApi): janela × razão × M-de-P, com TAG45 na chave da TAG26. **Só segue se** alguma combinação detectar a falha 22 dentro do orçamento | script fora do repositório | não |
+| 4 | `RuidoExcessivoDetector` + `--detector-ruido`. Testes | detector novo, DI, replay | só com a chave |
+| 5 | Medição 33.M do ruído e registro (P07, P12) | — | não |
+| 6 | Ativação no ambiente de teste do PK2 (`ClientesHabilitados = ["PK2"]`), numa sessão acompanhada, **depois das tarefas 25 e 6** | `appsettings` do ambiente de teste | **sim** |
+
+- **Risco:** alto no passo 6 (muda a decisão e o volume de alarmes); baixo nos passos 1–5, com as chaves desligadas e a regressão byte a byte.
+- **Esforço:** M (33.C) + M (33.R).
+
+#### 33.P1 Passo 1: o que foi feito (2026-11-16, sem commit)
+
+- **O que mudou** (nenhum detector real com o papel novo existe; com as chaves desligadas, a saída é a mesma):
+  - `src/IAApi.Engine/Detection/Core/EvidenceSemantics.cs`: `DetectorEvidenceRole.IndependentEvidence = 2`.
+  - `src/IAApi.Engine/Observability/DiagnosticContracts.cs`: código `ExcludedIndependentEvidence`.
+  - `src/IAApi.Engine/Detection/EvidenciaIndependenteOptions.cs` (novo): base `EvidenciaIndependenteOptions` (`Habilitado = false`, `ClientesHabilitados = []`, `EstaHabilitadoPara(cliente)`, que ignora maiúsculas/minúsculas e espaços), mais `ValorCongeladoOptions` (`AnomalyDetection:ValorCongelado`) e `RuidoExcessivoOptions` (`AnomalyDetection:RuidoExcessivo`). Os parâmetros dos detectores entram nos passos 2 e 4. O `appsettings.json` **não mudou**.
+  - `Services/AnomalyDetection/AnomalyDetectionOptionsValidators.cs`: `EvidenciaIndependenteOptionsValidator<T>`. Lista vazia é válida; lista nula ou item em branco, não.
+  - `Services/AnomalyDetection/DependencyInjection/AnomalyDetectionServiceCollectionExtensions.cs`: `Configure<>` das duas seções em `AddAnomalyDetectionConfiguration` e validadores em `AddAnomalyDetectionValidation`. **Nada lê essas opções ainda**, então o validador não roda em produção até o passo 2.
+  - `Services/AnomalyDetection/EnsembleDetectionService.cs`:
+    - um resultado aplicável com papel `IndependentEvidence` **não entra** em `somaPesos`, `somaScoresPonderados`, `quantidadeDetectoresAplicaveis`, `quantidadeAlertas` nem no detector de referência dos limites. Fica nos detalhes com `ExcludedIndependentEvidence` e peso efetivo 0;
+    - se algum confirma: `EhAnomalia = true` e nota final = `max(média, maior nota confirmada)`, com a nota limitada a [0, 100] e valor não finito tratado como 0. A política vira `WeightedMeanOrIndependentEvidence`, ou `<política experimental>+IndependentEvidenceOr` com a política temporal experimental ativa;
+    - sem nenhum detector da média aplicável e com evidência confirmada: `IndependentEvidenceOnly`, aplicável e anomalia, sem a exceção de soma de pesos zero; sem evidência confirmada continua `NoApplicableDetectors`;
+    - métricas novas (`quantidadeEvidenciasIndependentes`, `…Confirmadas`, `evidenciaIndependenteConfirmada`, `scoreEvidenciaIndependenteMaximo`, `scoreMediaPonderada`) **só quando há evidência independente aplicável**. Sem ela, o dicionário continua com as 12 chaves de antes;
+    - no ramo experimental, o código de exclusão passou a ser `??=`, para não sobrescrever `ExcludedIndependentEvidence`. Antes desse passo ele era sempre nulo ali, então nada muda.
+  - `EnsembleEvidenceParticipationPolicy.cs`: `IndependentEvidence` nunca participa.
+  - `LegacyDetectorResultV2Adapter.cs` e `EnsembleV2Simulator.cs`: papel `IndependentEvidence` ⇒ família `DataQuality`, decidida pelo papel e não pelo nome. Os outros detectores seguem pelo nome, como antes.
+  - A política de aplicabilidade (tag `Discrete`/`Counter`/`Setpoint` de alta confiança) bloqueia também a evidência independente, como bloqueia qualquer detector (há teste).
+- **Testes:** `IAApi.Tests/Detection/EnsembleIndependentEvidenceTests.cs` (novo, **38 casos**, só detectores falsos). Cobrem: nota, decisão e somas idênticas com e sem evidência não confirmada (inclusive os 60 exatos do P07); detalhes fora da agregação; "OU" com `max`; média maior mantida; várias evidências; nota NaN, infinita ou fora da faixa; nunca remove alarme; combinação com a política temporal experimental; somente evidência (confirmada e não confirmada, com peso 0); sem evidência ⇒ 12 métricas; evidência não aplicável ignorada; bloqueio por tag discreta; política de participação; família V2; opções (padrão desligado, seção, filtro de cliente); validador direto e pela DI; `appsettings.json` sem as seções.
+  - **Mutações** (temporárias, arquivo restaurado e conferido com `cmp`): evidência dentro da média ⇒ **14 falham**; "OU" desligado ⇒ **8 falham**.
+- **Execução** (a IAApi seguiu rodando na sessão de medição, pelo `bin\Debug`; **tudo compilado em `-c Release`**, numa pasta de saída separada, sem tocar no `bin\Debug` em uso):
+  - testes relacionados (ensemble, cenários, regime combinado, V2/confiança, persistência, Cp300): **228/228**;
+  - suíte completa: **1117/1117** (1079 + 38). O isolamento offline foi conferido (os testes do Bridge usam só `FakeBridgeHandler`);
+  - `Compare-Replay.ps1 -Configuracao Release -SemBuild`: **0 diferenças em 12 execuções** (`dados/rc2_rodadas/20261116_154049`); com `-HistoricoCausal`: **0 diferenças em 12** (`20261116_154524`).
+- **Rollback:** reverter os 7 arquivos alterados e apagar os 2 novos (`EvidenciaIndependenteOptions.cs` e o arquivo de teste). Não há configuração nova no `appsettings.json` nem migration.
+- **Rollback:** desligar a chave e reiniciar a API (o detector deixa de ser registrado); no código, reverter os commits de cada passo.
 
 ---
 

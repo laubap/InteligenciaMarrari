@@ -13,6 +13,15 @@ namespace IAApi.Services.AnomalyDetection;
 /// um profiler interno para medir o tempo acumulado de cada detector.
 ///
 /// O relatório é exibido periodicamente no terminal durante o benchmark.
+///
+/// BACKLOG 33 (passo 1): resultados com papel
+/// <see cref="DetectorEvidenceRole.IndependentEvidence"/> nunca entram na
+/// média ponderada (ficam nos detalhes com
+/// <c>ExcludedIndependentEvidence</c>). Quando um deles confirma, a decisão
+/// final é anomalia por "OU" com a média e a nota final passa a ser o
+/// máximo entre a média e a nota do detector; nunca remove um alarme.
+/// Sem detector com esse papel registrado (chaves desligadas, padrão),
+/// a saída é a mesma de antes.
 /// </summary>
 public class EnsembleDetectionService
 {
@@ -116,6 +125,10 @@ public class EnsembleDetectionService
 
         DetectorResult? resultadoReferencia = null;
         DetectorResult? resultadoZScore = null;
+
+        // BACKLOG 33: só deixa de ser nula se algum detector registrado
+        // devolver evidência independente aplicável.
+        List<DetectorResult>? evidenciasIndependentes = null;
 
         for (var index = 0;
              index < _detectores.Length;
@@ -229,6 +242,18 @@ public class EnsembleDetectionService
                 continue;
             }
 
+            if (resultado.EvidenceRole ==
+                DetectorEvidenceRole.IndependentEvidence)
+            {
+                aggregationExclusionReasonCodes[index] =
+                    DetectorDiagnosticReasonCodes.ExcludedIndependentEvidence;
+
+                (evidenciasIndependentes ??= new List<DetectorResult>())
+                    .Add(resultado);
+
+                continue;
+            }
+
             quantidadeAplicaveis++;
 
             somaPesos +=
@@ -269,7 +294,9 @@ public class EnsembleDetectionService
 
         var aggregationPolicy = "WeightedMeanAllApplicable";
         var participatingResults = new HashSet<DetectorResult>(
-            todosResultados.Where(result => result.Aplicavel));
+            todosResultados.Where(result =>
+                result.Aplicavel &&
+                result.EvidenceRole != DetectorEvidenceRole.IndependentEvidence));
 
         if (_options.ExperimentalPersistenceTemporalConfirmationEnabled)
         {
@@ -295,7 +322,9 @@ public class EnsembleDetectionService
                     if (todosResultados[index].Aplicavel &&
                         !participatingResults.Contains(todosResultados[index]))
                     {
-                        aggregationExclusionReasonCodes[index] =
+                        // ??=: preserva ExcludedIndependentEvidence
+                        // (antes do BACKLOG 33 o código era sempre nulo aqui).
+                        aggregationExclusionReasonCodes[index] ??=
                             DetectorDiagnosticReasonCodes
                                 .ExcludedByExperimentalTemporalConfirmationPolicy;
                     }
@@ -324,26 +353,13 @@ public class EnsembleDetectionService
                 configuredWeights,
                 participatingResults);
 
+        var evidenciaIndependente =
+            AvaliarEvidenciasIndependentes(
+                evidenciasIndependentes);
+
         if (quantidadeAplicaveis == 0)
         {
-            return new DetectorResult
-            {
-                Aplicavel = false,
-                EhAnomalia = false,
-                Score = 0,
-                ScoreNormalizado = 0,
-                Peso = 0,
-                LimiteInferior = 0,
-                LimiteSuperior = 0,
-                Media = input.MediaHistorica,
-                DesvioPadrao =
-                    input.DesvioPadraoHistorico,
-                Detector =
-                    "Ensemble ponderado",
-                AggregationPolicy = "NoApplicableDetectors",
-                Explicacao =
-                    "Nenhum detector foi aplicável para esta leitura.",
-                Metricas =
+            var metricasSemAplicaveis =
                     new Dictionary<string, double>(12)
                     {
                         ["scoreFinalNormalizado"] = 0,
@@ -369,7 +385,68 @@ public class EnsembleDetectionService
                         ["quantidadeConfirmacoesTemporaisConfirmadas"] =
                             temporalConfirmations.Count(x =>
                                 x.TemporalConfirmation?.Status == TemporalConfirmationStatus.Confirmed)
-                    },
+                    };
+
+            AdicionarMetricasEvidenciaIndependente(
+                metricasSemAplicaveis,
+                evidenciaIndependente,
+                scoreMediaPonderada: 0);
+
+            if (evidenciaIndependente.Confirmada)
+            {
+                // BACKLOG 33: "OU" sem média (nenhum detector da média
+                // aplicável): a evidência independente decide sozinha.
+                var scoreIndependente =
+                    evidenciaIndependente.ScoreMaximoConfirmado;
+
+                metricasSemAplicaveis["scoreFinalNormalizado"] =
+                    scoreIndependente;
+
+                return new DetectorResult
+                {
+                    Aplicavel = true,
+                    EhAnomalia = true,
+                    Score = scoreIndependente / 20.0,
+                    ScoreNormalizado = scoreIndependente,
+                    Peso = 1,
+                    LimiteInferior = 0,
+                    LimiteSuperior = 0,
+                    Media = input.MediaHistorica,
+                    DesvioPadrao =
+                        input.DesvioPadraoHistorico,
+                    Detector =
+                        "Ensemble ponderado",
+                    AggregationPolicy =
+                        PoliticaSomenteEvidenciaIndependente,
+                    Explicacao =
+                        CriarExplicacao(
+                            todosResultados),
+                    Metricas =
+                        metricasSemAplicaveis,
+                    DetalhesDetectores =
+                        detalhes
+                };
+            }
+
+            return new DetectorResult
+            {
+                Aplicavel = false,
+                EhAnomalia = false,
+                Score = 0,
+                ScoreNormalizado = 0,
+                Peso = 0,
+                LimiteInferior = 0,
+                LimiteSuperior = 0,
+                Media = input.MediaHistorica,
+                DesvioPadrao =
+                    input.DesvioPadraoHistorico,
+                Detector =
+                    "Ensemble ponderado",
+                AggregationPolicy = "NoApplicableDetectors",
+                Explicacao =
+                    "Nenhum detector foi aplicável para esta leitura.",
+                Metricas =
+                    metricasSemAplicaveis,
                 DetalhesDetectores =
                     detalhes
             };
@@ -390,49 +467,33 @@ public class EnsembleDetectionService
             scoreFinalNormalizado >=
             _options.EnsembleThreshold;
 
+        var scoreMediaPonderada =
+            scoreFinalNormalizado;
+
+        if (evidenciaIndependente.Confirmada)
+        {
+            // BACKLOG 33: "OU" com a média. Só acrescenta alarme;
+            // nota final = máximo entre a média e a nota do detector.
+            ehAnomaliaFinal = true;
+
+            scoreFinalNormalizado =
+                Math.Max(
+                    scoreMediaPonderada,
+                    evidenciaIndependente.ScoreMaximoConfirmado);
+
+            aggregationPolicy =
+                aggregationPolicy == PoliticaMediaPadrao
+                    ? PoliticaMediaOuEvidenciaIndependente
+                    : aggregationPolicy + SufixoOuEvidenciaIndependente;
+        }
+
         resultadoReferencia =
             resultadoZScore ??
             resultadoReferencia ??
             throw new InvalidOperationException(
                 "Não foi possível determinar um detector de referência.");
 
-        return new DetectorResult
-        {
-            Aplicavel = true,
-
-            EhAnomalia =
-                ehAnomaliaFinal,
-
-            Score =
-                scoreFinalNormalizado / 20.0,
-
-            ScoreNormalizado =
-                scoreFinalNormalizado,
-
-            Peso = 1,
-
-            LimiteInferior =
-                resultadoReferencia.LimiteInferior,
-
-            LimiteSuperior =
-                resultadoReferencia.LimiteSuperior,
-
-            Media =
-                input.MediaHistorica,
-
-            DesvioPadrao =
-                input.DesvioPadraoHistorico,
-
-            Detector =
-                "Ensemble ponderado",
-
-            AggregationPolicy = aggregationPolicy,
-
-            Explicacao =
-                CriarExplicacao(
-                    todosResultados),
-
-            Metricas =
+        var metricas =
                 new Dictionary<string, double>(12)
                 {
                     ["scoreFinalNormalizado"] =
@@ -474,11 +535,155 @@ public class EnsembleDetectionService
                     ["quantidadeConfirmacoesTemporaisConfirmadas"] =
                         temporalConfirmations.Count(x =>
                             x.TemporalConfirmation?.Status == TemporalConfirmationStatus.Confirmed)
-                },
+                };
+
+        AdicionarMetricasEvidenciaIndependente(
+            metricas,
+            evidenciaIndependente,
+            scoreMediaPonderada);
+
+        return new DetectorResult
+        {
+            Aplicavel = true,
+
+            EhAnomalia =
+                ehAnomaliaFinal,
+
+            Score =
+                scoreFinalNormalizado / 20.0,
+
+            ScoreNormalizado =
+                scoreFinalNormalizado,
+
+            Peso = 1,
+
+            LimiteInferior =
+                resultadoReferencia.LimiteInferior,
+
+            LimiteSuperior =
+                resultadoReferencia.LimiteSuperior,
+
+            Media =
+                input.MediaHistorica,
+
+            DesvioPadrao =
+                input.DesvioPadraoHistorico,
+
+            Detector =
+                "Ensemble ponderado",
+
+            AggregationPolicy = aggregationPolicy,
+
+            Explicacao =
+                CriarExplicacao(
+                    todosResultados),
+
+            Metricas =
+                metricas,
 
             DetalhesDetectores =
                 detalhes
         };
+    }
+
+    // BACKLOG 33: nomes das políticas de agregação com evidência independente.
+    private const string PoliticaMediaPadrao =
+        "WeightedMeanAllApplicable";
+
+    private const string PoliticaMediaOuEvidenciaIndependente =
+        "WeightedMeanOrIndependentEvidence";
+
+    private const string SufixoOuEvidenciaIndependente =
+        "+IndependentEvidenceOr";
+
+    private const string PoliticaSomenteEvidenciaIndependente =
+        "IndependentEvidenceOnly";
+
+    private readonly record struct EvidenciaIndependenteAvaliada(
+        int Quantidade,
+        int Confirmadas,
+        double ScoreMaximo,
+        double ScoreMaximoConfirmado)
+    {
+        public bool Presente => Quantidade > 0;
+
+        public bool Confirmada => Confirmadas > 0;
+    }
+
+    private static EvidenciaIndependenteAvaliada AvaliarEvidenciasIndependentes(
+        List<DetectorResult>? evidencias)
+    {
+        if (evidencias is null ||
+            evidencias.Count == 0)
+        {
+            return default;
+        }
+
+        var confirmadas = 0;
+        var scoreMaximo = 0.0;
+        var scoreMaximoConfirmado = 0.0;
+
+        foreach (var evidencia in evidencias)
+        {
+            var score =
+                NotaLimitada(
+                    evidencia.ScoreNormalizado);
+
+            scoreMaximo =
+                Math.Max(
+                    scoreMaximo,
+                    score);
+
+            if (!evidencia.EhAnomalia)
+                continue;
+
+            confirmadas++;
+
+            scoreMaximoConfirmado =
+                Math.Max(
+                    scoreMaximoConfirmado,
+                    score);
+        }
+
+        return new EvidenciaIndependenteAvaliada(
+            evidencias.Count,
+            confirmadas,
+            scoreMaximo,
+            scoreMaximoConfirmado);
+    }
+
+    private static double NotaLimitada(
+        double score) =>
+        double.IsFinite(score)
+            ? Math.Clamp(score, 0, 100)
+            : 0;
+
+    /// <summary>
+    /// Acrescenta as métricas da evidência independente só quando há
+    /// alguma aplicável; sem ela, o dicionário fica exatamente como antes.
+    /// </summary>
+    private static void AdicionarMetricasEvidenciaIndependente(
+        Dictionary<string, double> metricas,
+        EvidenciaIndependenteAvaliada evidencia,
+        double scoreMediaPonderada)
+    {
+        if (!evidencia.Presente)
+            return;
+
+        metricas["quantidadeEvidenciasIndependentes"] =
+            evidencia.Quantidade;
+
+        metricas["quantidadeEvidenciasIndependentesConfirmadas"] =
+            evidencia.Confirmadas;
+
+        metricas["evidenciaIndependenteConfirmada"] =
+            evidencia.Confirmada ? 1 : 0;
+
+        metricas["scoreEvidenciaIndependenteMaximo"] =
+            evidencia.ScoreMaximo;
+
+        metricas["scoreMediaPonderada"] =
+            scoreMediaPonderada;
     }
 
 

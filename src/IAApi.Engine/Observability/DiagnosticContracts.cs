@@ -38,6 +38,10 @@ public static class DetectorDiagnosticReasonCodes
     public const string IsolationForestProcessingFailed = "IsolationForestProcessingFailed";
     public const string ExcludedByExperimentalTemporalConfirmationPolicy =
         "ExcludedByExperimentalTemporalConfirmationPolicy";
+    // BACKLOG 33: evidência independente fica fora da média ponderada
+    // e entra na decisão só pelo "OU".
+    public const string ExcludedIndependentEvidence =
+        "ExcludedIndependentEvidence";
 }
 
 /// <summary>

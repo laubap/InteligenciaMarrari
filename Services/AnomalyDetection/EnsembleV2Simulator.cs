@@ -113,9 +113,13 @@ public sealed class EnsembleV2Simulator
 
         foreach (var detail in detalhes)
         {
+            // BACKLOG 33: evidência independente é qualidade do dado.
             var family =
-                ResolveFamily(
-                    detail.Nome);
+                detail.EvidenceRole ==
+                    DetectorEvidenceRole.IndependentEvidence
+                    ? DetectorFamily.DataQuality
+                    : ResolveFamily(
+                        detail.Nome);
 
             var baseWeight =
                 Clamp01(

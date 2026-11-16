@@ -84,6 +84,38 @@ public sealed class AnomalyDetectionOptionsValidator :
     }
 }
 
+/// <summary>
+/// BACKLOG 33: validação das chaves de evidência independente
+/// (<see cref="ValorCongeladoOptions"/>, <see cref="RuidoExcessivoOptions"/>).
+/// Lista vazia é válida (nenhum cliente); item nulo ou em branco, não.
+/// </summary>
+public sealed class EvidenciaIndependenteOptionsValidator<TOptions> :
+    IValidateOptions<TOptions>
+    where TOptions : EvidenciaIndependenteOptions
+{
+    public ValidateOptionsResult Validate(
+        string? name,
+        TOptions options)
+    {
+        var errors = new List<string>();
+        var secao = typeof(TOptions).Name;
+
+        if (options.ClientesHabilitados is null)
+        {
+            errors.Add($"{secao}.ClientesHabilitados não pode ser nula.");
+        }
+        else if (options.ClientesHabilitados.Any(string.IsNullOrWhiteSpace))
+        {
+            errors.Add(
+                $"{secao}.ClientesHabilitados não pode ter item nulo ou em branco.");
+        }
+
+        return errors.Count == 0
+            ? ValidateOptionsResult.Success
+            : ValidateOptionsResult.Fail(errors);
+    }
+}
+
 public sealed class IsolationForestOptionsValidator :
     IValidateOptions<IsolationForestOptions>
 {

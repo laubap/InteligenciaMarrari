@@ -15,9 +15,14 @@ public sealed class LegacyDetectorResultV2Adapter
     {
         ArgumentNullException.ThrowIfNull(legacyResult);
 
+        // BACKLOG 33: evidência independente é qualidade do dado,
+        // qualquer que seja o nome do detector.
         var family =
-            ResolveFamily(
-                legacyResult.Nome);
+            legacyResult.EvidenceRole ==
+                DetectorEvidenceRole.IndependentEvidence
+                ? DetectorFamily.DataQuality
+                : ResolveFamily(
+                    legacyResult.Nome);
 
         if (!legacyResult.Aplicavel)
         {

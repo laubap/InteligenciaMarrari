@@ -3,7 +3,16 @@ namespace IAApi.Services.AnomalyDetection;
 public enum DetectorEvidenceRole
 {
     StatisticalEvidence = 0,
-    TemporalConfirmation = 1
+    TemporalConfirmation = 1,
+
+    /// <summary>
+    /// Evidência independente (BACKLOG 33, família <c>DataQuality</c>):
+    /// nunca entra na média ponderada do ensemble. Quando confirma
+    /// (<c>EhAnomalia = true</c>), a decisão final vira anomalia por "OU"
+    /// com a média; nunca remove um alarme. Os detectores com esse papel
+    /// só são registrados com a chave própria ligada.
+    /// </summary>
+    IndependentEvidence = 2
 }
 
 public enum UnderlyingEvidenceKind

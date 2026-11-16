@@ -16,6 +16,10 @@ public static class EnsembleEvidenceParticipationPolicy
         if (!result.Aplicavel)
             return false;
 
+        // BACKLOG 33: evidência independente nunca entra na média.
+        if (result.EvidenceRole == DetectorEvidenceRole.IndependentEvidence)
+            return false;
+
         if (!experimentalTemporalConfirmationEnabled)
             return true;
 
