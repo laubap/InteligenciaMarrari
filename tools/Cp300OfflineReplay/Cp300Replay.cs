@@ -110,6 +110,14 @@ public sealed record Cp300ReplayOptions
     /// </summary>
     public IReadOnlyDictionary<string, string>? MapasRegime { get; init; }
 
+    /// <summary>
+    /// BACKLOG 33.C (passo 2): registra o ValorCongeladoDetector (evidencia
+    /// independente, "OU" com a media) no ensemble de producao e no de
+    /// detalhamento, com a chave ligada so para o cliente do CSV e os
+    /// parametros padrao. False (padrao) = saida igual a de antes, byte a byte.
+    /// </summary>
+    public bool DetectorValorCongelado { get; init; }
+
     /// <summary>Destino das mensagens da ferramenta (nao do runtime).</summary>
     public TextWriter? Log { get; init; }
 }
@@ -386,6 +394,14 @@ public static class Cp300Replay
         if (regimeCombinado)
             log.WriteLine("Regime combinado: ligado (AnomalyDetection:RegimeCombinado:Habilitado = true no replay; " +
                           "rotulos TAG60-TAG81 na lista de tags proibidas do cliente).");
+        // BACKLOG 33.C: so com --detector-congelado (sem a opcao, nada muda).
+        var valorCongelado = options.DetectorValorCongelado
+            ? new ValorCongeladoOptions { Habilitado = true, ClientesHabilitados = [clienteId] }
+            : null;
+        if (valorCongelado is not null)
+            log.WriteLine("Detector de valor congelado: ligado (AnomalyDetection:ValorCongelado:Habilitado = true no replay, " +
+                          $"cliente {clienteId}; {valorCongelado.MinimoPontos} pontos, {valorCongelado.MinimoMinutos:G} min, " +
+                          $"repouso {valorCongelado.MinutosRepouso:G} min).");
         var configuracoes = new List<(string Alvo, TagRegimeOperacionalIa Configuracao, List<TagRegimeComponenteIa> Extras)>();
         foreach (var (alvo, regime) in regimes)
         {
@@ -503,12 +519,12 @@ public static class Cp300Replay
 
         var regimeCombinadoCliente = regimeCombinado ? clienteId : null;
         var production = BuildPredictionService(db, history, detectionOptions, regimes.Count > 0, options.HistoricoCausal,
-            regimeCombinadoCliente);
+            regimeCombinadoCliente, valorCongelado);
         // Detalhamento: mesmas classes de producao, instancias separadas, sobre
         // o mesmo DetectorInput. A decisao oficial continua vindo do PredictionService.
         var detailPreparation = BuildPreparation(db, history, regimes.Count > 0, options.HistoricoCausal,
             regimeCombinadoCliente);
-        var detailEnsemble = BuildEnsemble(detectionOptions);
+        var detailEnsemble = BuildEnsemble(detectionOptions, valorCongelado);
         var resolver = new TagBehaviorProfileResolver();
 
         var readings = treinadas
@@ -837,19 +853,29 @@ public static class Cp300Replay
                n is >= 60 and <= 81;
     }
 
-    private static IAnomalyDetector[] BuildDetectors(AnomalyDetectionOptions options) =>
-    [
+    private static IAnomalyDetector[] BuildDetectors(
+        AnomalyDetectionOptions options, ValorCongeladoOptions? valorCongelado)
+    {
         // Mesma ordem de LegacyAnomalyDetectionServiceCollectionExtensions.
-        new StatisticalDetector(options),
-        new MadDetector(options),
-        new EwmaDetector(options),
-        new RateOfChangeDetector(options),
-        new PersistenceDetector(options),
-        new LevelShiftDetector(options)
-    ];
+        IAnomalyDetector[] legados =
+        [
+            new StatisticalDetector(options),
+            new MadDetector(options),
+            new EwmaDetector(options),
+            new RateOfChangeDetector(options),
+            new PersistenceDetector(options),
+            new LevelShiftDetector(options)
+        ];
 
-    private static EnsembleDetectionService BuildEnsemble(AnomalyDetectionOptions options) =>
-        new(BuildDetectors(options), Options.Create(options),
+        // BACKLOG 33.C: como na DI, so com a chave ligada (depois dos legados).
+        return valorCongelado is null
+            ? legados
+            : [.. legados, new ValorCongeladoDetector(valorCongelado, new TagBehaviorProfileResolver())];
+    }
+
+    private static EnsembleDetectionService BuildEnsemble(
+        AnomalyDetectionOptions options, ValorCongeladoOptions? valorCongelado) =>
+        new(BuildDetectors(options, valorCongelado), Options.Create(options),
             new TagBehaviorProfileResolver(), new DetectorApplicabilityPolicy());
 
     /// <summary>
@@ -892,9 +918,9 @@ public static class Cp300Replay
 
     private static PredictionService BuildPredictionService(
         AppDbContext db, CsvHistorySource history, AnomalyDetectionOptions options, bool comRegime,
-        bool historicoCausal, string? regimeCombinadoCliente)
+        bool historicoCausal, string? regimeCombinadoCliente, ValorCongeladoOptions? valorCongelado)
     {
-        var ensemble = BuildEnsemble(options);
+        var ensemble = BuildEnsemble(options, valorCongelado);
         var interpretation = new PredictionInterpretationService(
             new AnomalyInterpretationContextBuilder(new TagContextoIaService(db)),
             new OfflineInterpretation());
@@ -968,6 +994,11 @@ public static class Cp300Replay
                 row.Limiar = limiar;
             if (result.Metricas.TryGetValue("somaPesosAplicaveis", out var soma))
                 row.SomaPesos = soma;
+            // BACKLOG 33: com evidencia independente aplicavel, a nota final pode
+            // ser o maximo entre a media e a nota do detector ("OU"); as
+            // contribuicoes reconstroem a media. Sem ela, a metrica nao existe.
+            if (result.Metricas.TryGetValue("scoreMediaPonderada", out var media))
+                row.MediaPonderada = media;
         }
 
         foreach (var detail in result.DetalhesDetectores ?? [])
@@ -999,7 +1030,9 @@ public static class Cp300Replay
         if (row.NotaFinal is double final && row.Detectores.Count > 0 && row.SomaPesos > 0)
         {
             var soma = row.Detectores.Sum(d => d.Contribuicao);
-            if (Math.Abs(soma - final) > 1e-6)
+            // BACKLOG 33: com "OU", as contribuicoes somam a media, nao a nota final.
+            var alvo = row.MediaPonderada ?? final;
+            if (Math.Abs(soma - alvo) > 1e-6)
                 problemas.Add("soma_contribuicoes");
         }
 
@@ -1034,6 +1067,8 @@ public static class Cp300Replay
         public double? ScoreEnsemble { get; set; }
         public double? Limiar { get; set; }
         public double? SomaPesos { get; set; }
+        /// <summary>BACKLOG 33: media ponderada antes do "OU" (nao vai para o CSV).</summary>
+        public double? MediaPonderada { get; set; }
         public bool? DecisaoEnsemble { get; set; }
         public bool? DecisaoFinal { get; set; }
         public string? TipoTag { get; set; }

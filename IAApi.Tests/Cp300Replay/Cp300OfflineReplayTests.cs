@@ -147,6 +147,86 @@ public sealed class Cp300OfflineReplayTests : IDisposable
     }
 
     [Fact]
+    public async Task DetectorCongelado_Ligado_AcrescentaSoNaTag24Congelada_NuncaRemoveAlarme()
+    {
+        // BACKLOG 33.C (passo 2). A TAG24 repete a leitura das 02:19 a partir
+        // das 02:20: 10 min parada as 02:29.
+        var input = WriteCsv();
+        var sem = Path.Combine(_root, "sem-congelado.csv");
+        var com = Path.Combine(_root, "com-congelado.csv");
+        var log = new StringWriter();
+
+        var sSem = await Cp300Replay.RunAsync(Options(input, sem));
+        var sCom = await Cp300Replay.RunAsync(Options(input, com) with
+        {
+            DetectorValorCongelado = true,
+            Log = log
+        });
+
+        Assert.Equal(0, sCom.Divergencias);
+        Assert.Equal(0, sCom.LeiturasComErro);
+        Assert.Contains("Detector de valor congelado: ligado", log.ToString());
+
+        var rowsSem = ReadOutput(sem);
+        var rowsCom = ReadOutput(com);
+        Assert.All(rowsCom.GroupBy(r => (r["tag"], r["data_hora"])), leitura =>
+        {
+            Assert.Equal(7, leitura.Count());
+            Assert.All(leitura, r => Assert.Equal("ok", r["conferencia"]));
+        });
+        Assert.DoesNotContain(rowsSem, r => r["detector"] == ValorCongeladoDetectorNome);
+
+        static Dictionary<(string, string), string> Decisoes(List<Dictionary<string, string>> rows) =>
+            rows.GroupBy(r => (r["tag"], r["data_hora"]))
+                .ToDictionary(g => g.Key, g => g.First()["decisao_final"]);
+
+        var dSem = Decisoes(rowsSem);
+        var dCom = Decisoes(rowsCom);
+        Assert.Equal(dSem.Keys.Order(), dCom.Keys.Order());
+
+        // Nunca remove alarme.
+        Assert.DoesNotContain(dSem, kv => kv.Value == "1" && dCom[kv.Key] == "0");
+
+        // Ganhos: so TAG24, a partir das 02:29, e em todos esses minutos.
+        var ganhos = dCom.Where(kv => kv.Value == "1" && dSem[kv.Key] == "0")
+            .Select(kv => kv.Key).ToList();
+        Assert.All(ganhos, k => Assert.Equal("TAG24", k.Item1));
+        Assert.NotEmpty(ganhos);
+        var congelado = rowsCom.Where(r => r["tag"] == "TAG24" && r["detector"] == ValorCongeladoDetectorNome)
+            .ToDictionary(At);
+        foreach (var (t, row) in congelado)
+        {
+            if (t >= Congela.AddMinutes(9))
+            {
+                // Confirmado: nota 100 e decisao final de anomalia ("OU").
+                Assert.Equal(100, D(row["nota_detector"]));
+                Assert.Equal("1", row["decisao_final"]);
+                Assert.Equal("1", row["decisao_ensemble"]);
+            }
+            else
+            {
+                // Antes dos 10 min: nao confirma, e a decisao e a de antes.
+                Assert.True(D(row["nota_detector"]) < 100);
+                Assert.Equal(dSem[("TAG24", row["data_hora"])], row["decisao_final"]);
+            }
+        }
+
+        // Evidencia independente: fora da media (contribuicao 0, nao participou).
+        Assert.All(rowsCom.Where(r => r["detector"] == ValorCongeladoDetectorNome), r =>
+        {
+            Assert.Equal("0", r["participou"]);
+            Assert.Equal(0, D(r["contribuicao"]));
+        });
+
+        // TAG28 (reserva em 0) e TAG22 (degrau) nunca confirmam o congelamento.
+        Assert.DoesNotContain(rowsCom, r => r["tag"] != "TAG24" &&
+                                            r["detector"] == ValorCongeladoDetectorNome &&
+                                            r["nota_detector"] == "100");
+    }
+
+    private const string ValorCongeladoDetectorNome = "Valor congelado";
+
+    [Fact]
     public async Task RotuloPedidoExplicitamente_ERecusado()
     {
         var input = WriteCsv();

@@ -110,6 +110,9 @@ public sealed class EvidenciaIndependenteOptionsValidator<TOptions> :
                 $"{secao}.ClientesHabilitados não pode ter item nulo ou em branco.");
         }
 
+        // BACKLOG 33 (passo 2): parâmetros próprios de cada detector.
+        errors.AddRange(options.ValidarParametros());
+
         return errors.Count == 0
             ? ValidateOptionsResult.Success
             : ValidateOptionsResult.Fail(errors);

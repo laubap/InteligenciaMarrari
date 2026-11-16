@@ -73,7 +73,10 @@ public static class IAApiApplicationServiceCollectionExtensions
 
         services.AddAnomalyDetectionCoreServices();
 
-        services.AddLegacyAnomalyDetectionServices();
+        // BACKLOG 33: com a configuração, para registrar os detectores de
+        // evidência independente só quando a chave estiver ligada.
+        services.AddLegacyAnomalyDetectionServices(
+            configuration);
 
         services.AddAnomalyDetectionValidation();
 

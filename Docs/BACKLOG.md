@@ -1089,7 +1089,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - `Compare-Replay.ps1` com as 12 execuções dá 0 diferenças, e `dados/rc2_referencia/manifesto.json` fica intacto durante os testes (SHA-256 antes e depois).
 - **Esforço:** P. **Efeito na detecção:** nenhum (só a ferramenta de regressão). **Rollback:** reverter `tools/Cp300OfflineReplay/Compare-Replay.ps1`.
 
-### 33. (Correção, proposta) Detectores de qualidade do sinal: valor congelado (33.C) e ruído excessivo (33.R) — ⏳ **ABERTA (registrada em 2026-11-16)**; ✅ **passo 1 concluído (2026-11-16, sem commit)**; passos 2 a 6 não aprovados
+### 33. (Correção, proposta) Detectores de qualidade do sinal: valor congelado (33.C) e ruído excessivo (33.R) — ⏳ **ABERTA (registrada em 2026-11-16)**; ✅ **passos 1 e 2 concluídos (2026-11-16, sem commit)**; passos 3 a 6 não aprovados
 
 Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer nos pesos** (tarefa 7). A proposta saiu da leitura do código e de uma checagem offline no CSV do simulador. A IAApi não foi chamada.
 
@@ -1178,7 +1178,7 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 |---|---|---|---|
 | C0 | ✅ Checagem offline do congelamento (feita em 16/11, acima). Script fora do repositório | — | não |
 | 1 | ✅ **Feito em 16/11, sem commit (33.P1).** Infra: `IndependentEvidence`, exclusão da soma e "OU" atrás das chaves, opções e validadores, família `DataQuality` no V2. Testes com um detector falso | `DetectorEvidenceRole`, `EnsembleDetectionService.cs`, opções novas, `LegacyDetectorResultV2Adapter.cs`, `EnsembleV2Simulator.cs` | não (sem detector registrado) |
-| 2 | `ValorCongeladoDetector` + registro condicional na DI + `--detector-congelado` no replay. Testes unitários | detector novo, `LegacyAnomalyDetectionServiceCollectionExtensions.cs`, `Cp300Replay.cs` | só com a chave |
+| 2 | ✅ **Feito em 16/11, sem commit (33.P2).** `ValorCongeladoDetector` + registro condicional na DI + `--detector-congelado` no replay. Testes unitários | detector novo, `LegacyAnomalyDetectionServiceCollectionExtensions.cs`, `Cp300Replay.cs` | só com a chave |
 | 3 | Medição 33.M do congelamento (9 execuções ligadas) e registro na RES3 e em `PROBLEMAS_ENCONTRADOS.md` (P12) | — | não |
 | R0 | Varredura offline do ruído (Python, sem código da IAApi): janela × razão × M-de-P, com TAG45 na chave da TAG26. **Só segue se** alguma combinação detectar a falha 22 dentro do orçamento | script fora do repositório | não |
 | 4 | `RuidoExcessivoDetector` + `--detector-ruido`. Testes | detector novo, DI, replay | só com a chave |
@@ -1212,6 +1212,53 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
   - suíte completa: **1117/1117** (1079 + 38). O isolamento offline foi conferido (os testes do Bridge usam só `FakeBridgeHandler`);
   - `Compare-Replay.ps1 -Configuracao Release -SemBuild`: **0 diferenças em 12 execuções** (`dados/rc2_rodadas/20261116_154049`); com `-HistoricoCausal`: **0 diferenças em 12** (`20261116_154524`).
 - **Rollback:** reverter os 7 arquivos alterados e apagar os 2 novos (`EvidenciaIndependenteOptions.cs` e o arquivo de teste). Não há configuração nova no `appsettings.json` nem migration.
+
+#### 33.P2 Passo 2: o que foi feito (2026-11-16, sem commit)
+
+- **Detector** `src/IAApi.Engine/Detection/ValorCongeladoDetector.cs` (novo), nome `Valor congelado`, papel `IndependentEvidence`, `Peso = 0` (fica fora da média):
+  1. cliente fora de `ClientesHabilitados` ⇒ não aplicável (`ClientNotEnabledForDetector`);
+  2. **tipo do sinal:** aceita `Continuous` e **`Unknown`**; `Discrete`, `Counter` e `Setpoint`, em qualquer confiança ⇒ não aplicável (`SignalTypeNotSupported`). Antes disso, a política de aplicabilidade do ensemble já bloqueia os tipos de alta confiança, como para qualquer detector;
+  3. **trecho contíguo:** o histórico é recortado depois do último gap crítico, porque o histórico do regime é concatenado e o calculador recusa gap crítico. Se a leitura atual estiver separada do histórico por um gap crítico ⇒ não aplicável (`NoContiguousHistory`);
+  4. chama o **`FrozenSensorEvidenceCalculator` sem alterá-lo**, com os parâmetros das opções;
+  5. **guarda de "repouso conhecido":** se, antes da sequência atual, o histórico **completo** (inclusive trechos antigos do regime) já teve o mesmo valor parado por ≥ `MinutosRepouso`, não alarma. Uma sequência termina quando o valor muda ou há gap crítico;
+  6. nota: 100 quando confirma; durante a formação, o progresso (no máximo 99); nos outros casos, 0. As métricas (`pontosIguaisSeguidos`, `duracaoCongeladaMinutos`, `valorCongelado`, `taxaPassosIguaisAntes`, `maiorRepousoAnteriorMinutos`, `repousoConhecido`, `pontosHistoricoContiguo`…) e a explicação ficam nos detalhes.
+- **Reaproveitamento:** o recorte do trecho contíguo foi **extraído sem mudança** de `RuntimeFunctionalDecisionContextProvider.CreateContiguousRuntimeInput` para `src/IAApi.Engine/Detection/Core/DetectorInputContiguousTail.cs` (novo). O método antigo ficou, só delegando, porque um teste o chama por reflexão. A comparação do corpo com o `HEAD` deu idêntico (só a assinatura e um `ThrowIfNull` a mais). Não há lógica paralela.
+- **Opções** (`ValorCongeladoOptions`): `MinimoPontos = 10`, `MinimoMinutos = 10`, `JanelaAnteriorPontos = 30` e `TaxaMaximaPassosIguaisAntes = 0,60`, os mesmos padrões de `RegimeShadowOptions` (há teste); `MinutosRepouso = 10`. A validação de cada parâmetro (`ValidarParametros`) entra no validador comum. **Chave desligada por padrão; o `appsettings.json` não mudou.**
+- **DI:** nova sobrecarga `AddLegacyAnomalyDetectionServices(IConfiguration)`, chamada em `IAApiApplicationServiceCollectionExtensions`. Ela registra os 6 legados e, **só com `AnomalyDetection:ValorCongelado:Habilitado = true`** (lido na inicialização), o detector depois deles, com `ValidateOnStart`. Configuração inválida derruba a inicialização, e não cada avaliação. Mudar a chave exige reiniciar a API.
+- **Replay:** `--detector-congelado` (CLI e `Cp300ReplayOptions.DetectorValorCongelado`) registra o detector nas duas instâncias do ensemble, só para o cliente do CSV. O log ganha a linha `Detector de valor congelado: ligado`. A **conferência** (`conferencia`) agora compara a soma das contribuições com `scoreMediaPonderada` quando essa métrica existe: com o "OU", a nota final é 100 e as contribuições reconstroem a média. Sem a opção, a métrica não existe e a conferência é a de antes. README §2 atualizado.
+- **Testes:**
+  - `IAApi.Tests/Detection/ValorCongeladoDetectorTests.cs` (novo, **28 casos**):
+    - série inteira 445–458 (`Unknown`, como a TAG24): confirma aos 10 min, não aos 9 (nota 90);
+    - série decimal (`Continuous`) confirma;
+    - `digital`/`setpoint`/`contador` não se aplicam;
+    - zero com repouso de 30 min no histórico não alarma; zero com só 4 min, alarma; limite exato de 10 × 9 min;
+    - tag quase constante antes não alarma; histórico anterior insuficiente não se aplica;
+    - histórico com gap crítico usa o último trecho e confirma; repouso num trecho antigo, antes do gap, também conta; leitura atual separada por gap não se aplica;
+    - cliente desligado ou fora da lista;
+    - ensemble real com os 6 legados: sem o detector **não alarma** (P12) e com ele alarma (`WeightedMeanOrIndependentEvidence`, média inalterada);
+    - padrões iguais aos do calculador; validação de cada parâmetro; DI com a chave desligada (6 detectores), ligada (7, o último é o novo) e ligada com parâmetro inválido (recusa).
+  - `Cp300OfflineReplayTests.DetectorCongelado_Ligado_AcrescentaSoNaTag24Congelada_NuncaRemoveAlarme` (novo; série sintética já existente):
+    - com a opção, 7 linhas por leitura, conferência `ok` e 0 divergências;
+    - **nenhum minuto 1 → 0**;
+    - ganhos só na TAG24, com nota 100 e decisão 1 a partir dos 10 min parada; antes disso, decisão igual à de sem a opção;
+    - o detector fica fora da média; TAG22 e TAG28 nunca confirmam.
+  - **Mutações** (temporárias; arquivos restaurados e conferidos com `cmp`):
+
+    | Mutação | Testes que falham |
+    |---|---|
+    | sem a guarda de repouso | 3 |
+    | sem aceitar `Unknown` | 11 |
+    | sem o trecho contíguo | 2 |
+    | DI ignorando a chave | 1 |
+- **Execução** (a IAApi seguiu rodando pelo `bin\Debug`, intocado; tudo compilado em `-c Release`):
+  - testes relacionados (detector, evidência independente, ensemble, provider runtime, regime combinado, V2, persistência, Cp300): **267/267**;
+  - suíte completa: **1146/1146** (1117 + 29);
+  - `Compare-Replay.ps1 -Configuracao Release -SemBuild`: **0 diferenças em 12** (`dados/rc2_rodadas/20261116_160543`); com `-HistoricoCausal`: **0 em 12** (`20261116_161030`);
+  - CLI: `--detector-congelado` aceita; opção inexistente recusada. **Não houve replay com dados reais**: isso é o passo 3.
+- **Rollback:**
+  - reverter `RuntimeFunctionalDecisionContextProvider.cs`, `EvidenciaIndependenteOptions.cs`, `DiagnosticContracts.cs`, `AnomalyDetectionOptionsValidators.cs`, `LegacyAnomalyDetectionServiceCollectionExtensions.cs`, `IAApiApplicationServiceCollectionExtensions.cs`, `Cp300Replay.cs`, `Program.cs`, `README.md` e `Cp300OfflineReplayTests.cs`;
+  - apagar `ValorCongeladoDetector.cs`, `DetectorInputContiguousTail.cs` e `ValorCongeladoDetectorTests.cs`.
+  - Não há configuração nem migration. Em produção, basta a chave desligada (padrão).
 - **Rollback:** desligar a chave e reiniciar a API (o detector deixa de ser registrado); no código, reverter os commits de cada passo.
 
 ---

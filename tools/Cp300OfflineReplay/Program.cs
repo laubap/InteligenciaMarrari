@@ -94,7 +94,7 @@ internal static class Cp300ReplayCli
         "[--fim <yyyy-MM-ddTHH:mm:ss>] [--cliente PK2] [--tags TAG22,TAG23,...] " +
         "[--appsettings appsettings.json] [--horas-historico N] [--historico-inclui-atual] [--historico-causal] " +
         "[--regime TAGx=TAGy]... [--regime-combinado [--regime TAGx=TAGa+TAGb+TAGc]... [--regime-mapa \"TAGa=2:2;*:0\"]...] " +
-        "[--permitir-falha-no-treino] [--verbose]";
+        "[--detector-congelado] [--permitir-falha-no-treino] [--verbose]";
 
     public static async Task<int> RunAsync(string[] args)
     {
@@ -155,6 +155,7 @@ internal static class Cp300ReplayCli
                 Regimes = regimes,
                 RegimeCombinado = parsed.ContainsKey("regime-combinado"),
                 MapasRegime = mapas,
+                DetectorValorCongelado = parsed.ContainsKey("detector-congelado"),
                 Log = stdout
             };
 
@@ -196,7 +197,8 @@ internal static class Cp300ReplayCli
 
     private static Dictionary<string, string?> Parse(string[] args, List<string> regimeArgs, List<string> mapaArgs)
     {
-        string[] flags = ["historico-inclui-atual", "historico-causal", "verbose", "permitir-falha-no-treino", "regime-combinado"];
+        string[] flags = ["historico-inclui-atual", "historico-causal", "verbose", "permitir-falha-no-treino", "regime-combinado",
+            "detector-congelado"];
         string[] valued = ["entrada", "saida", "treino-ate", "treino-inicio", "treino-fim", "inicio", "fim", "cliente", "tags", "appsettings", "horas-historico"];
         var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < args.Length; i++)

@@ -42,6 +42,15 @@ public static class DetectorDiagnosticReasonCodes
     // e entra na decisão só pelo "OU".
     public const string ExcludedIndependentEvidence =
         "ExcludedIndependentEvidence";
+    // BACKLOG 33.C: motivos de não aplicação do detector de valor congelado.
+    public const string ClientNotEnabledForDetector =
+        "ClientNotEnabledForDetector";
+    public const string SignalTypeNotSupported =
+        "SignalTypeNotSupported";
+    public const string NoContiguousHistory =
+        "NoContiguousHistory";
+    public const string FrozenValueNotApplicable =
+        "FrozenValueNotApplicable";
 }
 
 /// <summary>
