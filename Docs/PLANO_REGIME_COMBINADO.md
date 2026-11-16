@@ -432,6 +432,7 @@ Limiar = 60.
 - O CSV novo traz também TAG34–TAG40 e TAG69–TAG78. O gabarito (TAG60–TAG81) não entrou em nenhuma série nem em `--tags`/`--regime`.
 
 **Séries derivadas:** `dados/cp300_09a13nov_derivado.csv` = entrada + 6 séries por minuto (5.474 minutos, nenhum incompleto), geradas por `rc0_derivar.py` (scratchpad da sessão, fora do repositório).
+- **Atualização 16/11:** a exportação completa estendeu o CSV até 13/11 22:59 (6.372 minutos), e o derivado foi regerado com o mesmo script. O trecho até 13/11 07:59 é idêntico, e as execuções `rc0_*` dão o mesmo resultado (BACKLOG, tarefa 30, "Pendências"). Os números desta seção valem para o trecho até 07:59.
 - `RB01`/`RB02`/`RB01S`/`RB02S` seguem as **mesmas regras** de §5.1. Rodado sobre o CSV antigo, o script reproduz **byte a byte** o `cp300_10a11nov_derivado.csv` da etapa 0 (descontadas as séries novas).
 - `RT01S` = `10·map(TAG42) + map(TAG43) + 100·(TAG46 = 380)`, com `map` = `2→2; *→0` (a configuração alvo de §6.2). `RT02S` é o espelho, com TAG43 primeiro.
 

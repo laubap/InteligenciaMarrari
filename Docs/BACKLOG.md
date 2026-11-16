@@ -6,7 +6,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 > **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. **Atualização 2026-11-13 (inventário do PK2, tarefa 2 concluída):** a nova tarefa **25 (P31, entrada inválida sistemática) passa a ser PRIORIDADE 1, antes de qualquer novo teste da IA real**. Em 12/11, 38 de 50 decisões não chegaram aos detectores; sem corrigir isso, um teste da IA real não mede detecção. A tarefa 6 continua necessária e vem logo depois. Entraram também a 26 (P30, escala da nota) e a 27 (P32, retreino do perfil). Depois, a 28 (P30 no LiveMonitor, para a demo; só planejada). Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
 
-> **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação (tarefa 30, "Pendências"). **Ainda em 16/11:** pela tarefa **31**, foram corrigidos P35 a P38, sem commit. No P35, o `clienteId` é opcional, e sem ele a resposta é `400` só quando a tag existe em mais de um cliente (opção (a)).
+> **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). ~~Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação~~ **feito em 16/11: resultado idêntico; referência das `rc0_*` regenerada; 0 diferenças em 12 execuções** (tarefa 30, "Pendências"). **Ainda em 16/11:** pela tarefa **31**, foram corrigidos P35 a P38, sem commit. No P35, o `clienteId` é opcional, e sem ele a resposta é `400` só quando a tag existe em mais de um cliente (opção (a)).
 
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
@@ -780,10 +780,29 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - P35 a P38 e P40.
 - **Rollback:** reverter os arquivos listados e apagar os 3 arquivos de teste e o `LocalDevelopmentRequestGuard.cs`. Nada foi commitado.
 - **Pendências abertas nesta tarefa:**
-  - ⏳ **Referência `rc0_*` do `Compare-Replay.ps1` a conferir e regenerar.** Em 16/11, a exportação estava acrescentando dados ao `dados/cp300_09a13nov.csv`, a origem do `dados/cp300_09a13nov_derivado.csv` usado pelas 6 execuções `rc0_*`. Por isso, a tarefa 30 rodou o Compare-Replay **só com as 6 execuções originais** (`dados/cp300_10a11nov_derivado.csv`). **Quando a exportação terminar:**
+  - ✅ **Referência `rc0_*` do `Compare-Replay.ps1` a conferir e regenerar.** **Feito em 16/11, depois do fim da exportação (detalhe no fim deste item).** Em 16/11, a exportação estava acrescentando dados ao `dados/cp300_09a13nov.csv`, a origem do `dados/cp300_09a13nov_derivado.csv` usado pelas 6 execuções `rc0_*`. Por isso, a tarefa 30 rodou o Compare-Replay **só com as 6 execuções originais** (`dados/cp300_10a11nov_derivado.csv`). **Quando a exportação terminar:**
     1. regenerar o derivado;
     2. conferir que as `rc0_*` dão resultado **idêntico** no trecho que usam. O arquivo de entrada muda (o SHA-256 do manifesto deixa de bater e o script sai com código 2), mas o trecho 09/11 12:30 → 13/11 07:59 deve ser o mesmo;
     3. regenerar a referência dessas 6 execuções (`-Gerar -Sobrescrever`, que hoje regrava as 12; registrar o commit). Sem isso, as `rc0_*` não servem de regressão.
+    - **Resultado (16/11, pedido da responsável; tudo offline, nenhum código alterado):**
+      - **CSV novo** (`dados/cp300_09a13nov.csv`):
+        - vai de 09/11 12:30 a **13/11 22:59**, com 43 tags, 273.996 linhas e 6.372 minutos; os 2.924 pedaços estão `ok`;
+        - as 235.382 linhas do CSV antigo (recuperadas das linhas originais do derivado) estão **todas no novo, idênticas**;
+        - não há linha nova dentro do trecho antigo, nem duplicata (tag, minuto). A exportação só acrescentou 38.614 linhas **depois** de 13/11 07:59.
+      - **Derivado:**
+        - o `rc0_derivar.py` (scratchpad da sessão da RC-0, fora do repositório) foi validado antes de uso: rodado sobre o CSV antigo recuperado, reproduziu **byte a byte** o derivado anterior (SHA-256 `41e47407…`);
+        - o derivado novo (`8736ce8e…`) tem as 268.226 linhas até 13/11 07:59 **idênticas e na mesma ordem**, mais 44.002 depois.
+      - **Conferência antes de regenerar:**
+        - as 6 `rc0_*` rodaram sobre o derivado novo, a partir do scratchpad e sem tocar em `dados/` nem no manifesto, com os argumentos do manifesto e a mesma comparação do script;
+        - resultado: **0 diferenças em 6** (CSV por SHA-256, log linha a linha).
+      - **Regeneração só das `rc0_*`:**
+        - o `-Gerar -Somente` grava um manifesto **só com as execuções selecionadas**. Um `-Gerar -Sobrescrever -Somente rc0_…` no `manifesto.json` apagaria as 6 originais;
+        - por isso, o script gerou com `-Manifesto dados\rc2_referencia\manifesto_rc0.json`, no commit **`9cd4983`** e sem mudanças locais. Assim, só os arquivos `rc0_*` da pasta da referência foram regravados, e as 6 entradas foram juntadas ao `manifesto.json`. O manifesto temporário foi apagado;
+        - nas 6 entradas `rc0_*`, só mudou `entrada_sha256` (`41e47407…` → `8736ce8e…`). Os 12 arquivos `rc0_*.csv`/`.log` regravados são byte a byte iguais aos anteriores;
+        - cada entrada `rc0_*` ganhou `referencia_commit`, `referencia_gerada_em` e `referencia_mudancas_locais`, campos que o script ignora. O topo do manifesto e as 6 entradas originais ficaram intactos: o topo continua com o commit `d89eb0c`, que é o das originais.
+      - **Aceite:** `Compare-Replay.ps1` normal, com as **12** execuções: **0 diferenças em 12**, código 0 (`dados/rc2_rodadas/20261116_130537`). As `rc0_*` voltam a servir de regressão.
+      - **Backup e rollback:** `dados/rc2_referencia_backup_20261116/` guarda o manifesto anterior, os 12 arquivos `rc0_*` e o derivado anterior (`cp300_09a13nov_derivado.ate_20261113_0759.csv`). Para voltar, basta copiá-los de volta para `dados/rc2_referencia/` e `dados/cp300_09a13nov_derivado.csv`.
+      - **Atenção:** o derivado agora cobre até 13/11 22:59. Os números de minutos e de estados da RC-0 (`PLANO_REGIME_COMBINADO.md` §5.7) descrevem o trecho até 07:59.
   - ✅ **`Compare-Replay.ps1` aceitava 0 execuções como sucesso. Corrigido em 16/11 (aprovado pela responsável, sem commit).**
     - **O problema:** `powershell -File … -Somente a,b,c` passava a lista como um único texto. Nenhuma execução casava, e o script terminava com "0 diferenças em 0 execuções" e **código 0**. A rodada foi refeita com `-Command` e uma lista de verdade.
     - **A correção**, só em `tools/Cp300OfflineReplay/Compare-Replay.ps1`:
@@ -869,7 +888,26 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
 - **Ficou de fora:**
   - procurar no banco vínculos e feedbacks **já gravados** entre clientes diferentes (exige acesso autorizado ao banco);
   - autenticação (P34). Sem ela, o `clienteId` delimita o escopo, mas não é controle de acesso.
-- **Rollback:** reverter os 4 controllers e `IAApi.Tests/FeedbackAnomaliaConsistencyTests.cs`, e apagar `IAApi.Tests/Security/ClienteIsolamentoTests.cs`. Nada foi commitado.
+- **Rollback:** reverter os 4 controllers e `IAApi.Tests/FeedbackAnomaliaConsistencyTests.cs`, e apagar `IAApi.Tests/Security/ClienteIsolamentoTests.cs`. **Atualização:** a responsável commitou a tarefa em `9cd4983` (16/11); o rollback passa a ser reverter esse commit.
+
+### 32. (Ferramenta) `Compare-Replay.ps1 -Gerar -Somente` apaga do manifesto as execuções não selecionadas — ⏳ **ABERTA (registrada em 2026-11-16; não implementar sem aprovação)**
+- **Problema** (confirmado no código, `tools/Cp300OfflineReplay/Compare-Replay.ps1`): no `-Gerar`, o script seleciona as execuções (`Selecionar`, linha 199), roda só essas e grava o manifesto **inteiro** com elas (`WriteAllText`, linha 234).
+  - Com `-Sobrescrever -Somente rc0_…` no `dados\rc2_referencia\manifesto.json`, as 6 execuções originais **sairiam do manifesto**. Os arquivos delas continuariam na pasta, mas a comparação deixaria de rodá-las, **sem aviso**.
+  - Foi notado ao regenerar a referência `rc0_*` (tarefa 30, "Pendências", 16/11). Lá, o contorno foi gerar num manifesto separado (`-Manifesto dados\rc2_referencia\manifesto_rc0.json`) e juntar as entradas à mão.
+- **Risco:** perder parte da regressão sem perceber. A rodada seguinte diria "0 diferenças em 6 execuções", e não 12.
+- **Comportamento seguro proposto:**
+  - **`-Gerar -Somente`, com manifesto existente** (exige `-Sobrescrever`, como hoje): ler o manifesto, regravar só os arquivos e as **entradas selecionadas** e manter as demais sem mudança, na mesma ordem.
+    - Cada entrada atualizada ganha `referencia_commit`, `referencia_gerada_em` e `referencia_mudancas_locais`, os mesmos campos usados à mão em 16/11.
+    - O topo do manifesto (`commit`, `gerado_em`, `entrada`, `entrada_sha256`, `appsettings_sha256`) fica como está.
+    - Se o `appsettings.json` atual for diferente do registrado, avisar (como a comparação já faz), porque as entradas passariam a vir de configurações diferentes.
+  - **`-Gerar` sem `-Somente`, ou manifesto inexistente:** sem mudança (gera tudo do zero).
+  - O resumo deve dizer quantas entradas foram atualizadas e quantas mantidas.
+- **Aceite:**
+  - sobre uma **cópia** do manifesto no scratchpad: `-Gerar -Sobrescrever -Somente <2 nomes>` mantém as outras 10 entradas idênticas (JSON comparado entrada a entrada) e atualiza só as 2;
+  - `-Gerar` sem `-Somente` sobre manifesto novo dá o mesmo formato de hoje;
+  - os casos de uso da tarefa 30 (nome desconhecido, seleção vazia: código 2, sem criar nada) continuam iguais;
+  - `Compare-Replay.ps1` com as 12 execuções dá 0 diferenças, e `dados/rc2_referencia/manifesto.json` fica intacto durante os testes (SHA-256 antes e depois).
+- **Esforço:** P. **Efeito na detecção:** nenhum (só a ferramenta de regressão). **Rollback:** reverter `tools/Cp300OfflineReplay/Compare-Replay.ps1`.
 
 ---
 
