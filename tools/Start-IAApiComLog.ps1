@@ -36,8 +36,12 @@
       Logging__Console__FormatterOptions__ColorBehavior    = Disabled
       AnomalyDetection__HistoricoCausal__Habilitado        = true so com -HistoricoCausal
       AnomalyDetection__RegimeCombinado__Habilitado        = true so com -RegimeCombinado
-    As duas chaves sao SEMPRE definidas (false quando o switch nao e passado),
-    para que o estado fique explicito e registrado no config.json do log.
+      IAAPI_PERF_DIAGNOSTICS                               = 1 so com -PerfDiag (senao 0)
+    As tres chaves sao SEMPRE definidas (false/0 quando o switch nao e passado),
+    para que o estado fique explicito e registrado no config.json do log. No
+    caso do PERF_DIAG, o 0 explicito tambem impede que um
+    IAAPI_PERF_DIAGNOSTICS=1 esquecido na sessao do PowerShell ligue o
+    diagnostico sem querer.
 
     Arquivos (pasta dados\ e ignorada pelo git):
       dados\logs\iaapi_<yyyyMMdd_HHmmss>.log         stdout (logs do console)
@@ -53,6 +57,13 @@
 
 .PARAMETER RegimeCombinado
     Liga AnomalyDetection:RegimeCombinado:Habilitado (RC-8). Desligado por padrao.
+
+.PARAMETER PerfDiag
+    Liga o PERF_DIAG (IAAPI_PERF_DIAGNOSTICS=1; Docs/performance-diagnostics.md),
+    para a etapa 0 da BACKLOG 6 (6.0). Desligado por padrao. So instrumenta:
+    nao muda a decisao de anomalia, mas acrescenta linhas "PERF_DIAG" ao log e
+    um pequeno custo por predicao. O PERF_DIAG so liga com o ambiente
+    Development; com -PerfDiag e outro -Ambiente, o script recusa subir.
 
 .PARAMETER Configuracao
     Debug (padrao, o mesmo do "dotnet run") ou Release.
@@ -82,12 +93,18 @@
     .\tools\Start-IAApiComLog.ps1 -HistoricoCausal -RegimeCombinado
 
 .EXAMPLE
+    .\tools\Start-IAApiComLog.ps1 -HistoricoCausal -PerfDiag
+
+    Sessao da etapa 0 da BACKLOG 6 (6.0): recorte causal (P31) e PERF_DIAG ligados.
+
+.EXAMPLE
     Get-Content (Get-Content .\dados\logs\iaapi.pid.json | ConvertFrom-Json).Log -Wait -Tail 50
 #>
 [CmdletBinding()]
 param(
     [switch]$HistoricoCausal,
     [switch]$RegimeCombinado,
+    [switch]$PerfDiag,
     [ValidateSet('Debug', 'Release')]
     [string]$Configuracao = 'Debug',
     [string]$Url = 'http://localhost:5145',
@@ -118,6 +135,14 @@ function Test-EnderecoLocal([string]$Endereco) {
 if (-not (Test-EnderecoLocal $Url)) {
     throw (("Endereco '{0}' recusado: a IAApi nao tem autenticacao (P34) e so pode subir em " +
         "localhost, 127.0.0.1 ou [::1] (ex.: http://localhost:5145). Nao subi nada.") -f $Url)
+}
+
+# 0b. O PERF_DIAG so liga em Development (PerformanceDiagnostics compara o
+# ambiente sem diferenciar maiusculas). Recusar antes de criar qualquer arquivo,
+# para nao rodar uma sessao de medicao sem medicao.
+if ($PerfDiag -and -not [string]::Equals($Ambiente, 'Development', [StringComparison]::OrdinalIgnoreCase)) {
+    throw (("-PerfDiag exige -Ambiente Development (recebido: '{0}'): fora dele o PERF_DIAG " +
+        "fica desligado mesmo com IAAPI_PERF_DIAGNOSTICS=1. Nao subi nada.") -f $Ambiente)
 }
 
 $raiz = Split-Path -Parent $PSScriptRoot
@@ -186,6 +211,7 @@ $variaveis = [ordered]@{
     'Logging__Console__FormatterOptions__ColorBehavior'   = 'Disabled'
     'AnomalyDetection__HistoricoCausal__Habilitado'       = $(if ($HistoricoCausal) { 'true' } else { 'false' })
     'AnomalyDetection__RegimeCombinado__Habilitado'       = $(if ($RegimeCombinado) { 'true' } else { 'false' })
+    'IAAPI_PERF_DIAGNOSTICS'                              = $(if ($PerfDiag) { '1' } else { '0' })
 }
 
 $salvas = @{}
@@ -235,6 +261,7 @@ $registro = [ordered]@{
     Configuracao    = $Configuracao
     HistoricoCausal = [bool]$HistoricoCausal
     RegimeCombinado = [bool]$RegimeCombinado
+    PerfDiag        = [bool]$PerfDiag
     Variaveis       = $variaveis
 }
 $json = $registro | ConvertTo-Json -Depth 3
@@ -243,7 +270,8 @@ Set-Content -LiteralPath $arquivoConfig -Value $json -Encoding UTF8
 
 Write-Host ''
 Write-Host ("IAApi rodando: PID {0}, {1}" -f $proc.Id, $Url)
-Write-Host ("  HistoricoCausal = {0}; RegimeCombinado = {1}" -f [bool]$HistoricoCausal, [bool]$RegimeCombinado)
+Write-Host ("  HistoricoCausal = {0}; RegimeCombinado = {1}; PerfDiag = {2}" -f
+    [bool]$HistoricoCausal, [bool]$RegimeCombinado, [bool]$PerfDiag)
 Write-Host ("  Log:      {0}" -f $log)
 Write-Host ("  Erros:    {0}" -f $logErro)
 Write-Host ("  PID em:   {0}" -f $arquivoPid)

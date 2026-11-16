@@ -24,6 +24,7 @@ cd 'C:\Users\Laura Marrari\Documents\IA MARRARI\IAApi_RECUPERADO'
 .\tools\Start-IAApiComLog.ps1                                     # chaves desligadas (padrão)
 .\tools\Start-IAApiComLog.ps1 -HistoricoCausal                    # só P31
 .\tools\Start-IAApiComLog.ps1 -HistoricoCausal -RegimeCombinado   # as duas
+.\tools\Start-IAApiComLog.ps1 -HistoricoCausal -PerfDiag          # etapa 0 da BACKLOG 6 (6.0): P31 + PERF_DIAG
 ```
 
 O script:
@@ -43,8 +44,16 @@ Variáveis de ambiente definidas só para o processo da IAApi. Os valores anteri
 | `Logging__Console__FormatterOptions__ColorBehavior` | `Disabled` (sem códigos de cor no arquivo) |
 | `AnomalyDetection__HistoricoCausal__Habilitado` | `true` só com `-HistoricoCausal`; senão `false` |
 | `AnomalyDetection__RegimeCombinado__Habilitado` | `true` só com `-RegimeCombinado`; senão `false` |
+| `IAAPI_PERF_DIAGNOSTICS` | `1` só com `-PerfDiag`; senão `0` |
 
 As duas chaves de detecção são **sempre** definidas, inclusive como `false`. Assim, o estado de cada subida fica explícito no `config.json` do log. Elas não existem hoje em `appsettings*.json`, e o padrão das classes de opções também é `false`.
+
+**`-PerfDiag` (PERF_DIAG, desligado por padrão).** Liga a instrumentação descrita em [Docs/performance-diagnostics.md](../Docs/performance-diagnostics.md). Foi aprovada para a etapa 0 da BACKLOG 6 (6.0).
+- **O que faz:** só mede. Não muda a decisão de anomalia. Acrescenta ao log linhas `PERF_DIAG ...` (`Monitoring.Reading`, `Prediction.Total`, `Preparation.History`, `Bridge.Transport` etc.), com um pequeno custo por predição.
+- **Valor da variável:** é sempre definida. Sem o switch, fica em `0`, o que impede que um `IAAPI_PERF_DIAGNOSTICS=1` esquecido na sessão do PowerShell ligue o diagnóstico sem querer. O `config.json` registra `PerfDiag`.
+- **Só em Development:** o PERF_DIAG só liga com o ambiente `Development`. Com `-PerfDiag` e outro `-Ambiente`, o script **recusa subir** antes de criar qualquer arquivo, para não rodar uma sessão de medição sem medição.
+- **Filtro de log:** as linhas saem em `Information`, na categoria `IAApi.Services.Diagnostics.PerformanceDiagnostics`. O `appsettings*.json` atual (`Default: Information`) já deixa passar.
+- **Fora do script:** o experimento `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY` (reuso do histórico) **não** é ligado por este script.
 
 Outros parâmetros: `-Configuracao Debug|Release`, `-PastaLogs`. Ajuda completa: `Get-Help .\tools\Start-IAApiComLog.ps1 -Full`.
 
@@ -54,7 +63,7 @@ Outros parâmetros: `-Configuracao Debug|Release`, `-PastaLogs`. Ajuda completa:
 |---|---|
 | `dados\logs\iaapi_<yyyyMMdd_HHmmss>.log` | Saída do console (logs com data e hora) |
 | `dados\logs\iaapi_<yyyyMMdd_HHmmss>.err.log` | stderr |
-| `dados\logs\iaapi_<yyyyMMdd_HHmmss>.config.json` | Parâmetros, chaves e variáveis desta subida |
+| `dados\logs\iaapi_<yyyyMMdd_HHmmss>.config.json` | Parâmetros, chaves (inclusive `PerfDiag`) e variáveis desta subida |
 | `dados\logs\iaapi.pid.json` | PID e hora de início da última subida (lido pelo `Stop-IAApi.ps1`) |
 
 Acompanhar o log:
