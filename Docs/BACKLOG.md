@@ -10,6 +10,12 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 > **Atualização 2026-11-16 (tarefa 27 planejada):** plano em 8 passos (27.0 a 27.7), registrado na tarefa 27. Ele absorve a tarefa 8. A recomendação é ter período opcional e simulação por padrão no `treinar-perfil`, e o replay ganhar `--perfis <json>` para medir o perfil do banco contra o candidato antes de gravar. Por enquanto, só o perfil global. Só o 27.6 (gravar) muda a decisão. Nada aprovado.
 
+> **Atualização 2026-11-16 (medição da etapa 0, `Docs/MEDICAO_ETAPA0.md`):** a 6.0 foi medida.
+> - 91 % do tempo de cada tag são duas buscas de 24 h; ciclo do PK2 de ~131 s; ~3,5 min por tag; 0 entradas inválidas com o `HistoricoCausal`.
+> - **Entraram as tarefas 34 (P42, LiveMonitor sobrecarregando o Bridge e o banco) e 35 (P43, banco local sem a migration RC-5), as duas com PRIORIDADE ALTA: antes da demo, e a 35 antes da RC-12.** Entrou também a 36 (P44, log sem horário e com o SQL do EF; antes da próxima sessão longa).
+> - A proposta 6.x ganhou a **6.0b** (medir o reuso do histórico sozinho), uma regra de decisão no aceite da 6.1 (custo do trecho curto → 6.5) e condições de carga nas sessões; a 6.4 passou a depender da 35.
+> - Nada implementado nem aprovado.
+
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
 - O inventário do banco (antiga 5) **subiu para 2**: é a forma mais barata de confirmar três achados (rótulo como `TagRegime`, `TipoRepresentacao` e perfil colapsado em zero).
@@ -64,7 +70,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - Enquanto não existir, o export das decisões reais (tarefa 16) usa a hora do processamento como `data_hora` (P18).
 
 ### 6. Medir a duração do ciclo e a cadência real por tag no ambiente de teste — **PRIORIDADE 2 (era 1; logo depois da 25 desde 2026-11-13)**
-- **Subtarefas 6.0 a 6.5 (registradas em 2026-11-16):** avaliar cada tag a cada minuto sem buscar 24 h por tag a cada ciclo. Ficam no fim desta tarefa, ligadas às tarefas 22 e 25. A 6.0 (medição com PERF_DIAG) está aprovada; de 6.1 a 6.5, nada está aprovado.
+- **Subtarefas 6.0 a 6.5 (registradas em 2026-11-16):** avaliar cada tag a cada minuto sem buscar 24 h por tag a cada ciclo. Ficam no fim desta tarefa, ligadas às tarefas 22 e 25 (e, desde a medição, 34 e 35). A 6.0 foi medida em 16/11. A 6.0b e as de 6.1 a 6.5 não estão aprovadas.
 - Sem mudança. `IAAPI_PERF_DIAGNOSTICS` numa sessão autorizada. **Risco:** médio. **Esforço:** P.
 - **Bloqueia a RC-12** (decisão de 2026-11-16, `PLANO_REGIME_COMBINADO.md` §7.9): a ativação do regime combinado no PK2 só vem depois desta tarefa e da 27. Com o regime ligado, o provider faz 3 consultas de histórico por tag de bomba (18 por ciclo nas 6 tags, contra 6 hoje), e esse custo não foi medido no replay (RC-11, §7.7).
 - **Por que subiu (P26, confirmado em log, IA real no preset 3, 12/11 14:21–15:09):**
@@ -80,7 +86,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 #### 6.x Avaliar cada tag a cada minuto sem buscar 24 h de histórico por tag a cada ciclo (registrado em 2026-11-16)
 
-**Objetivo:** cada tag avaliada uma vez por minuto com a leitura recente. Para isso, guardar uma janela de 24 h por cliente e tag e completá-la só com o trecho novo do Bridge, sem mudar `IHistoricoService`, o `BridgeHistoricoService`, os detectores nem o contrato HTTP. **Ligações:** tarefa **25** (o recorte causal `HistoricoCausal` é pré-requisito de 6.0 a 6.3) e tarefa **22** (sem ela, o laço do monitor não é testável offline, o que bloqueia o teste offline da 6.3). Também: 20 (alerta de ciclo lento), RC-12 (`PLANO_REGIME_COMBINADO.md` §7.9) e P10, P11, P18, P26 e P31.
+**Objetivo:** cada tag avaliada uma vez por minuto com a leitura recente. Para isso, guardar uma janela de 24 h por cliente e tag e completá-la só com o trecho novo do Bridge, sem mudar `IHistoricoService`, o `BridgeHistoricoService`, os detectores nem o contrato HTTP. **Ligações:** tarefa **25** (o recorte causal `HistoricoCausal` é pré-requisito de 6.0 a 6.3) e tarefa **22** (sem ela, o laço do monitor não é testável offline, o que bloqueia o teste offline da 6.3). Também: 20 (alerta de ciclo lento), RC-12 (`PLANO_REGIME_COMBINADO.md` §7.9) e P10, P11, P18, P26 e P31. **[16/11]** E ainda a tarefa **34** (P42: sem ela, as sessões de medição só valem com o LiveMonitor fechado) e a **35** (P43: pré-requisito da 6.4).
 
 **Aprovado em 2026-11-16 pela responsável:**
 - registro destas subtarefas;
@@ -89,7 +95,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - valores de projeto: **sobreposição de 10 min, recarga completa a cada 60 min, cadência de 1 min**;
 - metas da tabela da 6.0, **a revisar depois da medição**.
 
-**Não aprovado:** a implementação de 6.1 a 6.5. Cada uma exige aprovação própria.
+**Não aprovado:** a sessão da 6.0b e a implementação de 6.1 a 6.5. Cada uma exige aprovação própria.
 
 **Onde está o tempo hoje** (números já registrados, sem medição nova):
 - **Confirmado no código:**
@@ -103,7 +109,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
   - 9 timeouts em 48 min (P26);
   - idade da leitura de 0,2–17,2 min (P18);
   - 38 de 50 decisões com entrada inválida; ≈ 2 % dos minutos-tag avaliados (P31).
-- **Hipótese:** que a consulta de 24 h é a maior parte do tempo de cada tag. A 6.0 mede isso.
+- ~~**Hipótese:** que a consulta de 24 h é a maior parte do tempo de cada tag. A 6.0 mede isso.~~ **Confirmado em log (6.0, 16/11), com correção:** são **duas** buscas de 24 h por tag (preparação 47 % + tendência 45 % = **91 %** de 10,5 s). Os detectores custam ~4 ms; o resto, ~0,9 s por tag (`MEDICAO_ETAPA0.md` §3).
 
 **Por que algo novo (regra do `CLAUDE.md`):**
 - Nada no código guarda estado entre ciclos. O `PredictionRawHistorySnapshot` é, de propósito, local a uma predição (`Docs/prediction-history-reuse-experiment.md`; auditoria de concorrência).
@@ -123,7 +129,24 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
   - paralelizar o `foreach` (auditoria de concorrência, R01);
   - endpoint de histórico em lote no Bridge (exige mudar o Bridge; fica como evolução da 6.5).
 
-##### 6.0 Medir sem mudar nada (etapa 0) — **aprovada (PERF_DIAG); aguardando sessão**
+##### 6.0 Medir sem mudar nada (etapa 0) — ✅ **MEDIDA (sessão de 16/11, 15:19–16:46, preset 1); análise em `Docs/MEDICAO_ETAPA0.md`**
+- **Resultado (16/11, só leitura do log e do CSV; nenhum código mudou):**
+  - **Ciclo do PK2:** 131 s em média (94–162 s) antes do LiveMonitor; 306 s e ≥ 697 s com ele. Um ciclo começa a cada ~3,5 min (171–238 s).
+  - **Cadência por tag:** 3,47 min em média (p95 de 3,91; máx. de 4,14) antes do LiveMonitor; 3,8 / 4,1 / 16,2 min na sessão inteira. **14,6 avaliações por tag por hora; 24,3 % dos minutos-tag** (era ≈ 2 % em 12/11).
+  - **Tempo por predição (PK2, 10,5 s):** **91 % em duas buscas de 24 h** (preparação 47 %, tendência 45 %); detectores 0,04 %; finalização 3,3 %; baseline comportamental 2,2 %. **Hipótese confirmada, com correção:** são duas buscas por tag (o `PredictionHistoryReuse` estava desligado).
+  - **Idade da leitura** (calculada pela `ReadingOriginal`, UTC−3): p95 de 3,0 min no início e 3,2 min na decisão; máx. de 12,0 min (3,5 min sem o LiveMonitor).
+  - **`HistoricoCausal`:** 0 entradas inválidas; 270 de 270 recortadas, 0 acima da tolerância; nota 0 em 2 de 269 (0,7 %), ambas válidas, contra 76 % em 12/11. Sem o recorte, 67 % seriam inválidas.
+  - **Erros:** 0 timeouts no monitor; 1 falha (TAG27, HTTP 500 do Bridge); o monitor não parou (P27 não se repetiu).
+  - **Achados novos, registrados como P42, P43 e P44 / tarefas 34, 35 e 36 (16/11; nada aprovado):**
+    - o **LiveMonitor**, a partir de 16:27, fez até 12 buscas de 24 h simultâneas ao Bridge (o proxy aborta em 12 s, mas a busca continua) e ~958 mil consultas ao SQLite (`GET /api/anomalias` com N+1, a cada 2 s). Isso deixou o monitor 4–5× mais lento e causou os 4 timeouts da sessão;
+    - o banco local está **sem a migration RC-5** (`no such column: MapaEstados` em toda predição; o regime cai no global);
+    - o log saiu **sem data e hora** e com 702 MB (SQL do EF em Information).
+  - **Metas:** atingidas as de timeouts no monitor e de entrada inválida/nota 0; **não atingidas** cadência, cobertura, ciclo ≤ 60 s e idade p95 < 2 min.
+  - **Efeito na 6.1–6.3** (`MEDICAO_ETAPA0.md` §9; **incorporado em 16/11**): manter a janela incremental, com quatro ajustes:
+    1. medir antes o `PredictionHistoryReuse` sozinho (nova **6.0b**);
+    2. medir o custo do trecho curto no aceite da 6.1, com regra de decisão para a 6.5;
+    3. controlar a carga do LiveMonitor nas sessões (condição na 6.0b, 6.1 e 6.2; tarefa 34);
+    4. aplicar a RC-5 antes da 6.4 e da RC-12 (tarefa 35).
 - **Como subir:** `.\tools\Start-IAApiComLog.ps1 -HistoricoCausal -PerfDiag`, com o simulador rodando, em Development, com as mesmas tags (PK2 12 e PK7 1), por pelo menos 2 h. O `HistoricoCausal` fica ligado porque, sem ele, o P31 confunde a medida.
 - **Feito em 16/11 (sem commit):** parâmetro `-PerfDiag` no `tools/Start-IAApiComLog.ps1`.
   - Define `IAAPI_PERF_DIAGNOSTICS=1` só com o switch; sem ele, define `0`.
@@ -155,13 +178,41 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Aceite:** a tabela por ciclo e por tag da tarefa 6, mais a divisão do tempo entre as etapas. Esse resultado confirma ou descarta a hipótese de que o histórico de 24 h domina o tempo.
 - **Risco:** médio (sessão com o simulador e o Bridge). A decisão não muda.
 
+##### 6.0b Medir o reuso do histórico sozinho, sem código novo — **não aprovada (registrada em 16/11 pela medição da 6.0)**
+- **Por quê:** metade do tempo de cada tag é a **segunda** busca de 24 h, a da tendência pós-decisão (`MEDICAO_ETAPA0.md` §3). O `PredictionHistoryReuse` já existe e a elimina. Medir isso antes da 6.1 separa os dois ganhos e mostra quanto falta para 1 min.
+- **Como:**
+  - sessão igual à da 6.0 (`-HistoricoCausal -PerfDiag`, Development, PK2 com 12 tags e PK7 com 1, simulador rodando, pelo menos 1 h), com `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1` no ambiente do processo;
+  - o `Start-IAApiComLog.ps1` não tem opção para isso. Há duas saídas:
+    - definir a variável na janela antes de chamar o script (o processo filho herda o ambiente);
+    - acrescentar um `-ReusoHistorico` ao script, gravado no `config.json`. É uma mudança pequena, com aprovação própria;
+  - o experimento só vale em Development (trava do próprio experimento).
+- **Condições da sessão:**
+  - LiveMonitor fechado, ou tarefa 34 feita, com o estado registrado no relatório (P42);
+  - export só no fim;
+  - PERF_DIAG ligado (sem a 36, é a única linha do tempo).
+- **O que muda:** a tendência passa a usar o histórico já buscado na preparação, sem segunda consulta.
+  - **A decisão de anomalia não muda.**
+  - A tendência e a mensagem podem diferir quando a segunda consulta traria um ponto a mais (`Docs/prediction-history-reuse-experiment.md`, "Contratos e diferenças observáveis").
+- **Esperado [inferência]:**
+  - `HistoricalRequests` de 2 → 1;
+  - ~10,5 s → **~5,9 s** por tag;
+  - ciclo do PK2 de ~131 s → **~76 s**;
+  - intervalo por tag de ~3,5 → ~2,6 min.
+  - **Sozinho, não chega a 1 min.**
+- **Aceite:**
+  - `HistoricalRequests = 1` em todas as predições, sem `Bridge.Transport` sob `ValueTrend.History`;
+  - queda do ciclo e do intervalo por tag medida contra a 6.0 (fase antes do LiveMonitor);
+  - entradas inválidas continuam em 0.
+- **Rollback:** tirar a variável e reiniciar.
+- **Risco:** baixo (experimento já coberto por testes; a decisão não muda). **Esforço:** P (só a sessão).
+
 ##### 6.1 Janela incremental em modo Comparar — **não aprovada**
 - **Decorador de `IHistoricoService`** (novo arquivo em `Services/`), registrado em `BridgeServiceCollectionExtensions.cs` só com a chave. Sem a chave, a DI fica idêntica à atual.
 - **Chave:** `Bridge:HistoricoIncremental:Modo = Desligado | Comparar | Usar`. Padrão `Desligado`; a chave fica fora do `appsettings`.
 - **Valores aprovados:**
   - `SobreposicaoMinutos = 10`;
   - `RecargaCompletaMinutos = 60`;
-  - intervalo mínimo entre trechos novos da mesma chave, para que a chamada da tendência não dispare outro trecho (valor a definir, sugestão de 30 s).
+  - intervalo mínimo entre trechos novos da mesma chave, para que a chamada da tendência não dispare outro trecho (valor a definir, sugestão de 30 s). **[16/11]** Só é necessário se a 6.2 rodar **sem** o reuso. Com o `PredictionHistoryReuse` (6.0b), a tendência não chama o histórico, e este intervalo pode sair.
 - **Funcionamento:**
   - primeira chamada de uma tag: as 24 h completas, como hoje;
   - chamadas seguintes: `BuscarHistoricoPorPeriodo` a partir do último ponto menos a sobreposição;
@@ -180,7 +231,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Concorrência:** o decorador é singleton, com trava por chave.
 - **Memória:** estimativa de ~60 KB por tag, menos de 1 MB para 13 tags. Teto de entradas e descarte das tags inativas.
 - **A confirmar:**
-  - se o `/historico` devolve 1 ponto por minuto ou só as mudanças de valor;
+  - ~~se o `/historico` devolve 1 ponto por minuto ou só as mudanças de valor~~ **respondido em 16/11:** 1 ponto por minuto (1.436–1.439 em 24 h; `MEDICAO_ETAPA0.md` §3.1);
   - trecho vazio: hoje o `BuscarHistoricoPorPeriodo` lança exceção; o decorador deve tratar como "sem novidade" sem engolir erro HTTP;
   - fim do trecho calculado pelo último ponto mais uma margem, sem supor fuso.
 - **Testes offline** (com os dublês existentes `RecordingHistory`, `StubHistory` e `FixedHistory`):
@@ -191,18 +242,24 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
   - **equivalência com fonte em movimento** (relógio simulado, 1 ponto por minuto): diferença zero ou só na borda;
   - replay: opção `--historico-incremental`; `Compare-Replay.ps1` com **0 diferenças em 12 execuções**;
   - regressão: `PredictionHistoryReuseTests`, `PerformanceDiagnosticsTests`, `PredictionServiceObservabilityEquivalenceTests`, `HistoricoCausalTests` e a suíte completa.
-- **Aceite na sessão:** só diferenças na borda; consulta pequena medida.
+- **Aceite na sessão:** só diferenças na borda; **custo do trecho curto medido** (`Bridge.Transport` do trecho, p50 e p95 por tag, com a mesma carga da 6.0).
+- **Regra de decisão [16/11]:** para um ciclo de 1 min, sobram ≈ 3 s por tag para o histórico (`MEDICAO_ETAPA0.md` §8).
+  - Se o p95 do trecho ficar **≤ ~2 s**, seguir para 6.2 e 6.3.
+  - Se ficar **≥ ~3 s**, a 6.2 sozinha não chega a 1 min, e a **6.5** passa a ser necessária antes da 6.3 (ou um endpoint em lote no Bridge). Um custo assim indicaria custo fixo por requisição no Bridge: o lote de 1 tag do PK7 nunca ficou abaixo de 4,1 s.
+  - Entre 2 e 3 s, decidir com os números.
+- **Condições da sessão [16/11]:** LiveMonitor fechado ou tarefa 34 feita, com o estado registrado; export só no fim (P42).
 - **Rollback:** `Modo = Desligado` (ou sem a chave) e reiniciar.
 - **Risco:** baixo (a decisão não muda). **Esforço:** M.
 
-##### 6.2 Janela incremental em modo Usar, com o `PredictionHistoryReuse` — **não aprovada; depende de 6.0 e 6.1**
+##### 6.2 Janela incremental em modo Usar, com o `PredictionHistoryReuse` — **não aprovada; depende de 6.0, 6.0b e 6.1, e da tarefa 34 (ou do LiveMonitor fechado)**
 - **O que muda:** `Modo = Usar`. Na sessão, o `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1` vem do ambiente; o reuso não está no `-PerfDiag`, e levá-lo para configuração fora de Development exige aprovação própria.
 - **Impacto na detecção:** o que chega aos detectores pode diferir na borda da janela e nas correções tardias fora da sobreposição (até a recarga de 60 min).
-- **Sessão:** alternar desligado → ligado → desligado, 1 h cada, com `HistoricoCausal` e PERF_DIAG ligados nas três fases. Metas da tabela da 6.0.
+- **Sessão:** alternar desligado → ligado → desligado, 1 h cada, com `HistoricoCausal` e PERF_DIAG ligados nas três fases. Metas da tabela da 6.0. **[16/11]** O LiveMonitor fica **no mesmo estado nas três fases**, de preferência fechado (P42: sozinho, ele multiplicou o tempo do monitor por 4–5). O export fica para o fim. A linha de base da fase "desligado" pode reaproveitar a 6.0b, se as condições forem as mesmas.
 - **Rollback:** a chave.
 - **Risco:** médio.
 
 ##### 6.3 Cadência fixa de 1 minuto no laço — **não aprovada; o teste offline dependia da tarefa 22 (feita em 16/11, passos 1 e 2)**
+- **[16/11] Quando:** só depois que a 6.2 (ou a 6.5) medir ciclo ≤ ~50 s. Com o ciclo de hoje (131 s no PK2), a cadência fixa só pularia tiques.
 - **O que muda:** `PeriodicTimer` de 1 min (valor aprovado) no lugar do `Task.Delay` depois do ciclo. Um ciclo que passa do minuto **pula o tique**, sem acumular, e registra Warning (junta com a tarefa 20).
 - **Chave:** `Monitoramento:CadenciaFixa` (padrão `false`).
 - **Arquivos:** `MonitoramentoTagsService.cs`.
@@ -210,15 +267,16 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Rollback:** a chave.
 - **Risco:** médio. Muda a cadência, não a lógica da decisão.
 
-##### 6.4 Janela incremental para o histórico das tags de regime — **não aprovada; antes da RC-12**
+##### 6.4 Janela incremental para o histórico das tags de regime — **não aprovada; antes da RC-12; depende da tarefa 35 (P43)**
+- **[16/11] Pré-requisito:** banco local com a migration RC-5 (tarefa 35). Sem ela, a consulta da configuração de regime falha antes de qualquer busca de histórico do regime, e a medição em modo Comparar sairia vazia.
 - **O que muda:** a mesma lógica da 6.1 para os `BuscarHistoricoPorPeriodo` do `OperationalRegimeBaselineProvider`, chaveada por (cliente, tag de regime). Começa em modo Comparar.
 - **Por que antes da RC-12:** com o regime combinado ligado, seriam 18 consultas por ciclo só nas tags de bomba.
 - **Chave:** `Bridge:HistoricoIncremental:IncluirRegime`.
 - **Aceite:** replay com o regime combinado com 0 diferenças.
 
-##### 6.5 (Futuro) Completar a janela com a leitura do lote — **não aprovada**
+##### 6.5 (Futuro) Completar a janela com a leitura do lote — **não aprovada; passa a ser necessária se o trecho curto da 6.1 custar ≥ ~3 s por tag**
 - **O que muda:** acrescentar à janela o valor do `/valores-atuais` de cada ciclo, reduzindo ou eliminando a consulta por tag.
-- **Condições:** só vale se o ciclo ficar em 1 min (6.3) **e** se o valor do lote for igual ao do histórico no mesmo minuto. Isso precisa ser medido em modo Comparar.
+- **Condições:** ~~só vale se o ciclo ficar em 1 min (6.3)~~ **[16/11]** entra pela regra de decisão da 6.1, quando o trecho curto não cabe em ~3 s por tag. Em qualquer caso, só vale se o valor do lote for igual ao do histórico no mesmo minuto, o que precisa ser medido em modo Comparar. Na 6.0, o lote do PK2 (12 tags) levou 5,6 s na mediana, isto é, uma requisição para todas as tags.
 - **Alternativa:** endpoint de histórico incremental em lote no Bridge (fora deste repositório).
 - **Chave:** própria.
 
@@ -591,7 +649,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
 
 *Item 22 acrescentado em 2026-11-13, a partir do P28 (levantamento da tarefa 19). Passos 1 e 2 feitos em 2026-11-16, a pedido da responsável, sem commit; passo 3 não aprovado.*
 
-### 22. (Robustez/testes) Endereço do Bridge pela configuração e `HttpClient` substituível nos serviços do Bridge — ✅ **PASSOS 1 E 2 CONCLUÍDOS (2026-11-16, sem commit)**; passo 3 não feito; aceite (e) pendente
+### 22. (Robustez/testes) Endereço do Bridge pela configuração e `HttpClient` substituível nos serviços do Bridge — ✅ **PASSOS 1 E 2 CONCLUÍDOS (2026-11-16)**; passo 3 não feito; aceite (e) ✅ conferido em 16/11
 - **Resultado (16/11):**
   - **Conferência antes de mudar** (sem expor o valor): `Bridge:BaseUrl` só está definida no `appsettings.json` e é **igual** a `http://localhost:5001`, também sem `/` no fim. Não aparece no `appsettings.Development.json` nem no `Properties/launchSettings.json`, e a variável `Bridge__BaseUrl` não está definida nesta máquina (processo, usuário e máquina). Com a configuração atual, as URLs não mudam.
   - **Produção:**
@@ -615,7 +673,10 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
     - **(b)** ✅ suíte completa **1079/1079**. O isolamento foi conferido antes: bancos só temporários ou em memória, e nenhum teste com endereço do Bridge real;
     - **(c)** ✅ `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal` (`dados/rc2_rodadas/20261116_144938` e `20261116_145514`);
     - **(d)** ✅ `localhost:5001` aparece em um único lugar do código de produção (`BaseUrlPadrao`);
-    - **(e)** ⏳ pendente: conferir as linhas `Bridge lote…` na próxima sessão autorizada com o Bridge. Até lá, não afirmar que o comportamento no ambiente de teste ficou igual.
+    - **(e)** ✅ **conferido na sessão de 16/11 (15:19–16:46; `Docs/MEDICAO_ETAPA0.md` §7):**
+      - 21 lotes do PK2 com 12 tags e 21 do PK7 com 1 tag, 0 falhas; todas as predições receberam leitura;
+      - mediana de 5,6 s (PK2) e 4,4 s (PK7), na ordem da referência de 05/11 (29,4 s e 4,5 s); os máximos de 35 s e 23 s ocorreram sob a carga do LiveMonitor;
+      - nenhuma linha de log do `IHttpClientFactory` para os clientes do Bridge.
   - **Destrava:** o teste offline do laço do monitor com tags (tarefa 19, passo 2), o aceite da tarefa 18 e o teste offline da 6.3. Basta `services.AddHttpClient(nameof(BridgeValorAtualService)).ConfigurePrimaryHttpMessageHandler(...)` com o `FakeBridgeHandler`, como em `BridgeServicesTests`.
   - **Rollback:** reverter os 4 arquivos de produção e os 3 de teste, e apagar `IAApi.Tests/Bridge/`. Não há configuração nova nem migration.
 - **Problema (P28, confirmado no código):**
@@ -748,7 +809,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
     - `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, tanto sem `-HistoricoCausal` quanto com ele;
     - suíte completa: **967 aprovados, 0 falhas**.
   - **Pendente:**
-    - [ ] ligar a chave numa sessão autorizada com o simulador e medir a fração de entradas inválidas e de notas 0 no PK2 (esperado ≈ 0);
+    - [x] ligar a chave numa sessão autorizada com o simulador e medir a fração de entradas inválidas e de notas 0 no PK2 (esperado ≈ 0). **Feito em 16/11 (6.0, `Docs/MEDICAO_ETAPA0.md` §5): 0 inválidas; nota 0 em 2 de 269 (0,7 %), ambas válidas;**
     - [ ] opção (a): tornar visível a entrada inválida que restar (acima da tolerância);
     - [ ] avaliar os alarmes com a B-02 ligada antes de confiar neles (P32, tarefa 27).
 
@@ -1392,6 +1453,120 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
   - Não há configuração nem migration. Em produção, basta a chave desligada (padrão).
 - **Rollback:** desligar a chave e reiniciar a API (o detector deixa de ser registrado); no código, reverter os commits de cada passo.
 
+
+### 34. (Robustez, demo) LiveMonitor sem sobrecarregar o Bridge e o banco (P42) — ⏳ **ABERTA (registrada em 2026-11-16); PRIORIDADE ALTA: antes da demo e das sessões 6.0b, 6.1 e 6.2; nada aprovado**
+- **Problema** (P42; mecanismo confirmado no código, efeito confirmado em log em 16/11):
+  - Para um gráfico de 2 h, o `TagHistoricoController` busca **24 h** no Bridge por tag. O LiveMonitor pede isso a cada 15 s, 3 de cada vez. O proxy desiste em 12 s, mas a busca síncrona continua: foram **até 12 simultâneas**, com 36,6 s em média e 4 timeouts.
+  - `GET /api/anomalias` devolve **todas** as decisões de todos os clientes e faz **uma consulta de feedback por linha** (~3.200 por chamada). O LiveMonitor chama a cada 2 s; foram ~958 mil consultas em 19 min.
+  - **Efeito:** o monitor ficou 4–5× mais lento (ciclo de 131 → 306 s e ≥ 697 s; idade da leitura até 12 min), e o log chegou a 702 MB (P44).
+- **O que se reaproveita** (regra do `CLAUDE.md`; nenhum endpoint nem serviço novo):
+  - `IHistoricoService.BuscarHistoricoPorPeriodo(cliente, tag, inicio, fim)`, que já existe;
+  - a regra de semelhança de `FeedbackAnomaliaAnaliseService.GerarAnaliseFeedbacks`, separada da consulta para ser aplicada em memória;
+  - as variáveis do LiveMonitor (`MONITOR_HISTORY_MS`, `MONITOR_POLL_MS`);
+  - os dublês `FakeBridgeHandler`/`RecordingHistory` e `tools/IAApi.LiveMonitor/tests/`.
+- **Passos** (cada um com aprovação própria; nenhum muda a decisão de anomalia nem o laço do monitor):
+  - **34.0 Mitigação sem código** (regra de operação):
+    - nas sessões de medição, LiveMonitor fechado, ou aberto só numa fase registrada;
+    - export só no fim;
+    - na demo, até 34.1–34.4, abrir com poucas tags selecionadas e intervalo de histórico maior (ex.: `MONITOR_HISTORY_MS=60000`; mudança de configuração, exige aprovação; efeito a medir).
+  - **34.1 `GET /api/anomalias` sem N+1, com o mesmo JSON:**
+    - buscar os feedbacks com o mesmo *join* numa única consulta, agrupar por (cliente, tag) e aplicar a mesma regra em memória;
+    - a resposta tem de sair **idêntica**: mesmos campos, ordem e valores de `FeedbackSemelhante`.
+  - **34.2 Parâmetros opcionais em `GET /api/anomalias`** (`clienteId`, `desde`, `limite`):
+    - **sem eles, a resposta é a de hoje** (contrato preservado);
+    - o LiveMonitor (`server/proxy.ts`, `src/api.ts`) passa `clienteId` e um limite compatível com o `mergeDecisions` (1.000);
+    - o `Export-AnomaliasIaReal.ps1` passa `clienteId` e `desde`;
+    - reduz, sem resolver, a exposição entre clientes (P34).
+  - **34.3 Histórico do controller só no período pedido:**
+    - `TagHistoricoController` usa `BuscarHistoricoPorPeriodo(cliente, tag, agora − horas, agora)` no lugar das 24 h;
+    - preservar o formato da resposta, a ordem, o filtro de `NaN`/infinito e o fallback "últimas 20 leituras";
+    - se o período vier vazio (hoje `BuscarHistoricoPorPeriodo` lança exceção para trecho vazio, ver 6.1), cair no caminho atual de 24 h, com o mesmo resultado de hoje;
+    - conferir que o período vai ao Bridge com a mesma convenção de hora (`DateTime.Now`, sem fuso) já usada pelo `OperationalRegimeBaselineProvider`;
+    - esperado: ~120 pontos em vez de ~1.437 por chamada. O ganho de tempo no Bridge fica a medir (P10: pedaço de 2 h em 1–5 s com o Bridge livre);
+    - o `TagTendenciaController` fica como está (o LiveMonitor não o chama).
+  - **34.4 LiveMonitor sem abandonar buscas no Bridge:**
+    - na rota de histórico, timeout do proxy ≥ o da IAApi (60 s; sugestão de 65 s), para não disparar uma nova busca da mesma tag enquanto a anterior roda;
+    - intervalo padrão de histórico maior (sugestão de 60 s; o gráfico tem 1 ponto/min);
+    - testes em `tests/proxy.test.ts` e no *polling*.
+    - **Fora do escopo:** cancelamento de ponta a ponta no `BridgeHistoricoService` (síncrono; mexe no histórico de toda leitura; ver tarefa 22, passo 3).
+- **Arquivos:** `Controllers/AnomaliaController.cs`, `Services/FeedbackAnomaliaAnaliseService.cs`, `Controllers/TagHistoricoController.cs`, `tools/IAApi.LiveMonitor/server/proxy.ts`, `src/api.ts`, `src/useMonitor.ts` (se preciso), `tools/Cp300Export/Export-AnomaliasIaReal.ps1` e README; testes novos em `IAApi.Tests/` e `tools/IAApi.LiveMonitor/tests/`.
+- **Não muda:** a decisão de anomalia, o laço do monitor, `IHistoricoService`, `BridgeHistoricoService` e o contrato HTTP quando os parâmetros novos não são enviados.
+- **Aceite:**
+  - **offline:**
+    - JSON de `GET /api/anomalias` igual ao atual numa base de teste com feedbacks (comparação de ouro);
+    - número de comandos SQL por chamada constante (≤ 2), sem crescer com o número de linhas, contado por *interceptor* ou *logger* no teste;
+    - histórico com 1 chamada `BuscarHistoricoPorPeriodo` de ~2 h e nenhuma de 24 h, com a mesma resposta numa base fixa, inclusive período vazio;
+    - testes do LiveMonitor; suíte completa (isolamento conferido antes); `Compare-Replay.ps1` com 0 diferenças, como sanidade;
+  - **sessão** (com aprovação): 30 min com o LiveMonitor aberto nas 12 tags e PERF_DIAG.
+    - `Preparation.History` do monitor dentro de ±20 % do valor sem o LiveMonitor (4,9 s em 16/11);
+    - 0 timeouts; histórico do LiveMonitor com ≤ 3 buscas simultâneas no Bridge;
+    - consultas de feedback por chamada ≤ 2.
+- **Risco:** baixo a médio (rotas de leitura usadas pela demo e pelo export; contrato preservado). **Esforço:** M.
+- **Rollback:** reverter o commit de cada passo; LiveMonitor com os valores padrão.
+
+### 35. (Ambiente) Aplicar a migration RC-5 no banco local e avisar quando houver migration pendente (P43) — ⏳ **ABERTA (registrada em 2026-11-16); PRIORIDADE ALTA: antes da RC-12, da 6.4 e da demo; nada aprovado**
+- **Problema** (P43; confirmado em log e no código):
+  - O `ia_config.db` local não tem a coluna `MapaEstados`, que vem da migration `20261113160248_RC5_AddTagRegimeComponente`.
+  - Em 16/11, **270 de 270** predições falharam ao ler `TagsRegimesOperacionaisIa`, e o provider caiu em silêncio no baseline global.
+  - A IAApi não aplica nem confere migrations ao subir.
+  - **Hoje**, provavelmente sem efeito no PK2 (sem regime cadastrado em 13/11) [histórico a validar]. **PK7 não verificado.** **A RC-12 não teria efeito, sem aviso.**
+- **Passos** (cada um com aprovação própria):
+  - **35.0 Conferência só de leitura** (exige aprovação, porque abre o banco local, que tem configuração dos clientes):
+    - com a IAApi parada, `dotnet ef migrations list` para ver as aplicadas e as pendentes;
+    - contagem das linhas de `TagsRegimesOperacionaisIa` por cliente, sem expor outros valores;
+    - registrar se o PK7 tem regime: isso decide se a 35.1 pode mudar decisões do PK7.
+  - **35.1 Cópia de segurança e aplicação** (exige aprovação; muda o banco):
+    - IAApi parada; copiar `ia_config.db`, `-wal` e `-shm` para uma pasta fora do controle de versão;
+    - `dotnet ef database update`.
+    - A RC-5 é aditiva: coluna `MapaEstados` anulável e tabela `TagsRegimesComponentesIa` vazia.
+    - Se a 35.0 mostrar outras migrations pendentes, parar e relatar antes de aplicar.
+    - Não cadastrar regime nem ligar chaves.
+  - **35.2 Conferência na próxima sessão:**
+    - 0 linhas `no such column`;
+    - PK2 com `RegimeBaseline` "sem configuração", decisão igual à de hoje;
+    - PK7: se tiver regime, a decisão pode mudar (o regime volta a valer). Registrar antes e depois.
+  - **35.3 (Código, opcional) Aviso de migration pendente:**
+    - na subida, `Database.GetPendingMigrations()` → `LogError` com os nomes, **sem aplicar**;
+    - quando a consulta de regime falhar, o provider registra um Warning claro, com limite de frequência (hoje só aparece o `fail:` do EF);
+    - expor no "sinal de vida" (tarefa 19);
+    - o fail-open fica como está;
+    - testes offline com SQLite temporário sem a coluna.
+- **Não fazer:** aplicar migrations automaticamente na subida, porque mudaria o banco sem decisão humana.
+- **Aceite:**
+  - 35.0 registrada;
+  - 35.1 com cópia conferida (tamanho e abertura);
+  - 35.2 sem o erro e sem mudança de decisão no PK2;
+  - 35.3 com testes verdes e suíte completa.
+- **Rollback:** com a IAApi parada, restaurar as cópias, ou `dotnet ef database update 20261002183911_B325_AddRichBehaviorSnapshotIdentity` (o `Down` remove a coluna e a tabela). Na 35.3, reverter o commit.
+- **Risco:** baixo no PK2 (aditivo); médio se o PK7 tiver regime. **Esforço:** P.
+- **Ordem:** antes da RC-12 (dependência acrescentada na tabela RC), da 6.4 e da demo.
+
+### 36. (Ferramenta) Log da sessão com horário, sem o SQL do EF e com codificação conhecida (P44) — ⏳ **ABERTA (registrada em 2026-11-16); prioridade média: antes da próxima sessão longa; nada aprovado**
+- **Problema** (P44; confirmado em log):
+  - o log de 16/11 saiu **sem data e hora** no início das linhas, embora o script defina `Logging__Console__FormatterOptions__TimestampFormat` (as outras variáveis tiveram efeito);
+  - **960 mil** entradas `Executed DbCommand` do EF (`LogLevel:Default = Information`) somaram **702 MB** em 87 min;
+  - o texto sai na página de código do console (cp850).
+- **Passos** (cada um com aprovação própria):
+  - **36.1 Descobrir, offline, por que o horário não saiu:**
+    - teste em `IAApi.Tests` que monta o host com a mesma variável em configuração de memória e confere as opções do formatador de console (`SimpleConsoleFormatterOptions.TimestampFormat`) e o formatador escolhido;
+    - não sobe a IAApi nem o monitor;
+    - hipóteses: a chave não é lida como esperado; outro formatador ativo.
+  - **36.2 Script `Start-IAApiComLog.ps1`:**
+    - corrigir a variável do horário conforme o resultado da 36.1;
+    - acrescentar `Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command = Warning` (as falhas do EF continuam no log, como as do P43);
+    - gravar as duas no `config.json`; README; `Start-IAApiComLog.Tests.ps1`.
+    - Só a sessão muda; o `appsettings*.json` não.
+  - **36.3 Codificação:**
+    - documentar no `tools/README.md` que o arquivo sai na página de código do console e como lê-lo;
+    - avaliar (é código, exige aprovação) gravar em UTF-8.
+  - **36.4 (Opcional) Tamanho:** o log cresce sem rotação (README do script). Avaliar teto ou aviso de tamanho.
+- **Aceite:**
+  - teste da 36.1 explicando a causa;
+  - testes do script verdes;
+  - na próxima sessão: toda linha de log com data e hora; nenhuma `Executed DbCommand` (as `Failed executing DbCommand` continuam); tamanho por hora registrado.
+- **Rollback:** reverter o script e o README. **Risco:** baixo. **Esforço:** P.
+- **Relação:** P27 (passo a, "com data e hora"); tarefa 17 (`Console.WriteLine` continua sem horário); tarefa 6 (tabela por ciclo).
+
 ---
 
 *Tarefas RC-0 a RC-12 acrescentadas em 2026-11-12: implementação do item 12 (Opção A, regime combinado com 3 componentes). O detalhe de cada uma (objetivo, arquivos, aceite) está em `PLANO_REGIME_COMBINADO.md` §6. Cada tarefa cabe numa sessão e exige aprovação própria.*
@@ -1412,4 +1587,4 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 | RC-9 | ✅ **Concluída (2026-11-13).** `BaselineDiagnostic.RegimeKey` (parâmetro opcional no fim do construtor; espaços ⇒ nula) com `[JsonIgnore(WhenWritingNull)]` na propriedade. Assim ela fica fora do JSON quando nula nos dois pontos de serialização levantados: o exportador JSONL (`JsonIgnoreCondition.Never`) e o endpoint `GET /intelligence-lab/diagnostics/{id}` (padrão web do `AddControllers`). A cópia do `InMemoryDiagnosticCollector` só repassa o objeto. `PrepararAsync` preenche a chave só com o regime aplicado (vinda da RC-8); a linha `BASELINE POR REGIME APLICADO` ganha `Chave=…` só quando ela existe. Não entra em nenhuma decisão. 12 testes novos: JSON do baseline sem chave igual ao literal do contrato anterior, no JSONL e no padrão web; com chave, `regimeKey` no fim; preparação de ponta a ponta com a chave desligada (sem chave no diagnóstico, no JSON e no log) e ligada; regime não aplicado sem chave. Mutação (sem o `JsonIgnore`): 3 testes falham. Relacionados 505/505; `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal`; suíte completa **999/999**. Ver `PLANO_REGIME_COMBINADO.md` §6.3, RC-9 | `DiagnosticContracts.cs`, `PredictionDetectionPreparationService.cs` | JSON e log iguais com a chave desligada; RC-2 com 0 diferenças | RC-8 | só com a chave (observabilidade) |
 | RC-10 | ✅ **Concluída (2026-11-13).** Replay com `--regime-combinado` (liga `RegimeCombinado:Habilitado` só no provider do replay, com TAG60–TAG81 na lista de tags proibidas do cliente), `--regime TAG27=TAG42+TAG43+TAG46` (componente 1 na linha principal com `MapaEstados`; 2..N em `TagsRegimesComponentesIa`) e `--regime-mapa "TAG42=2:2;*:0"`. Sem a opção, `+` e `--regime-mapa` são recusados (código 2) e o provider é construído como antes. Recusa TAG60–TAG81 em qualquer componente, componente ausente do CSV, repetido ou igual à tag analisada, e mapa inválido ou de tag que não é componente. Coluna `chave_regime` (de `BaselineEfetivo.RegimeKey`) só com a opção; no log, cobertura por chave no treino e na primeira janela móvel, com valores fora do mapa. 11 testes novos (parse, rótulo nas posições 1–3, recusas, 1 componente = golden RC-2 + coluna vazia, golden novo `replay_bombas_regime_combinado.csv` sem/com `HistoricoCausal`, cobertura no log). Mutação (coluna sempre vazia): os 2 goldens novos falham. Ferramenta 44/44; `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal`; suíte completa **1010/1010**. Ver `PLANO_REGIME_COMBINADO.md` §6.3, RC-10 | `tools/Cp300OfflineReplay/` + testes | `tools/Cp300OfflineReplay/` + testes | sem a opção, saída idêntica; TAG60–81 recusada em qualquer componente | RC-8, RC-9 | não (ferramenta) |
 | RC-11 | ⚠️ **Aprovada com ressalvas (2026-11-16).** ✅ **Decisão da responsável (2026-11-16): 3 componentes** (estado da própria bomba, estado da outra bomba e TAG46), com os mapas de §6.2 (`PLANO_REGIME_COMBINADO.md` §7.9). Replay com `--regime-combinado --historico-causal` sobre `dados/cp300_09a13nov.csv` em 5 cenários (preset 1, madrugada de 11/11, preset 6, 18 h normais de 12/11 e preset 3 de 13/11), com 3 componentes (`combr`) e 2 componentes (`comb2r`): 10 execuções, 0 erros e 0 divergências.<br>**(1)** `Compare-Replay.ps1`: 0 diferenças em 12 execuções, sem e com `-HistoricoCausal`.<br>**(2)** Equivalência: 0 linhas diferentes em 8 comparações (`rc0_*_combs`/`comb`, `p3_combs`, `p3b_combs`).<br>**(3)** Metas de §3.1 atendidas: B-01 no preset 1 = 4; B-01 na madrugada = **30 (no limite)**; B-02 no failover = 0; TAG29 com 1º alarme às 15:32 e 0 antes da falha. **Fallbacks por poucos pontos: 174 minutos-tag nas bombas (72 com alarme)**, sempre na 1ª noite com 380 depois de um rodízio: 11/11 00:43–00:45 (9, B-01) e 13/11 00:47–01:12 (63, B-02; classe com 14–29 pontos). Mais 12 na TAG26 (transição da válvula). Foram para o item 24.<br>**(4)** TAG29 às 15:33/15:34: chave `TAG42=2\|TAG43=0\|TAG46=450`, média 169,9/170,1, desvio 27,4/27,7, 434/435 pontos, `OperationalRegime`; **confirmada às 15:37 (no limite)**.<br>**(5)** Custo do preset 6 em Release: 15,2 s com a chave desligada (`combs`) contra 16,4 s ligada (`combr`), +8 %, dentro da variação. I/O (3 consultas por tag) não medido.<br>**Com × sem set-point:** total 830 × 1.028; preset 3 com 5 × 4 de 7 falhas e 37 × 62 falsos; sem set-point falham B-01 no preset 1 (6) e B-02 no failover (40). Nas madrugadas, cada um ganha numa: 11/11 74 × 58; 13/11 113 × 110, com a B-01 16 × 78. Recomendação: 3 componentes. Ver `PLANO_REGIME_COMBINADO.md` §7.<br>**Escopo original:** Equivalência com a etapa 0, metas de §3.1, critério da TAG29 e custo. **Acrescentado em 2026-11-13 (saída da RC-0): antes de decidir os componentes, comparar o regime combinado com e sem set-point.** São 2 componentes (própria bomba e outra bomba, equivale a `comb`) contra 3 (mais TAG46, equivale a `combs`), de dia (preset 1 e preset 6) e de madrugada, nos CSVs de 10–11/11 e de 09–13/11. Medir: alarmes da B-01 e da B-02, falsos fora da falha, failover do preset 6, TAG29 e `origem_baseline = Global`. **Motivo:** com a noite anterior, `comb` teve menos alarmes na madrugada (58 contra 74; B-01 0 contra 30). Mas o set-point ainda foi necessário para a B-02 no failover do preset 6 (40 → 0) (`PLANO_REGIME_COMBINADO.md` §5.7.4). A escolha não exige código: a RC-10 aceita N componentes. Os fallbacks por poucos pontos que sobrarem vão para o item 24 | nenhum código; resultado em `PLANO_REGIME_COMBINADO.md` §7 | regressão byte a byte; mesmas decisões que `e0_*_combs` (3 componentes) e `e0_*_comb` (2 componentes); **TAG29 com detecção confirmada até 15:37 no preset 6** (decisão (a), §5.6.2); se depois, documentar a causa e parar; **tabela com e sem set-point (dia e madrugada) e decisão dos componentes registrada pela responsável antes da RC-12** | RC-0, RC-1, RC-10 | não |
-| RC-12 | ⏳ **NÃO aprovada (2026-11-16).** Por decisão da responsável, fica para **depois da tarefa 6** (cadência do ciclo) e **da tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25). Componentes: os 3 decididos na RC-11 (`PLANO_REGIME_COMBINADO.md` §7.9).<br>Ativação no ambiente de teste do PK2 | banco e configuração do PK2 | `RegimeKey` no diagnóstico durante presets 1 e 6; alarmes na ordem do replay; tempo de ciclo com 3 consultas por tag de bomba; validação no simulador, não em planta | RC-11 + tarefas 6 e 27 + aprovação | **sim** |
+| RC-12 | ⏳ **NÃO aprovada (2026-11-16).** Por decisão da responsável, fica para **depois da tarefa 6** (cadência do ciclo) e **da tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25). Componentes: os 3 decididos na RC-11 (`PLANO_REGIME_COMBINADO.md` §7.9).<br>Ativação no ambiente de teste do PK2 | banco e configuração do PK2 | `RegimeKey` no diagnóstico durante presets 1 e 6; alarmes na ordem do replay; tempo de ciclo com 3 consultas por tag de bomba; validação no simulador, não em planta | RC-11 + tarefas 6, 27 e **35** (P43: banco com a migration RC-5) + aprovação | **sim** |

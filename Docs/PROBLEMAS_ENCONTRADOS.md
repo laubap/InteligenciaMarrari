@@ -15,6 +15,20 @@
 
 > **Atualização com o preset 3 de 13/11 (16/11/2026, RES3 §4):** o preset 3 foi **repetido e rodou** (13/11 15:02 → 22:12; início conferido pelos rótulos, P29). Replay com treino limpo de 24 h (12/11 15:00 → 13/11 15:00) e `--historico-causal`, em quatro configurações. **Detectadas 3 de 7 falhas monitoradas** em cada uma, mas não as mesmas: saturação (27) e intermitente (23) em todas; circuito aberto (26) só no combinado; ruído (22) só sem regime e no recomendado, provavelmente por coincidência com a parada da B-02. **P12 confirmado no replay** (sensor congelado no set-point, nota 0). Falsos fora das falhas: sem regime 211, recomendado **248**, combinado **37**. O regime combinado real (Opção A) deu saída idêntica às séries derivadas. Novidades em P01, P03, P06, P07, P12, P20, P21, P22 e P29, e um problema novo: **P41** (falha de sensor dentro da malha de pressão aparece nas bombas, não no sensor). **Com aprovação, o mapa do placar passou a contar essas tags** (`efeitosPorCanal`): o combinado vai de 3 para **5 de 7**; as outras configurações não mudam. Itens marcados com **[preset 3 de 13/11]**.
 
+> **Atualização com a medição da etapa 0 (16/11/2026, BACKLOG 6.0, `Docs/MEDICAO_ETAPA0.md`, MED0):** IA real com `HistoricoCausal` e PERF_DIAG, de 15:19 a 16:46 de 16/11, preset 1, só leitura do log.
+> - **P31 resolvido em campo pelo recorte:** 0 entradas inválidas; nota 0 em 0,7 %, contra 76 %.
+> - **P26 melhorou, mas continua aberto:** ~3,5 min por tag (era ~10).
+> - **P10/P11:** 91 % do tempo de cada tag são **duas** buscas de 24 h.
+> - **P18:** idade da leitura com p95 de 3,0 min.
+> - **P27 não se repetiu.**
+> - **Três problemas novos:**
+>   - **P42:** a partir de 16:27, o LiveMonitor sobrecarregou o Bridge e o banco, deixou o monitor 4–5× mais lento e causou todos os timeouts da sessão;
+>   - **P43:** o banco local está sem a migration RC-5 (`no such column: MapaEstados` em toda predição);
+>   - **P44:** o log saiu sem horário e com o SQL do EF (702 MB).
+>   - P42 e P43 têm prioridade alta: antes da demo e antes da RC-12.
+>
+> Itens marcados com **[etapa 0]**.
+
 **Como ler o status**
 
 | Status | Significado |
@@ -46,15 +60,15 @@
 | P07 | A média ponderada dilui reações isoladas: sem IF, Z+MAD+EWMA saturados dão exatamente 60 | Confirmado no código e no replay | Preset 1 (RES §2.2; MAPA §4.1); **[preset 6]** atraso de ~2 min na TAG29 (RES6 §2.2); **[preset 3 de 13/11]** drift (21): EWMA 99,7 e mudança de patamar 100 deram nota 53,4; ruído (22) com regime: Z 100, EWMA 0, nota 62,8 em 1 min (RES3 §4.5) | Falha não detectada / atraso | Média |
 | P08 | O baseline por regime volta ao perfil global (ruim) em transições, set-point novo ou poucas amostras | Confirmado no replay | Madrugada, preset 1 (RES §4.2, §4.3); **[preset 3]** 63 minutos-tag após o rodízio de 00:47 no combinado (RES3 §2.3) | Alarme falso | Média |
 | P09 | Regime quase constante (bomba parada) fica com desvio 0; a proteção existe só por acaso | Confirmado no código; efeito é hipótese | Estimativa (RES §3.6) | Risco de alarme falso | Média |
-| P10 | O Bridge fica ~8× mais lento com a IAApi e o simulador rodando, e a IAApi consulta 24 h de histórico por tag a cada ciclo | Lentidão do Bridge confirmada em log; **na IA real, 9 consultas de histórico estouraram o timeout de 60 s em 48 min, e essas leituras ficaram sem decisão (P26, confirmado em log)**; atraso da detecção ainda não medido | Exportação da TAG73 (`dados/preset1_parte2.csv.pedacos.csv`); **IA real no preset 3 (P26)** | Atraso + leituras sem decisão | **Alta** (medir) |
-| P11 | O ciclo é sequencial: 60 s + soma do tempo de todas as tags | Confirmado no código; **na IA real, o ciclo do PK2 se repetiu a cada 5 a 18 min (P26)** | — (MAPA #1, §3); **IA real no preset 3 (P26)** | Atraso | **Alta** (era Média; subiu com P26) |
+| P10 | O Bridge fica ~8× mais lento com a IAApi e o simulador rodando, e a IAApi consulta 24 h de histórico por tag a cada ciclo | Lentidão do Bridge confirmada em log; **na IA real, 9 consultas de histórico estouraram o timeout de 60 s em 48 min, e essas leituras ficaram sem decisão (P26, confirmado em log)**; atraso da detecção ainda não medido. **[etapa 0] Medido (MED0 §3, §6):** cada tag faz **2** buscas de 24 h (preparação e tendência), de ~4,6 s cada com o Bridge sem carga externa, que somam **91 %** do tempo da predição; 0 timeouts no monitor; com o LiveMonitor aberto, as buscas foram a ~22 s, e os timeouts apareceram nas consultas do próprio LiveMonitor | Exportação da TAG73 (`dados/preset1_parte2.csv.pedacos.csv`); **IA real no preset 3 (P26)**; **[etapa 0] MED0** | Atraso + leituras sem decisão | **Alta** |
+| P11 | O ciclo é sequencial: 60 s + soma do tempo de todas as tags | Confirmado no código; **na IA real, o ciclo do PK2 se repetiu a cada 5 a 18 min (P26)**. **[etapa 0] Confirmado em log:** ciclo do PK2 de **131 s** em média (94–162 s), ou 12 tags × ~10,5 s + lote de ~5,6 s; um ciclo começa a cada ~3,5 min; a 12ª tag espera em média 2,5 min, contra 0,5 min da 1ª | — (MAPA #1, §3); **IA real no preset 3 (P26)**; **[etapa 0] MED0 §2** | Atraso | **Alta** (era Média; subiu com P26) |
 | P12 | Não há detector de valor congelado nem de falha de comunicação **no ensemble**. **[16/11]** A lógica existe (`FrozenSensorEvidenceCalculator`), mas só no canário runtime do PK7, e exige sinal `Continuous`: a TAG24 sai `Unknown` | Confirmado no código; **[preset 3 de 13/11] confirmado no replay:** a falha 20 (TAG24 congelada em 450, o set-point) deu nota 0 em todos os detectores, nos 30 min, nas 4 configurações | Presets 3/4 (AUD §5c); **RES3 §4.5** | Falha não detectada | **Alta** |
 | P13 | O treino do perfil usa sempre as últimas 24 h, sem escolher período, e só roda sob demanda | Confirmado no código; **[preset 6]** contaminação confirmada nos dados; **[preset 3]** o treino por período limpo (replay) não resolve o P01 | — (AUD §5d, §5e-6); **[preset 6]** RES6 §1.2 | Risco (treino contaminado) | **Alta** |
 | P14 | O código aceita um rótulo (TAG60–TAG81) como tag de regime | Confirmado no código | — (AUD §5a) | Risco (vazamento do gabarito) | **Alta** (barato) |
 | P15 | `IaAtiva` é `true` por padrão ao cadastrar uma tag | Confirmado no código | — (AUD §5a) | Risco | Baixa |
 | P16 | Os pesos do `appsettings.json` diferem dos padrões do código | Confirmado no código | — (AUD §3, §5e-4) | Risco (ferramentas divergentes) | Baixa |
 | P17 | `MinHistoryPoints` (30) não tem efeito em produção | Confirmado no código | — (AUD §3) | Risco (configuração enganosa) | Baixa |
-| P18 | O registro grava a hora do processamento, não a hora da leitura | Confirmado no código; **[preset 3]** idade da leitura na IA real de **0,2 a 17,2 min**, confirmada nos dados (valores do lote do início do ciclo) | — (MAPA #14); **[preset 3]** RES3 §2.4 | Atraso invisível | **Alta** (era Média) |
+| P18 | O registro grava a hora do processamento, não a hora da leitura | Confirmado no código; **[preset 3]** idade da leitura na IA real de **0,2 a 17,2 min**, confirmada nos dados (valores do lote do início do ciclo). **[etapa 0]** Medida pelo PERF_DIAG: na decisão, p50 de 1,7 min, **p95 de 3,2 min** e máx. de 12,0 min (3,5 min sem o LiveMonitor); meta de p95 < 2 min não atingida | — (MAPA #14); **[preset 3]** RES3 §2.4; **[etapa 0]** MED0 §4 | Atraso invisível | **Alta** (era Média) |
 | P19 | Entrada inválida (leitura mais antiga que o histórico) vira "sem anomalia" em silêncio | Confirmado no código; não ocorreu no preset 1; **na IA real, 38 de 50 decisões (12/11), reproduzido (P31)** | — (MAPA #7; RES §2.2); **IA real 12/11 (INV §4.2)** | **Falha não detectada** (era Risco) | **Alta** (era Baixa; ver P31) |
 | P20 | Tag com poucos valores distintos pode ser classificada como "discreta" e ter todos os detectores bloqueados | Confirmado no código; ocorreu nos replays com regime do preset 1 (73 min, não relatado na RES) e **[preset 6]** (TAG28/32, B-02 parada; TAG27/31 na config. 3) | TAG44 (RES §2.1); **[preset 6]** RES6 §2.2 | Falha não detectada (hipótese) | Baixa |
 | P21 | Alarmes que caem por acaso no horário da falha parecem acertos | Confirmado no replay (de novo no preset 6, inclusive no failover); **[preset 3 de 13/11]** a "detecção" do ruído (22) sem regime e no recomendado cai só nos minutos com a B-02 parada; e a regra excluiu o circuito aberto (26) por 3 alarmes antes | Preset 1 (RES §2.1, §4.2); **[preset 6]** RES6 §2.1, §2.3; **RES3 §4.4–§4.5** | Risco de avaliação errada | Média |
@@ -62,12 +76,12 @@
 | P23 | Código em execução fora de commit | **Resolvido**: runtime e ferramentas commitados; os 5 `.patch` estavam incorporados e foram movidos para fora do repositório (16/11) | — (AUD §1; git em 12/11) | Risco | Baixa |
 | **P24** | **[preset 6]** Falha encadeada mascarada: com a nota já saturada, uma segunda falha na mesma tag não muda nada | Confirmado no replay | Preset 6 (RES6 §2.1, §2.2) | Falha não detectada (agravamento invisível) | Média |
 | **P25** | Absorção da falha pelo baseline móvel: uma deterioração longa entra nas 24 h móveis e passa a ser "normal"; com regime, nenhum detector fica ancorado em referência estável | **Hipótese** (mecanismo confirmado no código; efeito a medir com o teste de deriva sintética) | Indício pequeno no preset 6 (RES6 §2.6); proposta em `Docs/PROPOSTA_BASELINE_ESTAVEL.md` | Falha não detectada (deterioração lenta) | **Alta** (medir) |
-| **P26** | A IA real avaliou cada tag do PK2 só 3 a 5 vezes em ~48 min (12/11 14:21–15:09): cerca de uma avaliação a cada ~10 min por tag, enquanto os dados chegam a 1 por minuto. Parte das tentativas estourou o timeout de 60 s do Bridge e ficou sem decisão | Confirmado em log (decisões da API + Event Viewer); efeito na detecção é inferência | IA real em 12/11 (`dados/ia_real_preset3.csv`; o preset 3 não rodou, P29); **[preset 3]** idade da leitura até 17,2 min (RES3 §2.4) | Falha não detectada / atraso (~90% dos minutos sem avaliação) | **Alta** |
-| **P27** | A IAApi parou de gravar decisões do PK2 (e do PK7) às 15:09 de 12/11, sem nenhum aviso ou erro no log, e só voltou depois de reiniciar em 13/11. Causa desconhecida | Parada confirmada nos dados e no Event Viewer; **causa: hipótese** | IA real no preset 3 | Monitoramento parado sem alerta: cerca de 11 h de teste perdidas | **Alta** |
-| **P28** | O endereço do Bridge está fixo no código (`http://localhost:5001`) em `BridgeValorAtualService` e `BridgeTagsService`, sem configuração nem ponto de substituição para teste. Só o histórico lê `Bridge:BaseUrl` | Confirmado no código (13/11). **Corrigido em 16/11 (BACKLOG 22, passos 1 e 2, sem commit):** os dois serviços recebem o `HttpClient` pela DI, com o endereço de `Bridge:BaseUrl`; testes offline com handler falso. Na próxima sessão com o Bridge, conferir as linhas `Bridge lote…` | — (levantamento da BACKLOG 19) | Risco: configuração enganosa; o laço do monitor não pode ser testado offline com tags | Média |
+| **P26** | A IA real avaliou cada tag do PK2 só 3 a 5 vezes em ~48 min (12/11 14:21–15:09): cerca de uma avaliação a cada ~10 min por tag, enquanto os dados chegam a 1 por minuto. Parte das tentativas estourou o timeout de 60 s do Bridge e ficou sem decisão | Confirmado em log (decisões da API + Event Viewer); efeito na detecção é inferência. **[etapa 0] Melhorou, mas continua aberto:** uma avaliação a cada **3,5 min** por tag (p95 de 3,9; máx. de 4,1 sem o LiveMonitor; 16,2 com ele); **14,6 avaliações por tag por hora** e **24 % dos minutos-tag**, contra a meta de 60/h e ≥ 90 % | IA real em 12/11 (`dados/ia_real_preset3.csv`; o preset 3 não rodou, P29); **[preset 3]** idade da leitura até 17,2 min (RES3 §2.4); **[etapa 0]** MED0 §2 | Falha não detectada / atraso (~76% dos minutos sem avaliação em 16/11; ~90% em 12/11) | **Alta** |
+| **P27** | A IAApi parou de gravar decisões do PK2 (e do PK7) às 15:09 de 12/11, sem nenhum aviso ou erro no log, e só voltou depois de reiniciar em 13/11. Causa desconhecida | Parada confirmada nos dados e no Event Viewer; **causa: hipótese**. **[etapa 0] Não se repetiu** em ~87 min (log em arquivo, sem janela de console, PERF_DIAG sem lacunas > 90 s); a causa continua em aberto | IA real no preset 3; **[etapa 0]** MED0 §6.4 | Monitoramento parado sem alerta: cerca de 11 h de teste perdidas | **Alta** |
+| **P28** | O endereço do Bridge está fixo no código (`http://localhost:5001`) em `BridgeValorAtualService` e `BridgeTagsService`, sem configuração nem ponto de substituição para teste. Só o histórico lê `Bridge:BaseUrl` | Confirmado no código (13/11). **Corrigido em 16/11 (BACKLOG 22, passos 1 e 2, sem commit):** os dois serviços recebem o `HttpClient` pela DI, com o endereço de `Bridge:BaseUrl`; testes offline com handler falso. **[etapa 0]** Linhas `Bridge lote…` conferidas em 16/11: contagens e tempos normais (MED0 §7) | — (levantamento da BACKLOG 19) | Risco: configuração enganosa; o laço do monitor não pode ser testado offline com tags | Média |
 | **P29** | **[preset 3]** O preset 3 de 12/11 **não iniciou** no simulador (TAG74 nunca foi a 3; TAG76 ficou em 0 desde 14:20; sem reset da planta nem falhas nos slots), e nada na rotina de teste conferiu o início. O período foi tratado como teste do preset 3 até a análise dos rótulos | Confirmado nos dados; **causa: hipótese** (comando de início não escrito ou não aceito). **[13/11] Repetido e rodou** (15:02 → 22:12), conferido pelos rótulos (RES3 §4.2); a conferência continua fora do roteiro automático | Preset 3 (RES3 §1.2, §4.2) | Teste perdido sem aviso; risco de avaliação errada | **Alta** (barato) |
 | **P30** | O `Score` gravado em `AnomaliaDetectada` (e exportado como `nota_final`) é a **nota do ensemble ÷ 20** (0–5), enquanto o replay grava a nota de 0 a 100. A comparação de notas da RES3 §2.4b misturou as escalas. **[13/11] Corrigido nas análises** (não no runtime): a exportação ganhou `nota_0_100` (`Score × 20`), o README §1.1 diz a escala de cada coluna, `dados/ia_real_preset3.csv` tem a coluna e a RES3 §2.4b foi refeita na escala 0–100 | Confirmado no código e nos dados (131 anomalias com `Score` 3,0–3,7); **correção da análise conferida** (50 de 50 iguais ao INV §4.3) | IA real 12/11 (INV §4.2a) | Risco de avaliação errada (o placar não é afetado: usa só a decisão) | Média (barato); **pendente só o LiveMonitor** |
-| **P31** | O valor atual vem do **lote do início do ciclo**, mas o histórico de 24 h é buscado depois. Quando o histórico já tem um ponto mais novo, a entrada é **inválida** e a IA grava nota 0, "sem anomalia" (P19). Em 12/11, **38 de 50** decisões; só ≈ 2 % dos minutos-tag foram de fato avaliados | Confirmado no código; **reproduzido** offline (50 de 50); efeito em outros dias: hipótese (zeros em 67–91 % das decisões desde 05/11) | IA real 12/11 (INV §4.2b, §4.3) | **Falha não detectada** (a maioria das leituras não chega aos detectores) | **Alta** |
+| **P31** | O valor atual vem do **lote do início do ciclo**, mas o histórico de 24 h é buscado depois. Quando o histórico já tem um ponto mais novo, a entrada é **inválida** e a IA grava nota 0, "sem anomalia" (P19). Em 12/11, **38 de 50** decisões; só ≈ 2 % dos minutos-tag foram de fato avaliados | Confirmado no código; **reproduzido** offline (50 de 50); efeito em outros dias: hipótese (zeros em 67–91 % das decisões desde 05/11). **[etapa 0] Correção (`HistoricoCausal`) confirmada em campo:** 0 entradas inválidas; 270 de 270 recortadas, 0 acima da tolerância; nota 0 em 2 de 269 (0,7 %), ambas válidas; sem o recorte, 67 % seriam inválidas | IA real 12/11 (INV §4.2b, §4.3); **[etapa 0]** MED0 §5 | **Falha não detectada** (a maioria das leituras não chega aos detectores) | **Alta** |
 | **P32** | O perfil de produção do PK2 (`PerfisIa`) é de **30/10**, com **161–232 pontos** (~3 h) e a B-02 quase sempre parada: TAG28 (0,35 ± 0,72, deadband 2) e TAG32 (0,03 ± 0,17, deadband 0,04) **colapsadas**. Nunca retreinado | Confirmado nos dados e no código; efeito com a B-02 ligada: hipótese | Inventário (INV §2) | Alarme falso (B-02 ligada) e falha não detectada (desvio inflado em TAG25/26) | **Alta** |
 | **P33** | `POST /api/dev/reset` apaga análises, perfis, configurações, processos, equipamentos, dependências e contextos de **todos os clientes**, sem autenticação e em qualquer ambiente (B323-01) | Confirmado no código (16/11). **Corrigido em 16/11 (BACKLOG 30, sem commit):** 404 fora de Development e fora de loopback, com testes | — (auditoria B3.23; BACKLOG 29, 30) | Risco: perda total da configuração e do histórico de decisões | ~~Alta~~ resolvido no código |
 | **P34** | A API não tem autenticação nem autorização. Fora os endpoints do Intelligence Lab, qualquer um que alcance a porta lê e altera dados de todos os clientes (B323-02) | Confirmado no código (16/11). **Mitigado para a demo em 16/11 (BACKLOG 30, sem commit):** o `Start-IAApiComLog.ps1` recusa endereço que não seja local. A falta de autenticação continua | — (auditoria B3.23; BACKLOG 29, 30) | Risco: exposição e alteração de dados entre clientes | **Alta** (definitiva: G) |
@@ -78,6 +92,9 @@
 | **P39** | A resposta bruta da LLM e o corpo de erro HTTP do LM Studio vão para o log; `POST /api/anomalias/tag` escreve no console o pedido e a resposta inteiros e devolve o **stack trace** ao chamador (B323-17) | Confirmado no código (16/11). **Corrigido em parte em 16/11 (BACKLOG 30, sem commit):** sem stack trace na resposta, resposta bruta da LLM só em Debug e erro da LLM sem o corpo. Falta: console com pedido e resposta inteiros e `ex.Message` em outros controllers | — (auditoria B3.23; BACKLOG 29, 30) | Risco: vazamento de dados industriais e de detalhes internos | Média (resto: Baixa) |
 | **P40** | Dependências com alertas: SQLite nativo (alta) na API e em todos os projetos com EF; `System.Security.Cryptography.Xml`/`Pkcs` (alta) nos testes e em 2 ferramentas; `tinypool` (crítica) e `vitest` (moderada) no LiveMonitor, só em desenvolvimento (B323-23) | Confirmado em `dotnet list package --vulnerable` e `npm audit` (16/11) | — (auditoria B3.23; BACKLOG 29) | Risco: falha explorável em biblioteca de terceiros | Média |
 | **P41** | **[preset 3 de 13/11]** Falha no sensor de pressão PT-02 (TAG24), que está dentro da malha de controle, **não aparece na própria tag**: congelado (20) e ganho errado (24) deixam a leitura no set-point, e o efeito vai para as bombas (frequência, corrente, potência, vazão). O mapa do placar só olhava a tag do sensor | Confirmado nos dados e no replay. **Avaliação corrigida em 16/11 (aprovado):** o mapa ganhou `efeitosPorCanal` (canal 3 → tags da malha); com ele, o combinado detecta 20 e 24 nas bombas (3 → 5 de 7). A detecção da IA não mudou | Preset 3 de 13/11 (RES3 §4.2, §4.4) | Falha não detectada na tag alvo; risco de avaliação errada (resolvido no placar) | **Alta** (detecção); avaliação resolvida |
+| **P42** | **[etapa 0]** O LiveMonitor sobrecarrega o Bridge e o banco. Para um gráfico de 2 h, cada consulta de histórico busca **24 h** no Bridge; o proxy desiste em 12 s, mas a busca continua (até 12 simultâneas). As decisões vêm de `GET /api/anomalias` a cada 2 s, que lista **todas** as decisões de todos os clientes e faz **uma consulta de feedback por linha** (N+1, ~3.200 por chamada) | Mecanismo confirmado no código; efeito confirmado em log (16/11, a partir de 16:27); a causalidade é inferência forte, por tempo e mecanismo | Sessão da etapa 0 (MED0 §6.2) | Monitor 4–5× mais lento (ciclo de 131 s → 306 s e ≥ 697 s; idade da leitura até 12 min); 4 timeouts; 1 leitura sem decisão; log de 702 MB (P44). A ferramenta da demo degrada a IA que ela mostra | **Alta** (antes da demo) |
+| **P43** | **[etapa 0]** O banco local (`ia_config.db`) está **sem a migration RC-5**. Toda predição falha ao ler `TagsRegimesOperacionaisIa` (`no such column: t.MapaEstados`), e o provider cai em silêncio no baseline global. A IAApi não aplica migrations ao subir | Confirmado em log (270 de 270 predições) e no código. Migrations aplicadas e regimes cadastrados no PK7: **não verificados** (o banco não foi aberto) | Sessão da etapa 0 (MED0 §6.3) | Hoje, provavelmente nenhum no PK2 (sem regime cadastrado em 13/11). Risco no PK7, se tiver regime. **A RC-12 não teria efeito**, sem nenhum aviso | **Alta** (antes da RC-12 e da demo) |
+| **P44** | **[etapa 0]** O log da sessão sai **sem data e hora** no início das linhas: o `TimestampFormat` passado pelo `Start-IAApiComLog.ps1` não teve efeito, embora as outras variáveis tenham tido. Com `LogLevel:Default = Information`, o EF grava **cada comando SQL** (960 mil entradas, 702 MB em 87 min). O texto está na página de código do console (acentos trocados) | Confirmado em log; causa do horário ausente: hipótese | Sessão da etapa 0 (MED0 §1, §6.2) | Linha do tempo só pelo PERF_DIAG (sem ele, nenhuma); passo a do P27 incompleto; disco e custo de log; análise difícil | Média (barato; antes da próxima sessão longa) |
 
 ---
 
@@ -313,6 +330,13 @@
 - **Status:** a lentidão do Bridge sob carga está **confirmada em log**. O **efeito na detecção** continua **hipótese**: não medimos quanto a consulta de 24 h da IAApi demora sob carga, se ela estoura o timeout de 60 s, nem a idade das leituras na decisão. O replay não reproduz latência.
 - **Solução candidata:** medir com PERF_DIAG (`IAAPI_PERF_DIAGNOSTICS`, já existente) e depois avaliar o reuso do histórico entre etapas (experimento ainda não commitado) ou um cache incremental.
 - **[13/11] Evidência da IA real (P26):** entre 14:25 e 15:04 de 12/11, 9 avaliações de tags do PK2 falharam com "Tempo limite excedido ao consultar o Bridge" (timeout de 60 s da consulta de histórico, `BridgeHistoricoService.BuscarJson`), e às 15:13 a consulta em lote dos valores atuais também estourou. Essas leituras **não geraram decisão**; a falha aparece só como Warning no Event Viewer. O timeout sob carga deixou de ser só hipótese.
+- **[etapa 0] Medido com PERF_DIAG** (16/11, 15:19–16:46; `Docs/MEDICAO_ETAPA0.md` §3, §6; confirmado em log):
+  - **Cada predição faz 2 buscas de 24 h** (`HistoricalRequests = 2`): a da preparação e a da tendência pós-decisão. O `PredictionHistoryReuse` estava desligado.
+  - Antes do LiveMonitor, cada busca levou ~4,6 s (p95 de ~5,9 s; máx. de 9,1 s), quase tudo em `Bridge.HttpBuffered`. As duas somam **91 % do tempo da predição** (4,9 s + 4,7 s de 10,5 s).
+  - Cada resposta tem **1.436–1.439 pontos** (1 por minuto).
+  - **0 timeouts no monitor.**
+  - **Carga concorrente confirmada:** a partir de 16:27, o LiveMonitor pediu o histórico de 24 h das 12 tags (via `GET /api/tags/historico`, que busca 24 h para mostrar 2 h). Foram até **12 consultas simultâneas**: o proxy abandona a requisição em 12 s, mas o Bridge continua. Essas consultas levaram 36,6 s em média, com **4 timeouts de 60 s**. No mesmo período, as buscas do monitor subiram para ~22 s cada (máx. de 54,4 s), e o Bridge devolveu um HTTP 500 interno ("open operation … 00:00:03") para a TAG27. A ligação entre a carga e a lentidão é inferência forte, por tempo e mecanismo.
+  - É a mesma lentidão sob carga da exportação de 11/11, agora com a fonte da carga identificada.
 - **BACKLOG:** 6 e 4.
 
 ### P11. Ciclo sequencial
@@ -321,6 +345,11 @@
 - **Evidência:** confirmado no código (MAPA #1, #4b, §3, pontos L1–L7). **[13/11] Medido indiretamente na IA real (P26):** com 12 tags do PK2 e 1 do PK7, o ciclo do PK2 se repetiu a cada 5 a 18 min. Cada tag levou de 2 s a 110 s, e cada timeout custou 60 s.
 - **Causa no código:** `Services/MonitoramentoTagsService.cs : ExecuteAsync` (`Task.Delay(1 min)`); `Services/AnomalyDetection/Multivariate/MultivariateShadowRuntimeCoordinator.cs : ProcessarLeituraAsync`.
 - **Prioridade:** subiu de Média para **Alta** em 13/11 por causa do P26.
+- **[etapa 0] Confirmado em log** (16/11; `Docs/MEDICAO_ETAPA0.md` §2, §3):
+  - **Ciclo do PK2:** 131 s em média (94–162 s) antes do LiveMonitor, ou seja, lote de ~5,6 s + 12 tags × ~10,5 s; 306 s e ≥ 697 s com o LiveMonitor aberto.
+  - **Laço:** PK7 (~17 s) + PK2 + 60 s ≈ 208 s, o que bate com a mediana de 210 s entre inícios de ciclo.
+  - Em cada tag, o que não é Bridge soma **~0,9 s**; os detectores, ~4 ms.
+  - Para chegar a 1 min, sobram ≈ 3 s por tag para o histórico [inferência].
 - **BACKLOG:** 6.
 
 ### P12. Sem detector de valor congelado ou de falha de comunicação
@@ -382,6 +411,11 @@
   - **Idade na decisão:** de 0,2 min (ciclo rápido, primeira tag) a **17,2 min** (TAG33 no ciclo de 14:54, com 6 timeouts antes; P26). A resolução é de 1 min.
   - A hora gravada esconde esse atraso. Um placar da IA real com `data_hora` = processamento conta como atraso de detecção o tempo em que o dado ficou parado na fila.
   - **Prioridade:** subiu para Alta.
+- **[etapa 0] Idade medida pelo PERF_DIAG** (16/11; `Docs/MEDICAO_ETAPA0.md` §4; confirmado em log):
+  - O `ReadingAgeAtStartMs` veio nulo, como previsto no código (`ReadingKind=Unspecified`, sem fuso presumido). A idade foi calculada como `PredictionStartedUtc − (ReadingOriginal + 3 h)`, com hora local = UTC−3. A leitura tem resolução de 1 min, então a idade inclui de 0 a 60 s de truncamento.
+  - **PK2 na decisão:** média de 1,9 min; p50 de 1,7; **p95 de 3,2**; **máx. de 12,0 min**. Sem o LiveMonitor: p95 de 2,8 e máx. de 3,5. PK7: máx. de 1,4 min.
+  - No fim do lote, a idade é ≤ 1 min (o Bridge entrega o minuto corrente). O atraso vem da **fila sequencial**: a 1ª tag começa, em média, com 0,5 min; a 12ª, com 2,5 min.
+  - **Meta de p95 < 2 min não atingida.** A hora gravada no registro continua sendo a do processamento (o problema deste item não mudou).
 - **BACKLOG:** 5.
 
 ### P19. Entrada inválida vira "sem anomalia" em silêncio
@@ -514,6 +548,12 @@
     - Não há baseline comportamental nem contexto do PK2 no banco.
     - As 50 decisões foram reproduzidas offline.
 - **Solução candidata:** primeiro medir (PERF_DIAG, BACKLOG 6). Depois avaliar reuso ou cache incremental do histórico (P10) e processamento não sequencial (P11). Nada aprovado.
+- **[etapa 0] Medido com PERF_DIAG** (16/11, 15:19–16:46, preset 1; `Docs/MEDICAO_ETAPA0.md` §2, §8; confirmado em log):
+  - **Cadência por tag (PK2):** uma avaliação a cada **3,47 min** em média (p95 de 3,91; máx. de 4,14) antes do LiveMonitor (16:27); na sessão inteira, 3,8 / 4,1 / **16,2 min**.
+  - **14,6 avaliações por tag por hora; 248 de ~1.022 minutos-tag (24 %)**, todos com entrada válida (P31). Em 12/11, era ~10 min e ≈ 2 %.
+  - **0 timeouts no monitor.** 1 tag sem decisão: TAG27 às 16:40, HTTP 500 do próprio Bridge, que não abriu a conexão com o servidor de dados em 3 s.
+  - **Metas da 6.0** (60/h; ≥ 90 %): não atingidas. O limite é o ciclo sequencial (P11) com duas buscas de 24 h por tag (P10).
+  - **Fator externo novo:** com o LiveMonitor aberto (a partir de 16:27), cada tag levou ~46 s em vez de ~10,5 s, e o último ciclo teve 9 tags em 11,6 min.
 - **BACKLOG:** 6 (prioridade elevada em 13/11) e 4.
 
 ### P27. O monitor parou de gravar decisões sem nenhum aviso
@@ -547,6 +587,12 @@
   - **c.** Se parar: **antes de reiniciar**, (1) ver a última linha do log (um "Predição iniciada" sem "finalizada" indica a tag e a etapa); (2) ver se a janela do console está em modo "Selecionar"; (3) registrar o PID, o uso de CPU e o número de threads do processo; (4) se aprovado, tirar uma pilha com `dotnet-stack report -p <PID>` (exige instalar a ferramenta) para ver onde a thread do monitor está parada.
   - **d.** Conferir o Event Viewer (Aplicativo, `.NET Runtime`, `MonitoramentoTagsService`) da janela do teste.
   - **e.** Adiar as reinicializações do Windows Update durante testes longos: o de 12/11 foi interrompido pelo reinício das 02:01.
+- **[etapa 0] Não se repetiu** (16/11, 15:19–16:46; `Docs/MEDICAO_ETAPA0.md` §6.4; confirmado em log):
+  - IAApi subida pelo `Start-IAApiComLog.ps1`, com a saída em arquivo e sem janela de console (passo a);
+  - linhas PERF_DIAG contínuas, sem lacuna maior que 90 s; 20 ciclos completos do PK2 e o 21º interrompido pelo encerramento do processo (última decisão às 16:45:00; log cortado às 16:46:34);
+  - nenhum "Erro geral";
+  - **limitação do passo a:** o log saiu **sem data e hora no início das linhas** (o `TimestampFormat` não teve efeito; causa não investigada) e com **702 MB**, por causa do SQL do EF em Information e do LiveMonitor (§6.2 da medição). O tempo foi recuperado pelos campos do PERF_DIAG;
+  - 87 min sem parada **não descartam** as hipóteses (em 12/11, parou após ~50 min). Apenas não há sinal de parada sem a janela de console.
 - **BACKLOG** (atualizado em 13/11; nenhuma tarefa aprovada nem implementada):
   - **6:** execução já aprovada com o log em arquivo, com data e hora (passos a, b e d acima).
   - **17:** trocar `Console.WriteLine` por `ILogger` no caminho do monitor. Ataca a hipótese 1, mas não basta sozinha.
@@ -577,7 +623,10 @@
   - `http://localhost:5001` ficou num só lugar do código de produção: `BridgeServiceCollectionExtensions.BaseUrlPadrao`, usado também pelo `ObterBaseUrl` do histórico (mesmo valor; o histórico não mudou de forma).
   - **Antes de mudar** (sem expor o valor): `Bridge:BaseUrl` só está definida no `appsettings.json` e é **igual** ao endereço fixo antigo; não está no `appsettings.Development.json`, no `launchSettings.json` nem na variável `Bridge__BaseUrl` desta máquina. Com a configuração atual, as URLs não mudam.
   - A hipótese do `HttpClient` não descartado por escopo deixa de se aplicar a esses dois serviços. O histórico (`Singleton`) continua com o próprio cliente e com a troca por reflexão nos testes (passo 3 da tarefa 22, não feito).
-- **Falta (aceite (e) da tarefa 22):** na próxima sessão autorizada com o Bridge, conferir nas linhas `Bridge lote…` do log se os tempos e as contagens estão normais. Até lá, não afirmar que o comportamento no ambiente de teste ficou igual.
+- **[etapa 0] Aceite (e) da tarefa 22 conferido em 16/11** (`Docs/MEDICAO_ETAPA0.md` §7):
+  - 21 lotes do PK2 com 12 tags e 21 do PK7 com 1 tag, 0 falhas;
+  - mediana de 5,6 s e 4,4 s, na ordem da referência de 05/11;
+  - nenhuma linha de log do `IHttpClientFactory`.
 - **Impacto:** risco (testabilidade e configuração enganosa). **Prioridade:** ~~Média~~ resolvido no código (falta a conferência (e)).
 - **BACKLOG:** 22.
 
@@ -657,6 +706,12 @@
     - ligar numa sessão autorizada no simulador e medir a fração de entradas inválidas e de notas 0 (esperado ≈ 0);
     - o caso acima da tolerância continua sendo nota 0 silenciosa (opção (a) do BACKLOG 25);
     - risco de alarme falso com a B-02 ligada pelo perfil colapsado (P32) [hipótese].
+- **[etapa 0] Correção confirmada em campo** (16/11, 15:19–16:46, preset 1, chave ligada; `Docs/MEDICAO_ETAPA0.md` §5; confirmado em log):
+  - **270 de 270** predições com `HISTORICO RECORTADO NA LEITURA` e **0** `NÃO RECORTADO (TOLERÂNCIA)`. O maior avanço foi de 12 min, abaixo dos 30 de tolerância.
+  - **0 entradas inválidas.** Nota 0 em **2 de 269 (0,7 %)**, contra 76 % em 12/11. As duas são avaliações válidas: detectores aplicáveis, todos com nota 0 (TAG29 às 15:28, TAG27 às 16:20).
+  - Pontos removidos: 1 ponto (só o do próprio minuto) em 33 %; 2 em 42 %; 3 em 21 %; 4 a 12 em 4 %. **Sem o recorte, 181 de 270 (67 %) teriam ponto posterior à leitura e seriam recusadas** [inferência pelo validador].
+  - Minutos-tag avaliados: **24 %** (era ≈ 2 %). O limite agora é a cadência (P26), não a validação.
+  - Continuam pendentes a opção (a) (caso acima da tolerância, que não ocorreu) e os alarmes com a B-02 ligada (P32). As 9 anomalias da sessão **não foram avaliadas** contra o gabarito.
 - **BACKLOG:** **25 (prioridade 1)**, 6 (medir) e 4.
 
 ### P32. Perfil de produção do PK2 antigo, curto e colapsado nas tags da B-02
@@ -691,6 +746,79 @@
 - **Solução candidata para a detecção** (não testada):
   - Relação entre tags, por exemplo pressão (ou TAG24 − TAG46) × frequência e vazão (BACKLOG 13; multivariado, P06). Para o congelamento, o detector de valor parado (P12).
 - **BACKLOG:** não há item; relacionados: 3 (parte B), 10 e 13.
+
+### P42. O LiveMonitor sobrecarrega o Bridge e o banco [etapa 0]
+
+- **O que acontece.** O LiveMonitor, ferramenta de acompanhamento da demo, faz duas consultas periódicas que custam muito mais do que mostram:
+  - **Histórico:** para cada tag selecionada, chama `/monitor-api/history` → `GET /api/tags/historico/{cliente}/{tag}?horas=2` (`tools/IAApi.LiveMonitor/server/proxy.ts:33`). São 3 de cada vez (`mapLimited`, `src/polling.ts`), e uma nova rodada começa 15 s depois da anterior (`MONITOR_HISTORY_MS`, padrão 15.000).
+    - O `TagHistoricoController.BuscarHistorico` chama `IHistoricoService.BuscarHistorico`, que pede ao Bridge as **24 h** de `Bridge:HorasHistorico` (~1.437 pontos). Só depois filtra as 2 h.
+    - O proxy aborta a requisição após **12 s** (`proxy.ts:66-67`). Mas `BridgeHistoricoService.BuscarJson` faz `GetAsync(url).GetAwaiter().GetResult()` (linhas 229–230), bloqueante e sem cancelamento, com timeout de 60 s. Então a busca continua no Bridge enquanto o LiveMonitor já pediu a próxima.
+  - **Decisões:** a cada **2 s** (`MONITOR_POLL_MS`), chama `/monitor-api/decisions` → `GET /api/anomalias`.
+    - O `AnomaliaController.Listar` (linhas 85–116) carrega **todas** as `AnomaliasDetectadas` de **todos os clientes**, sem filtro nem paginação (~3.200 linhas em 16/11).
+    - Para cada linha, chama `FeedbackAnomaliaAnaliseService.GerarAnaliseFeedbacks`, ou seja, uma consulta ao SQLite (N+1).
+    - O filtro por cliente é feito no navegador (`src/domain.ts:11`).
+    - O `Export-AnomaliasIaReal.ps1` usa a mesma rota e também filtra localmente.
+- **Evidência** (log de 16/11, `Docs/MEDICAO_ETAPA0.md` §6.2; confirmado em log):
+  - A partir de 16:27:17 (primeira requisição HTTP da sessão), apareceram **212 buscas de 24 h ao Bridge fora das predições** (17–18 por tag do PK2): média de **36,6 s**; **até 12 simultâneas** (mediana de ~6); **4 timeouts de 60 s** (TAG31 e TAG33, de 16:41 a 16:44).
+  - No mesmo período, **~958 mil consultas de feedback** ao SQLite (~3.200 por chamada; só 270 são do monitor).
+  - **No monitor:**
+    - busca da preparação de 4,9 s → **21,9 s**; da tendência, de 4,7 s → **23,2 s** (o aumento está na espera do Bridge, `Bridge.HttpBuffered`);
+    - predição de 10,5 s → **45,8 s**; ciclo do PK2 de 131 s → **306 s** e **≥ 697 s**;
+    - idade máxima da leitura de 3,5 → **12,0 min**; lote do PK2 de 5,6 → 35,2 s;
+    - **HTTP 500 do Bridge** na TAG27 ("open operation … 00:00:03"), que ficou sem decisão.
+- **Status:** mecanismo **confirmado no código**; efeito **confirmado em log**, pela coincidência no tempo. A causalidade é **inferência forte**: não houve fase controlada com o LiveMonitor fechado depois de 16:27. **Hipóteses complementares:** fila de threads ocupada pelas chamadas síncronas abandonadas; disputa de disco pelo log (P44).
+- **Por que importa:**
+  - A ferramenta que mostra a IA na demo deixa a IA 4–5× mais lenta, e o que se vê na tela é uma IA degradada.
+  - As medições da tarefa 6 (6.0b, 6.1, 6.2) não são comparáveis se o LiveMonitor estiver aberto numa fase e fechado na outra.
+  - `GET /api/anomalias` também devolve decisões de todos os clientes; isso é exposição entre clientes, tratada com o P34.
+- **Enquanto não corrigido:** nas sessões de medição, deixar o LiveMonitor fechado ou registrar quando foi aberto. Rodar o export só no fim.
+- **Solução candidata** (nada aprovado; BACKLOG 34):
+  - histórico do controller só no período pedido;
+  - `GET /api/anomalias` sem N+1, com filtro opcional por cliente e limite;
+  - LiveMonitor com intervalo maior e sem abandonar buscas no Bridge.
+  - O contrato HTTP atual fica preservado quando os parâmetros novos não são enviados.
+- **BACKLOG:** **34** (prioridade alta, antes da demo); relacionados: 6 (6.0b–6.2), 19, 28, 30 e P34.
+
+### P43. Banco local sem a migration RC-5: o regime falha em toda predição [etapa 0]
+
+- **O que acontece.** A migration `20261113160248_RC5_AddTagRegimeComponente` (13/11) acrescenta a coluna `MapaEstados` em `TagsRegimesOperacionaisIa` e cria a tabela `TagsRegimesComponentesIa`.
+  - O banco local da IAApi (`ia_config.db`) não tem a coluna. A consulta do `OperationalRegimeBaselineProvider` (linhas 104–120) falha com `SQLite Error 1: 'no such column: t.MapaEstados'`.
+  - O provider captura a exceção e devolve "não aplicado", ou seja, o **baseline global**.
+  - O único sinal é o par de linhas `fail:` do EF no log. Não há Warning do provider nem nada no LiveMonitor.
+- **Evidência:**
+  - **Confirmado em log:** 270 de 270 predições (PK2 e PK7), em `Preparation.RegimeBaseline`, de 15:19 a 16:46 de 16/11.
+  - **Confirmado no código:** a migration existe. O projeto não chama `Migrate()`, `EnsureCreated()` nem `GetPendingMigrations()` em nenhum lugar fora dos testes, então o banco só muda com `dotnet ef database update` manual.
+  - **Não verificado** (exige abrir o banco, com aprovação): quais migrations estão aplicadas e se o PK7 tem regime cadastrado.
+- **Efeito na decisão:**
+  - **PK2:** provavelmente nenhum hoje. Em 13/11, o banco não tinha nenhuma linha em `TagsRegimesOperacionaisIa` (INV §3) [histórico a validar], e "sem configuração" também cai no global.
+  - **PK7:** se tiver regime cadastrado, está rodando com o baseline global desde que o código da RC-5 passou a ser usado [hipótese]. O `RegimeBaseline` do PK7 levou 321 ms em média, contra 50 ms do PK2, o que não prova nada sozinho.
+  - **RC-12:** com o banco assim, ligar o regime combinado no PK2 **não teria efeito, sem aviso**. O aceite da RC-12 (`RegimeKey` no diagnóstico) pegaria isso, mas só depois de gastar a sessão.
+  - **Testes e replay** usam bancos temporários ou em memória, criados pelo modelo atual. Por isso a suíte e o replay passam e não pegam este problema.
+- **Prioridade:** alta. Precisa ser resolvido antes da RC-12, da 6.4 e da demo.
+- **Solução candidata** (nada aprovado; BACKLOG 35):
+  - conferir o banco em só leitura;
+  - fazer cópia de segurança e aplicar a migration;
+  - na subida, avisar quando houver migration pendente, sem aplicar sozinho.
+- **BACKLOG:** **35** (prioridade alta, antes da RC-12); relacionados: RC-5, RC-8, RC-12, 6.4 e 19.
+
+### P44. Log da sessão sem horário e com o SQL do EF [etapa 0]
+
+- **O que acontece:**
+  - **Sem data e hora:** o `tools/Start-IAApiComLog.ps1` define `Logging__Console__FormatterOptions__TimestampFormat = "yyyy-MM-dd HH:mm:ss "` para o processo filho (linha 210). Mesmo assim, as linhas saíram sem data e hora (ex.: `info: Microsoft.Hosting.Lifetime[14]`).
+    - As outras variáveis, definidas do mesmo jeito, tiveram efeito: `HISTORICO RECORTADO` e PERF_DIAG aparecem.
+    - O `Program.cs` não configura o logging (provedores padrão).
+    - **Causa: hipótese, não investigada.**
+  - **Volume:** `LogLevel:Default = Information` (`appsettings.json` e `appsettings.Development.json`) inclui `Microsoft.EntityFrameworkCore.Database.Command`, que grava cada comando SQL com o texto. Foram **960.008** entradas do EF entre as ~974 mil do log, e **702 MB** em 87 min (~36 MB/min depois de 16:27, por causa do P42).
+  - **Codificação:** o arquivo está na página de código do console (cp850 nesta máquina). Acentos aparecem trocados (`Predi�ao`, `Conclu¡da` lido como latin-1).
+  - As linhas de `Console.WriteLine` (`HISTORICO RECORTADO`, `LIMPEZA DE HISTORICO`, interpretação) nunca tiveram horário (P27, tarefa 17).
+- **Evidência:** confirmado em log (`dados/logs/iaapi_20261116_151930.log`; `MEDICAO_ETAPA0.md` §1).
+- **Efeito:**
+  - A linha do tempo da sessão só pôde ser montada pelos campos UTC do PERF_DIAG. Sem PERF_DIAG, não haveria nenhuma.
+  - O passo a do P27 ("log em arquivo **com data e hora**") ficou incompleto, e o aceite da tarefa 6 ("tabela por ciclo com início") depende disso.
+  - Sessões longas (≥ 2 h, ou noturnas) podem gerar vários GB.
+  - Neste log, o custo de logging não apareceu no monitor (o "restante" dentro da predição ficou em ~40 ms), mas não foi isolado.
+- **Prioridade:** média. É barato e deve ser feito antes da próxima sessão longa.
+- **BACKLOG:** **36**; relacionados: 6, 17, 19 e P27.
 
 ### Problemas de segurança da auditoria B3.23 (P33 a P40)
 
@@ -938,6 +1066,10 @@ A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos 
 
 1. **Medir a latência real e garantir que o monitor fique de pé** (P10, P11, P26, P27 → BACKLOG **6**, **4**). Subiu do passo 4 em 13/11: a IA real avaliou cada tag só a cada ~10 min e parou sem aviso às 15:09. Sem isso, nenhum teste da IA real mede a detecção. Fazer numa sessão autorizada: PERF_DIAG, console gravado em arquivo com data e hora e vigia da última decisão (P27, "Como confirmar"). **[preset 3]** No mesmo teste, conferir o início do cenário pelos rótulos (P29), porque o "preset 3" de 12/11 não chegou a rodar. A idade da leitura já tem uma medida indireta: até 17,2 min (P18).
    - **[13/11, inventário] Antes de qualquer novo teste da IA real, tratar o P31.** Hoje ≈ 3/4 das decisões do PK2 são entrada inválida gravada como "normal". Sem isso, medir latência e cadência não basta para medir detecção. Precisa de proposta e aprovação. Nas análises, usar a nota × 20 (P30).
+   - **[etapa 0, 16/11] Antes da demo e das próximas sessões de medição:**
+     - corrigir o P42 (LiveMonitor sobrecarregando o Bridge e o banco → BACKLOG **34**) e o P43 (migration RC-5 ausente no banco local → BACKLOG **35**, também antes da RC-12);
+     - antes da próxima sessão longa, o P44 (log → BACKLOG **36**);
+     - depois, a 6.0b (reuso do histórico) e a 6.1 (`BACKLOG.md` 6.x).
 2. **Barato e só de proteção:** bloquear rótulos como tag de regime em produção (P14 → BACKLOG **11**). ~~Junto, fazer o inventário do banco do PK2.~~ **Inventário feito em 13/11 (`Docs/INVENTARIO_PK2.md`):** só TAG22–33 ativas, nenhum regime, contexto, comportamento ou modelo IF. Perfil de 30/10 colapsado na B-02 (P32): retreinar só com aprovação e período limpo (passo 5).
 3. **Ativar o regime recomendado no PK2, com aprovação:** TAG28/30/32 ← TAG43, TAG26 ← TAG45, TAG24 ← TAG46. Validado no replay: preset 1 245 → 41 alarmes; madrugada 1.282 → 660 (P02, P04, P05; RES §4). **[preset 6]** 325 → 223, e os alarmes falsos fora da falha caem de 175 para 27, mas surgem 56 minutos-tag com a B-02 sozinha depois do failover (P03; RES6 §2.3). A detecção da TAG29 não muda. Só configuração no banco, reversível.
 4. **Regime combinado para as bombas** (P03, P08 → BACKLOG **12**). É o que falta para a B-01, que ainda gera 566 alarmes de madrugada. Testar no replay antes de produção, com a mesma tabela da RES §4.
