@@ -11,6 +11,7 @@ using IAApi.Services.AnomalyDetection.Orchestration;
 using IAApi.Services.AnomalyDetection.Presentation;
 using IAApi.Services.AnomalyDetection.Runtime;
 using IAApi.Services.Diagnostics;
+using IAApi.Tests.Bridge;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -81,7 +82,7 @@ public sealed class PredictionHistoryReuseTests(ITestOutputHelper output)
     {
         var logger = new PerfTestLogger();
         var perf = new PerformanceDiagnostics("Development", "1", logger);
-        using var handler = new BridgeHandler();
+        using var handler = BridgeHandler();
         using var http = new HttpClient(handler);
         var bridge = CreateBridge(http, perf);
         await using var fixture = await Fixture.CreateAsync(bridge, enabled ? Enabled : null, perf);
@@ -474,17 +475,13 @@ public sealed class PredictionHistoryReuseTests(ITestOutputHelper output)
             CancellationToken cancellationToken = default) => Task.FromResult(new AnomalyInterpretationResult
             { Resumo = "Test", InterpretacaoTecnica = "Test", Severidade = "Normal", ModeloUtilizado = "Test" });
     }
-    private sealed class BridgeHandler : HttpMessageHandler
+    // Handler falso comum (IAApi.Tests/Bridge/FakeBridgeHandler.cs).
+    private static FakeBridgeHandler BridgeHandler() => new(request =>
     {
-        public int Calls { get; private set; }
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Calls++;
-            Assert.Equal("/historico?tagName=TAG-A&horas=24", request.RequestUri!.PathAndQuery);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                { Content = new StringContent(JsonSerializer.Serialize(Readings())) });
-        }
-    }
+        Assert.Equal("/historico?tagName=TAG-A&horas=24", request.RequestUri!.PathAndQuery);
+        return new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent(JsonSerializer.Serialize(Readings())) };
+    });
     private static BridgeHistoricoService CreateBridge(HttpClient http, PerformanceDiagnostics perf)
     {
         var bridge = new BridgeHistoricoService(new ConfigurationBuilder().AddInMemoryCollection(

@@ -7,10 +7,15 @@ using System.Text.Json;
 // retornado em objetos de resposta com valor numérico.
 public class BridgeValorAtualService
 {
-    private readonly HttpClient _httpClient = new()
+    private readonly HttpClient _httpClient;
+
+    // O HttpClient vem da DI (AddBridgeServices): endereço de Bridge:BaseUrl
+    // e timeout de 60 s. Nos testes, um handler falso evita qualquer conexão.
+    public BridgeValorAtualService(HttpClient httpClient)
     {
-        Timeout = TimeSpan.FromSeconds(60)
-    };
+        ArgumentNullException.ThrowIfNull(httpClient);
+        _httpClient = httpClient;
+    }
 
     // Busca os valores atuais das tags informadas e retorna uma lista
     // de respostas prontas para uso pela aplicação.
@@ -30,8 +35,9 @@ public class BridgeValorAtualService
             "application/json"
         );
 
+        // Caminho relativo ao BaseAddress (Bridge:BaseUrl).
         var response = await _httpClient.PostAsync(
-            "http://localhost:5001/valores-atuais",
+            "valores-atuais",
             content
         );
 

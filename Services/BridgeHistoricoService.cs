@@ -199,7 +199,8 @@ public class BridgeHistoricoService : IHistoricoService
     {
         var baseUrl =
             _configuration["Bridge:BaseUrl"]
-            ?? "http://localhost:5001";
+            ?? IAApi.Services.DependencyInjection
+                .BridgeServiceCollectionExtensions.BaseUrlPadrao;
 
         return baseUrl.TrimEnd('/');
     }

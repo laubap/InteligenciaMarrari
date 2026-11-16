@@ -13,6 +13,7 @@ using IAApi.Services.AnomalyDetection.Multivariate;
 using IAApi.Services.AnomalyDetection.Orchestration;
 using IAApi.Services.AnomalyDetection.Presentation;
 using IAApi.Services.AnomalyDetection.Runtime;
+using IAApi.Tests.Bridge;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.FileProviders;
@@ -1094,15 +1095,19 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
             runtimeDecision,
             multivariateDecisionService);
 
-        // O contrato atual depende da classe concreta BridgeValorAtualService,
-        // sem interface nem método virtual para um fake. A fronteira é segura
-        // neste cenário porque não há dependências cadastradas: o serviço real
-        // retorna antes de chamar BuscarValoresAtuais. Se esse fluxo mudar, a
-        // chamada tentará localhost e o teste falhará; esta fixture não deve
-        // ser entendida como cobertura do Bridge.
+        // Sem dependências cadastradas, AnaliseRelacionadasService retorna antes
+        // de chamar BuscarValoresAtuais. O handler falso falha se for chamado,
+        // e Calls = 0 é conferido depois da detecção (tarefa 22, P28): nenhuma
+        // conexão real. Esta fixture não deve ser entendida como cobertura do
+        // Bridge (ver IAApi.Tests/Bridge/BridgeServicesTests.cs).
         Assert.Empty(context.TagDependenciasIa.AsNoTracking().ToList());
+        var bridgeNaoChamado = FakeBridgeHandler.FailIfCalled();
+        using var bridgeHttp = new HttpClient(bridgeNaoChamado)
+        {
+            BaseAddress = new Uri("http://bridge.test/")
+        };
         var postDecision = new PredictionPostDecisionAnalysisService(
-            new AnaliseRelacionadasService(context, new BridgeValorAtualService()),
+            new AnaliseRelacionadasService(context, new BridgeValorAtualService(bridgeHttp)),
             new PredictionRiskAnalysisService(
                 new RiskScoreService(),
                 new ExplicacaoRiscoService()),
@@ -1138,6 +1143,7 @@ public sealed class IntelligenceLabBehaviorBaselineEndToEndTests
 
         var response = await service.Detectar(requestOverride ?? CreateRequest(history));
         var diagnostic = Assert.Single(buffer.Snapshot());
+        Assert.Equal(0, bridgeNaoChamado.Calls);
 
         return new PredictionRun(response, diagnostic);
     }

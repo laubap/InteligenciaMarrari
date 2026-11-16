@@ -10,6 +10,7 @@ using IAApi.Services.AnomalyDetection.BehaviorProfiles.Discovery;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.History;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Persistence;
 using IAApi.Services.AnomalyDetection.BehaviorProfiles.Runtime;
+using IAApi.Tests.Bridge;
 using Xunit.Abstractions;
 
 namespace IAApi.Tests;
@@ -143,7 +144,7 @@ public sealed class PerformanceDiagnosticsTests(ITestOutputHelper output)
         {
             var logger = new PerfTestLogger();
             var diagnostics = new PerformanceDiagnostics("Development", enabled ? "1" : null, logger);
-            var handler = new BridgeHandler(mode);
+            var handler = BridgeHandler(mode);
             using var http = new HttpClient(handler);
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             { ["Bridge:BaseUrl"] = "http://bridge.test", ["Bridge:HorasHistorico"] = "24" }).Build();
@@ -206,24 +207,20 @@ public sealed class PerformanceDiagnosticsTests(ITestOutputHelper output)
             => throw new NotSupportedException();
     }
 
-    private sealed class BridgeHandler(string mode) : HttpMessageHandler
+    // Handler falso comum (IAApi.Tests/Bridge/FakeBridgeHandler.cs).
+    private static FakeBridgeHandler BridgeHandler(string mode) => new(request =>
     {
-        public int Calls { get; private set; }
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        Assert.Equal("http://bridge.test/historico?tagName=C.T&horas=24", request.RequestUri!.AbsoluteUri);
+        if (mode == "timeout") throw new TaskCanceledException("timeout");
+        return new HttpResponseMessage(mode == "http-error" ? HttpStatusCode.BadGateway : HttpStatusCode.OK)
         {
-            Calls++;
-            Assert.Equal("http://bridge.test/historico?tagName=C.T&horas=24", request.RequestUri!.AbsoluteUri);
-            if (mode == "timeout") throw new TaskCanceledException("timeout");
-            return Task.FromResult(new HttpResponseMessage(mode == "http-error" ? HttpStatusCode.BadGateway : HttpStatusCode.OK)
-            {
-                Content = new StringContent(mode == "invalid-json" ? "invalid" : """
-                    [{"dataHora":"2026-11-05T10:00:00Z","valor":1},
-                     {"dataHora":"2026-11-05T10:00:00Z","valor":2},
-                     {"dataHora":"2026-11-05T10:01:00Z","valor":"NaN"}]
-                    """)
-            });
-        }
-    }
+            Content = new StringContent(mode == "invalid-json" ? "invalid" : """
+                [{"dataHora":"2026-11-05T10:00:00Z","valor":1},
+                 {"dataHora":"2026-11-05T10:00:00Z","valor":2},
+                 {"dataHora":"2026-11-05T10:01:00Z","valor":"NaN"}]
+                """)
+        };
+    });
 }
 
 internal sealed class PerfTestLogger : ILogger<PerformanceDiagnostics>

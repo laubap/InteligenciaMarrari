@@ -6,7 +6,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 > **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. **Atualização 2026-11-13 (inventário do PK2, tarefa 2 concluída):** a nova tarefa **25 (P31, entrada inválida sistemática) passa a ser PRIORIDADE 1, antes de qualquer novo teste da IA real**. Em 12/11, 38 de 50 decisões não chegaram aos detectores; sem corrigir isso, um teste da IA real não mede detecção. A tarefa 6 continua necessária e vem logo depois. Entraram também a 26 (P30, escala da nota) e a 27 (P32, retreino do perfil). Depois, a 28 (P30 no LiveMonitor, para a demo; só planejada). Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
 
-> **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). ~~Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação~~ **feito em 16/11: resultado idêntico; referência das `rc0_*` regenerada; 0 diferenças em 12 execuções** (tarefa 30, "Pendências"). **Ainda em 16/11:** pela tarefa **31**, foram corrigidos P35 a P38, sem commit. No P35, o `clienteId` é opcional, e sem ele a resposta é `400` só quando a tag existe em mais de um cliente (opção (a)). **Ainda em 16/11:** a tarefa 6 ganhou as subtarefas **6.0 a 6.5** (janela de histórico incremental e cadência de 1 min, ligadas às tarefas 22 e 25). O PERF_DIAG da 6.0 foi aprovado, e o `Start-IAApiComLog.ps1` ganhou `-PerfDiag` (sem commit). De 6.1 a 6.5, nada está aprovado.
+> **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). ~~Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação~~ **feito em 16/11: resultado idêntico; referência das `rc0_*` regenerada; 0 diferenças em 12 execuções** (tarefa 30, "Pendências"). **Ainda em 16/11:** pela tarefa **31**, foram corrigidos P35 a P38, sem commit. No P35, o `clienteId` é opcional, e sem ele a resposta é `400` só quando a tag existe em mais de um cliente (opção (a)). **Ainda em 16/11:** a tarefa 6 ganhou as subtarefas **6.0 a 6.5** (janela de histórico incremental e cadência de 1 min, ligadas às tarefas 22 e 25). O PERF_DIAG da 6.0 foi aprovado, e o `Start-IAApiComLog.ps1` ganhou `-PerfDiag` (sem commit). De 6.1 a 6.5, nada está aprovado. **Ainda em 16/11:** a tarefa **22** (P28) foi feita nos passos 1 e 2, sem commit. Os serviços de valor atual e de tags recebem o `HttpClient` pela DI, com `Bridge:BaseUrl`; os testes são offline, com `FakeBridgeHandler`; suíte com 1079/1079 e replay com 0 diferenças. Isso destrava os testes offline do laço (19, passo 2; 18; 6.3). Falta o aceite (e), com o Bridge.
 
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
@@ -200,11 +200,11 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Rollback:** a chave.
 - **Risco:** médio.
 
-##### 6.3 Cadência fixa de 1 minuto no laço — **não aprovada; o teste offline depende da tarefa 22**
+##### 6.3 Cadência fixa de 1 minuto no laço — **não aprovada; o teste offline dependia da tarefa 22 (feita em 16/11, passos 1 e 2)**
 - **O que muda:** `PeriodicTimer` de 1 min (valor aprovado) no lugar do `Task.Delay` depois do ciclo. Um ciclo que passa do minuto **pula o tique**, sem acumular, e registra Warning (junta com a tarefa 20).
 - **Chave:** `Monitoramento:CadenciaFixa` (padrão `false`).
 - **Arquivos:** `MonitoramentoTagsService.cs`.
-- **Teste offline:** Bridge falso lento, para forçar o tique pulado. Isso só é possível depois da tarefa 22 (P28).
+- **Teste offline:** Bridge falso lento, para forçar o tique pulado. Isso só é possível depois da tarefa 22 (P28). **16/11:** a 22 foi feita. O `FakeBridgeHandler` entra pela DI (ver tarefa 22, "Destrava").
 - **Rollback:** a chave.
 - **Risco:** médio. Muda a cadência, não a lógica da decisão.
 
@@ -419,10 +419,10 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - teste do laço com SQLite em memória **sem nenhuma tag ativa**: o ciclo é concluído, `Aguardando` aparece e, ao cancelar, `Encerrado`;
   - o mesmo teste com um contexto que falha: `UltimoErro.Origem = Geral`;
   - replay RC-2 com 0 diferenças. O replay chama `Detectar` direto, sem passar pelo laço (confirmado no código). Isso só confirma que o caminho da decisão não mudou.
-- **Limite de teste (confirmado no código):** `BridgeValorAtualService` cria o próprio `HttpClient`, aponta fixo para `http://localhost:5001` e não tem interface nem métodos virtuais.
+- **Limite de teste (confirmado no código em 13/11; superado pela tarefa 22 em 16/11):** `BridgeValorAtualService` cria o próprio `HttpClient`, aponta fixo para `http://localhost:5001` e não tem interface nem métodos virtuais.
   - Um teste automático do laço **com tags** chamaria o Bridge real, se estivesse ligado. Isso viola o isolamento do `CLAUDE.md`.
   - Os caminhos de lote e de tag ficam cobertos pelos testes do passo 1 e pela conferência do passo 5.
-  - O ponto de substituição no Bridge é a **tarefa 22** (P28). Fazê-la antes deste passo permite testar o laço com tags e um handler falso. Sem ela, a alternativa seria trocar o `_httpClient` por reflexão, como os testes do histórico já fazem. Não é recomendada: o contorno é frágil.
+  - O ponto de substituição no Bridge é a **tarefa 22** (P28), **feita em 16/11 (passos 1 e 2)**. O laço já pode ser testado com tags e com o `FakeBridgeHandler` pela DI. Sem ela, a alternativa seria trocar o `_httpClient` por reflexão, como os testes do histórico já fazem. Não é recomendada: o contorno é frágil.
 
 **Passo 3 — Endpoint de leitura.** Esforço: P. Risco: baixo.
 - Novo `Controllers/MonitoramentoStatusController.cs`: `GET /api/monitoramento/status?clienteId=` com `Cache-Control: no-store`. Rota nova; nenhum contrato existente muda.
@@ -584,9 +584,35 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
 
 ---
 
-*Item 22 acrescentado em 2026-11-13, a partir do P28 (levantamento da tarefa 19). Não aprovado; nada implementado.*
+*Item 22 acrescentado em 2026-11-13, a partir do P28 (levantamento da tarefa 19). Passos 1 e 2 feitos em 2026-11-16, a pedido da responsável, sem commit; passo 3 não aprovado.*
 
-### 22. (Robustez/testes) Endereço do Bridge pela configuração e `HttpClient` substituível nos serviços do Bridge
+### 22. (Robustez/testes) Endereço do Bridge pela configuração e `HttpClient` substituível nos serviços do Bridge — ✅ **PASSOS 1 E 2 CONCLUÍDOS (2026-11-16, sem commit)**; passo 3 não feito; aceite (e) pendente
+- **Resultado (16/11):**
+  - **Conferência antes de mudar** (sem expor o valor): `Bridge:BaseUrl` só está definida no `appsettings.json` e é **igual** a `http://localhost:5001`, também sem `/` no fim. Não aparece no `appsettings.Development.json` nem no `Properties/launchSettings.json`, e a variável `Bridge__BaseUrl` não está definida nesta máquina (processo, usuário e máquina). Com a configuração atual, as URLs não mudam.
+  - **Produção:**
+    - `Services/DependencyInjection/BridgeServiceCollectionExtensions.cs`: `AddHttpClient<BridgeTagsService>` e `AddHttpClient<BridgeValorAtualService>` no lugar dos `AddScoped`, com a mesma assinatura de `AddBridgeServices`. `BaseAddress` vem de `ObterBaseAddress(IConfiguration)`: `Bridge:BaseUrl` normalizada com `/` no fim; chave ausente ou vazia usa `BaseUrlPadrao`; endereço que não seja http(s) absoluto gera `InvalidOperationException`, sem o valor na mensagem. Timeouts `TimeoutValorAtual` = 60 s e `TimeoutTags` = 100 s.
+    - **`RemoveAllLoggers()` nos dois clientes** (decisão desta implementação, não estava na proposta): com `LogLevel:Default = Information`, o `IHttpClientFactory` gravaria 4 linhas por requisição no log do monitor. Sem elas, o log fica igual ao de antes.
+    - `BridgeValorAtualService` e `BridgeTagsService`: construtor com `HttpClient` e caminhos relativos `valores-atuais` e `tags?cliente={clienteId}`, com a mesma codificação. Corpo, conversão e tratamento de erro não mudaram.
+    - `BridgeHistoricoService.ObterBaseUrl`: o literal virou `BridgeServiceCollectionExtensions.BaseUrlPadrao`, com o mesmo valor, para cumprir o aceite (d). Nada mais mudou no histórico.
+    - **Vida útil:** `Transient`. Os consumidores (`CurrentValuePredictionService`, `AnaliseRelacionadasService`, `ProcessoInteligenciaService`, `EquipamentoInteligenciaService`, controllers e o escopo do `MonitoramentoTagsService`) são `Scoped` ou resolvidos dentro de escopo (confirmado no código).
+  - **Testes:**
+    - **Handler comum** `IAApi.Tests/Bridge/FakeBridgeHandler.cs` (conta e registra as chamadas, com `Json(...)` e `FailIfCalled()`). Ele substitui os dois `BridgeHandler` privados de `PerformanceDiagnosticsTests` e `PredictionHistoryReuseTests`, que viraram fábricas com as mesmas asserções e respostas. A reflexão no `_httpClient` do histórico continua, porque é o passo 3.
+    - **`IAApi.Tests/Bridge/BridgeServicesTests.cs` (29 testes):**
+      - URL final com e sem `/` no fim, com caminho, sem a chave e com a chave vazia;
+      - URL igual à do endereço fixo antigo, inclusive para `clienteId` com espaço, `&`, acento, `/` e `%`;
+      - corpo e `Content-Type` do `POST`, conversão da resposta (número, texto, `NaN`, vazio, `null`, inválido, ausente) e erro HTTP;
+      - `BaseAddress` e `Timeout` pelo `IHttpClientFactory`, vida útil (`Transient`/`Singleton`) e endereço inválido;
+      - nenhum log do factory, com um cliente de controle que prova que a captura funciona.
+    - `IntelligenceLabBehaviorBaselineEndToEndTests`: `BridgeValorAtualService` com `FakeBridgeHandler.FailIfCalled()` e `Calls = 0` conferido depois de cada detecção.
+    - **Mutações** (temporárias, com o arquivo restaurado e conferido por `cmp`): sem `RemoveAllLoggers`, 1 teste falha; sem a `/` no fim, 3 falham; com o endereço fixo de volta, 9 falham.
+  - **Aceite:**
+    - **(a)** ✅ 29/29 novos, offline, e relacionados 124/124 (Bridge, PERF_DIAG, reaproveitamento do histórico, E2E do IntelligenceLab, `HistoricoCausal`, `Monitoring`);
+    - **(b)** ✅ suíte completa **1079/1079**. O isolamento foi conferido antes: bancos só temporários ou em memória, e nenhum teste com endereço do Bridge real;
+    - **(c)** ✅ `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal` (`dados/rc2_rodadas/20261116_144938` e `20261116_145514`);
+    - **(d)** ✅ `localhost:5001` aparece em um único lugar do código de produção (`BaseUrlPadrao`);
+    - **(e)** ⏳ pendente: conferir as linhas `Bridge lote…` na próxima sessão autorizada com o Bridge. Até lá, não afirmar que o comportamento no ambiente de teste ficou igual.
+  - **Destrava:** o teste offline do laço do monitor com tags (tarefa 19, passo 2), o aceite da tarefa 18 e o teste offline da 6.3. Basta `services.AddHttpClient(nameof(BridgeValorAtualService)).ConfigurePrimaryHttpMessageHandler(...)` com o `FakeBridgeHandler`, como em `BridgeServicesTests`.
+  - **Rollback:** reverter os 4 arquivos de produção e os 3 de teste, e apagar `IAApi.Tests/Bridge/`. Não há configuração nova nem migration.
 - **Problema (P28, confirmado no código):**
   - `BridgeValorAtualService` e `BridgeTagsService` têm `http://localhost:5001` fixo no código e criam o próprio `HttpClient`. Só o `BridgeHistoricoService` lê `Bridge:BaseUrl`.
   - Mudar a chave muda só o histórico, sem aviso.
