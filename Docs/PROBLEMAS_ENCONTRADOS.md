@@ -678,32 +678,67 @@
 - **O que acontece** (confirmado no código): `Controllers/TagRelacoesController.cs:23-43` busca `ProcessoTagsIa` e `EquipamentoTagsIa` só por `TagName`, embora as duas tabelas tenham `ClienteId` (`Models/ProcessoTagIa.cs:12`, `Models/EquipamentoTagIa.cs:13`).
 - **Risco em uma frase:** tags com o mesmo nome em clientes diferentes (por exemplo, `TAG24`) fazem a resposta misturar processos e equipamentos de outro cliente.
 - **Correção mínima proposta:** receber `clienteId` (rota ou query) e filtrar `x.ClienteId == clienteId` nas duas consultas. Muda o contrato HTTP (parâmetro novo obrigatório): conferir os consumidores antes. **Esforço: P.**
-- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-03.
-- **BACKLOG:** não há item.
+- **Correção aplicada (16/11, pedida pela responsável, sem commit; BACKLOG 31), na forma aditiva:**
+  - **Consumidores conferidos:** nada no repositório chama `GET /api/tags/{tagName}/relacoes` (LiveMonitor, ferramentas e `IAApi.http`). Mesmo assim, a pedido da responsável, a mudança no contrato é **aditiva**: parâmetro **opcional** `?clienteId=…`.
+  - **Com `clienteId`:** as duas consultas filtram `x.ClienteId == clienteId`. Um cliente sem relações para a tag recebe as listas vazias.
+  - **Sem `clienteId`** (ou com `?clienteId=` vazio, que o ASP.NET entrega como nulo): a resposta é **a mesma de antes**, com os mesmos campos e as relações de todos os clientes.
+  - Testes (primeira etapa): `IAApi.Tests/Security/ClienteIsolamentoTests.cs`, 4 casos `P35_*`. Os 3 com `clienteId` **falhavam antes**: com o HEAD não compilavam (o parâmetro não existia), e com o parâmetro acrescentado mas ignorado falhavam por misturar C1 e C2. Depois da correção, passam. O 4º confere que, sem `clienteId`, a resposta continua igual à anterior e passa antes e depois.
+  - **Rollback:** reverter `Controllers/TagRelacoesController.cs`.
+- ~~**Falta:** sem `clienteId`, a resposta continua misturando clientes.~~ **Fechado pela opção (a), aprovada pela responsável em 16/11 (sem commit; BACKLOG 31):**
+  - Sem `clienteId`, o controller conta os clientes distintos da tag em `ProcessoTagsIa` e `EquipamentoTagsIa`, **juntas**: processo de C1 e equipamento de C2 também contam como dois clientes.
+  - **Mais de um cliente:** `400` com `{ "erro": "A tag existe em mais de um cliente. Informe o cliente em ?clienteId=." }`. Não devolve nenhuma relação e não cita os clientes.
+  - **Um cliente só, ou nenhuma relação:** resposta **igual à de antes**, com os mesmos campos e `200`.
+  - **Com `clienteId`:** sem mudança em relação à correção anterior (filtra; nunca dá `400` por ambiguidade).
+  - **Mudança de contrato:** só o caso que antes misturava clientes passa a ser `400`. Nada no repositório chama o endpoint.
+  - Testes: `ClienteIsolamentoTests.cs`, agora com 8 casos `P35_*`. O teste anterior "sem `clienteId`, resposta igual" (dois clientes) deu lugar a dois de `400`: tag nos dois clientes, e processo de um com equipamento de outro. Os dois **falhavam antes** (o código devolvia `200` com a mistura) e passam depois. Os 3 de compatibilidade sem `clienteId` (um cliente só, processo e equipamento do mesmo cliente, tag sem relações) e os 3 com `clienteId` passam antes e depois.
+- **Limite:** sem autenticação (P34), o `clienteId` delimita o escopo da resposta, mas **não é controle de acesso**.
+- **Status:** ~~corrigido em parte~~ **corrigido no código** (testes unitários; a API não foi iniciada). **Prioridade:** resolvido. **Origem:** B323-03.
+- **BACKLOG:** 31.
 
 ### P36. Vínculo equipamento ↔ tag sem conferir o cliente (B323-04)
 
 - **O que acontece** (confirmado no código): `Controllers/EquipamentoController.cs:72-73` busca o equipamento só pelo ID; `:103` grava o vínculo com `request.ClienteId`, sem comparar com `equipamento.ClienteId`.
 - **Risco em uma frase:** um pedido pode ligar a tag de um cliente ao equipamento de outro, e o vínculo fica gravado com um cliente que não é o dono do equipamento.
 - **Correção mínima proposta:** recusar com `400` quando `request.ClienteId != equipamento.ClienteId` (ou gravar sempre o cliente do equipamento). **Esforço: P.**
-- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-04.
-- **BACKLOG:** não há item.
+- **Correção aplicada (16/11, sem commit; BACKLOG 31):** primeira opção, o `400`.
+  - Logo depois de encontrar o equipamento, `VincularTag` responde `400` (`"O cliente informado não é o cliente do equipamento."`) quando `request.ClienteId` é diferente de `equipamento.ClienteId`. A comparação é exata, como no resto do código.
+  - A checagem vale **para criar e para atualizar** um vínculo existente: antes, a atualização também não conferia o cliente.
+  - **Mudança de comportamento:** um pedido com `ClienteId` vazio, ou com o cliente errado, que antes gravava o vínculo com esse cliente, agora recebe `400`. Nada no repositório chama esse endpoint. Equipamento inexistente continua `404`.
+  - Testes: `ClienteIsolamentoTests.cs`, 6 casos `P36_*`. Os 3 de recusa (cliente diferente, cliente vazio e atualização com cliente diferente, que não altera o vínculo) **falhavam antes** e passam depois. Os 3 de compatibilidade (criar e atualizar com o mesmo cliente, equipamento inexistente) passam antes e depois.
+  - **Rollback:** reverter `Controllers/EquipamentoController.cs`.
+- **Não corrigido aqui:** vínculos com cliente errado já gravados no banco não foram procurados nem alterados.
+- **Status:** ~~confirmado no código~~ **corrigido no código** (testes unitários; a API não foi iniciada). **Prioridade:** resolvido. **Origem:** B323-04.
+- **BACKLOG:** 31.
 
 ### P37. Vínculo processo ↔ equipamento sem conferir o cliente (B323-05)
 
 - **O que acontece** (confirmado no código): `Controllers/ProcessoEquipamentoController.cs:24-44` confere só se o processo e o equipamento existem. `ProcessoEquipamentoIa` não tem `ClienteId` (`Models/ProcoessoEquipamentoIa.cs`); `ProcessoIa` e `EquipamentoIa` têm, mas não são comparados.
 - **Risco em uma frase:** o processo de um cliente pode ficar ligado ao equipamento de outro.
 - **Correção mínima proposta:** recusar com `400` quando `processo.ClienteId != equipamento.ClienteId`. **Esforço: P.**
-- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-05.
-- **BACKLOG:** não há item.
+- **Correção aplicada (16/11, sem commit; BACKLOG 31):**
+  - Depois de encontrar os dois, `Vincular` responde `400` (`"Processo e equipamento são de clientes diferentes."`) quando `processo.ClienteId` é diferente de `equipamento.ClienteId`, antes de procurar vínculo repetido.
+  - Processo ou equipamento inexistente continua `404`, e vínculo repetido continua `400` com a mesma mensagem. A tabela `ProcessoEquipamentosIa` não ganhou coluna.
+  - Testes: `ClienteIsolamentoTests.cs`, 3 casos `P37_*`. O de clientes diferentes **falhava antes** e passa depois. Os de mesmo cliente e processo inexistente passam antes e depois.
+  - **Rollback:** reverter `Controllers/ProcessoEquipamentoController.cs`.
+- **Não corrigido aqui:** vínculos entre clientes que já estejam no banco não foram procurados.
+- **Status:** ~~confirmado no código~~ **corrigido no código** (testes unitários; a API não foi iniciada). **Prioridade:** resolvido. **Origem:** B323-05.
+- **BACKLOG:** 31.
 
 ### P38. Feedback de anomalia aceita motivo de outro cliente (B323-06)
 
 - **O que acontece** (confirmado no código): `Controllers/FeedbackAnomaliaController.cs:34-35` confere só `x.Id == request.MotivoAnomaliaIAId`. `MotivoAnomaliaIA` tem `ClienteId` e `Ativo` (`Models/MotivoAnomaliaIA.cs:5`, `:10`), e nenhum dos dois é conferido.
 - **Risco em uma frase:** o feedback de uma anomalia pode citar o motivo de falha de outro cliente, ou um motivo desativado, e misturar a taxonomia de falhas entre clientes.
 - **Correção mínima proposta:** acrescentar `&& x.ClienteId == anomalia.ClienteId && x.Ativo` na mesma consulta. **Esforço: P.**
-- **Status:** confirmado no código. **Prioridade:** Média. **Origem:** B323-06.
-- **BACKLOG:** não há item.
+- **Correção aplicada (16/11, sem commit; BACKLOG 31):**
+  - A consulta passou a ser `x.Id == request.MotivoAnomaliaIAId && x.ClienteId == anomalia.ClienteId && x.Ativo`.
+  - Motivo de outro cliente ou desativado recebe o **mesmo `400`** e a **mesma mensagem** de motivo inexistente (`"O tipo de falha informado não existe."`), para não revelar que o motivo existe em outro cliente.
+  - Nesse caso, nenhum feedback é gravado, e o status da anomalia **não muda** (continua `Pendente`).
+  - Testes: 4 casos `P38_*` acrescentados a `IAApi.Tests/FeedbackAnomaliaConsistencyTests.cs`, o arquivo que já testava esse controller. Os 2 de recusa (outro cliente, inativo) **falhavam antes** e passam depois. O de motivo inexistente e o de motivo válido (grava e muda o status para `Confirmada`) passam antes e depois.
+  - **Não muda decisão de anomalia:** o feedback é posterior à detecção. O que muda é só a recusa de um feedback inconsistente, e com ela a troca de status (`Confirmada`/`Descartada`) que esse feedback faria.
+  - **Rollback:** reverter `Controllers/FeedbackAnomaliaController.cs`.
+- **Não corrigido aqui:** feedbacks já gravados com motivo de outro cliente não foram procurados.
+- **Status:** ~~confirmado no código~~ **corrigido no código** (testes unitários; a API não foi iniciada). **Prioridade:** resolvido. **Origem:** B323-06.
+- **BACKLOG:** 31.
 
 ### P39. Resposta da LLM, corpo de erro e stack trace em log e na resposta HTTP (B323-17)
 

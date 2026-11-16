@@ -31,8 +31,14 @@ public class FeedbackAnomaliaController : ControllerBase
             });
         }
 
+        // P38: o motivo tem de ser do cliente da anomalia e estar ativo.
+        // A mensagem de erro é a mesma de "não existe", para não revelar
+        // motivos de outro cliente.
         var motivoExiste = await _context.MotivosAnomaliaIA
-            .AnyAsync(x => x.Id == request.MotivoAnomaliaIAId);
+            .AnyAsync(x =>
+                x.Id == request.MotivoAnomaliaIAId &&
+                x.ClienteId == anomalia.ClienteId &&
+                x.Ativo);
 
         if (!motivoExiste)
         {

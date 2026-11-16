@@ -6,7 +6,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 
 > **Atualização 2026-11-13 (IA real no preset 3; `PROBLEMAS_ENCONTRADOS.md` P26 e P27):** a tarefa **6 (latência) passou a ser a prioridade 1**. Entraram as tarefas de robustez para a demo **17 a 20**, nenhuma implementada. **Atualização 2026-11-13 (inventário do PK2, tarefa 2 concluída):** a nova tarefa **25 (P31, entrada inválida sistemática) passa a ser PRIORIDADE 1, antes de qualquer novo teste da IA real**. Em 12/11, 38 de 50 decisões não chegaram aos detectores; sem corrigir isso, um teste da IA real não mede detecção. A tarefa 6 continua necessária e vem logo depois. Entraram também a 26 (P30, escala da nota) e a 27 (P32, retreino do perfil). Depois, a 28 (P30 no LiveMonitor, para a demo; só planejada). Para os próximos testes foi aprovado só subir a IAApi com a saída gravada em arquivo com data e hora (tarefa 6, "Execução aprovada"); `dotnet-stack` ainda não.
 
-> **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação (tarefa 30, "Pendências").
+> **Atualização 2026-11-16:** entrou a tarefa **29** (conferência, só leitura, dos 30 achados da auditoria B3.23). A **fase A (segurança) tem prioridade alta e vem antes de qualquer demo para fora da equipe**. Não altera a prioridade 1 (tarefa 25) para os testes internos. **Mais tarde em 16/11:** fase A da 29 concluída (P33 a P40). Pela tarefa **30**, foram corrigidos P33 e parte de P39, e P34 foi mitigado para a demo (sem commit). Ficou pendente conferir e regenerar a referência `rc0_*` do Compare-Replay depois da exportação (tarefa 30, "Pendências"). **Ainda em 16/11:** pela tarefa **31**, foram corrigidos P35 a P38, sem commit. No P35, o `clienteId` é opcional, e sem ele a resposta é `400` só quando a tag existe em mais de um cliente (opção (a)).
 
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
@@ -681,7 +681,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
 
 ### 29. (Conferência, só leitura) Os 30 achados da auditoria B3.23 contra o código atual — **segurança (fase A) = PRIORIDADE ALTA: antes de qualquer demo para fora da equipe**
 - **Andamento:** 🟡 **fase A (segurança) ✅ concluída em 16/11; fases B e C ⏳ pendentes.**
-  - **Resumo da fase A:** os 8 achados **continuam presentes** (o B323-23 em parte). Viraram **P33 a P40** no `PROBLEMAS_ENCONTRADOS.md`, cada um com a correção mínima proposta e o esforço. **Antes de qualquer demo para fora da equipe, tratar pelo menos P33 (`/api/dev/reset`) e P34 (sem autenticação)**; a mitigação de P34 para a demo é manter a API só em `localhost` (esforço P). **Atualização:** P33 corrigido, P34 mitigado e P39 corrigido em parte pela **tarefa 30** (16/11, sem commit). P35 a P38, P40 e o resto de P34/P39 continuam abertos.
+  - **Resumo da fase A:** os 8 achados **continuam presentes** (o B323-23 em parte). Viraram **P33 a P40** no `PROBLEMAS_ENCONTRADOS.md`, cada um com a correção mínima proposta e o esforço. **Antes de qualquer demo para fora da equipe, tratar pelo menos P33 (`/api/dev/reset`) e P34 (sem autenticação)**; a mitigação de P34 para a demo é manter a API só em `localhost` (esforço P). **Atualização:** P33 corrigido, P34 mitigado e P39 corrigido em parte pela **tarefa 30** (16/11, sem commit). ~~P35 a P38~~, P40 e o resto de P34/P39 continuam abertos. **Atualização:** P35 a P38 corrigidos pela **tarefa 31** (16/11, sem commit).
   - **Como foi feito:** leitura do código no HEAD `05c64c3`; a API não foi iniciada e nenhum endpoint foi chamado. Para o B323-23, a responsável **autorizou** `dotnet list package --vulnerable --include-transitive` (13 projetos) e `npm audit` no LiveMonitor; ambos só consultam, nada foi instalado nem alterado.
 
   | Achado | Situação | Evidência (HEAD `05c64c3`) | Nível | Destino |
@@ -826,6 +826,50 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
       - **6 execuções originais de novo, referência `d89eb0c`:**
         - `-File`, lista como texto: **0 diferenças em 6**, código 0 (`dados/rc2_rodadas/t30b_file`);
         - `-Command`, lista como array: **0 diferenças em 6**, código 0 (`dados/rc2_rodadas/t30b_command`).
+
+### 31. (Segurança, isolamento entre clientes) Correções mínimas de P35 a P38 — ✅ **CONCLUÍDA (2026-11-16, sem commit; P35 completado pela opção (a))**
+- **Origem:** tarefa 29, fase A. **Pedida pela responsável em 16/11:** a correção mínima proposta em cada um, com testes que falham antes e passam depois. No P35, a mudança no contrato HTTP tinha de ser aditiva ou compatível. Sem mudar nenhuma decisão de anomalia; sem commit.
+- **Consumidores conferidos antes:** nada no repositório (LiveMonitor, `tools/`, `IAApi.http`, serviços) chama os 4 endpoints. Os serviços do runtime (`ProcessoAnaliseService`, `FeedbackAnomaliaAnaliseService`) só **leem** essas tabelas, e essas leituras não mudaram.
+- **Arquivos alterados:**
+  - **P35:** `Controllers/TagRelacoesController.cs`: parâmetro **opcional** `?clienteId=`. Com ele, filtra `ClienteId` nas duas consultas. Sem ele, a resposta é a de antes, com o mesmo corpo e os mesmos campos, **exceto** quando a tag existe em mais de um cliente: aí responde `400` (opção (a), ver o complemento abaixo).
+  - **P36:** `Controllers/EquipamentoController.cs` (`VincularTag`): `400` quando `request.ClienteId` difere do cliente do equipamento, ao criar e ao atualizar.
+  - **P37:** `Controllers/ProcessoEquipamentoController.cs`: `400` quando o processo e o equipamento são de clientes diferentes.
+  - **P38:** `Controllers/FeedbackAnomaliaController.cs`: o motivo tem de ser do cliente da anomalia e estar ativo. A resposta de recusa é igual à de motivo inexistente.
+  - **Testes:**
+    - `IAApi.Tests/Security/ClienteIsolamentoTests.cs` (**novo**, 13 casos de P35 a P37). Não havia teste desses 3 controllers.
+    - `IAApi.Tests/FeedbackAnomaliaConsistencyTests.cs` (**estendido**, +4 casos de P38; já testava esse controller).
+- **Efeito na detecção:** nenhum. Nenhum caminho de leitura do runtime mudou; só passaram a ser recusadas gravações inconsistentes, e os dados já gravados não foram tocados. O feedback (P38) é posterior à decisão. O replay confirma (abaixo).
+- **Mudanças de contrato:**
+  - `GET /api/tags/{tagName}/relacoes`: parâmetro opcional (aditivo), mais o `400` da opção (a), só para tag sem `clienteId` em mais de um cliente;
+  - `POST /api/equipamentos/{id}/tags`: `400` novo para `ClienteId` vazio ou diferente do cliente do equipamento, que antes era gravado;
+  - `POST /api/processo-equipamentos`: `400` novo para clientes diferentes;
+  - `POST /api/anomalias/{id}/feedback`: o `400` que já existia agora também vale para motivo de outro cliente ou inativo, com a mesma mensagem.
+- **Execução (16/11, tudo offline; a API não foi iniciada e o Bridge não foi acessado). Antes, conferi que os testes não usam banco real, rede nem `WebApplicationFactory`:**
+  - **Antes da correção:**
+    - com os controllers do HEAD, os testes do P35 **não compilavam** (CS1501: o parâmetro não existia);
+    - com só a assinatura do P35 acrescentada (parâmetro ignorado) e P36 a P38 sem correção, **9 falhas e 9 aprovados** de 18. Falharam exatamente os 9 testes do defeito: 3 de P35, 3 de P36, 1 de P37 e 2 de P38. Passaram os 9 de compatibilidade.
+    - Numa primeira rodada, houve uma 10ª falha, culpa do teste e não do código: o JSON escapava o "ã". Corrigido lendo o campo `erro`.
+  - **Depois da correção:**
+    - os 18 testes passam;
+    - relacionados (`ClienteIsolamentoTests`, `FeedbackAnomaliaConsistencyTests`, `IAApi.Tests.Security` e Intelligence Lab): **246 aprovados, 0 falhas**.
+  - **Compare-Replay**, só as 6 execuções originais, sobre `dados/cp300_10a11nov_derivado.csv`, com a referência do commit `d89eb0c`: `-File -Somente "preset1_sem,preset1_rec,madrugada_sem,madrugada_rec,preset6_sem,preset6_rec"` deu **0 diferenças em 6 execuções**, código 0 (`dados/rc2_rodadas/20261116_114822`). As `rc0_*` ficaram de fora pela pendência da tarefa 30: a exportação ainda grava em `dados/cp300_09a13nov.csv`.
+  - **Suíte completa:** **1041 aprovados, 0 falhas** (1024 + 17 novos).
+- ✅ **Complemento aprovado e feito em 16/11: P35, opção (a).**
+  - **Antes:** sem `clienteId`, a resposta misturava as relações de todos os clientes.
+  - **Agora:** sem `clienteId` e com a tag em **mais de um cliente**, contando `ProcessoTagsIa` e `EquipamentoTagsIa` juntas, a resposta é `400` com `"A tag existe em mais de um cliente. Informe o cliente em ?clienteId=."`. Ela não traz relações nem cita os clientes. Com um cliente só, ou sem relações, a resposta é igual à de hoje. Com `clienteId`, nada muda.
+  - **Arquivo:** `Controllers/TagRelacoesController.cs`.
+  - **Testes:** em `ClienteIsolamentoTests.cs`, o caso "sem `clienteId`, dois clientes, resposta igual" deu lugar a 2 casos de `400` (tag nos dois clientes; processo de um e equipamento de outro), e entraram 2 de compatibilidade (processo e equipamento do mesmo cliente; tag sem relações). Agora são 8 casos `P35_*`.
+    - **Antes da mudança:** 2 falhas (exatamente os 2 de `400`, que recebiam `200` com a mistura) e 6 aprovados.
+    - **Depois:** 8 de 8.
+  - **Execução (offline; a API não foi iniciada):**
+    - relacionados (`ClienteIsolamentoTests`, `FeedbackAnomaliaConsistencyTests`, `IAApi.Tests.Security` e Intelligence Lab): **250 aprovados, 0 falhas**;
+    - **Compare-Replay**, só as 6 execuções originais, com a referência do commit `d89eb0c`: **0 diferenças em 6**, código 0 (`dados/rc2_rodadas/20261116_115609`);
+    - suíte completa: **1045 aprovados, 0 falhas**.
+  - **Rollback:** reverter o bloco de ambiguidade em `Controllers/TagRelacoesController.cs` volta à primeira etapa (filtro opcional); reverter o arquivo inteiro volta ao HEAD.
+- **Ficou de fora:**
+  - procurar no banco vínculos e feedbacks **já gravados** entre clientes diferentes (exige acesso autorizado ao banco);
+  - autenticação (P34). Sem ela, o `clienteId` delimita o escopo, mas não é controle de acesso.
+- **Rollback:** reverter os 4 controllers e `IAApi.Tests/FeedbackAnomaliaConsistencyTests.cs`, e apagar `IAApi.Tests/Security/ClienteIsolamentoTests.cs`. Nada foi commitado.
 
 ---
 

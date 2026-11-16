@@ -75,6 +75,11 @@ public class EquipamentoController : ControllerBase
         if (equipamento == null)
             return NotFound(new { erro = "Equipamento não encontrado." });
 
+        // P36: o vínculo só vale para o cliente dono do equipamento.
+        // Vale para criar e para atualizar um vínculo existente.
+        if (request.ClienteId != equipamento.ClienteId)
+            return BadRequest(new { erro = "O cliente informado não é o cliente do equipamento." });
+
         var existente = _context.EquipamentoTagsIa
             .FirstOrDefault(x =>
                 x.EquipamentoIaId == equipamentoId &&

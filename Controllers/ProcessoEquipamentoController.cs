@@ -43,6 +43,15 @@ public class ProcessoEquipamentoController : ControllerBase
             });
         }
 
+        // P37: processo e equipamento têm de ser do mesmo cliente.
+        if (processo.ClienteId != equipamento.ClienteId)
+        {
+            return BadRequest(new
+            {
+                erro = "Processo e equipamento são de clientes diferentes."
+            });
+        }
+
         var existe = _context.ProcessoEquipamentosIa
             .Any(x =>
                 x.ProcessoIaId == request.ProcessoId &&
