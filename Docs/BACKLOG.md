@@ -16,6 +16,8 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 > - A proposta 6.x ganhou a **6.0b** (medir o reuso do histórico sozinho), uma regra de decisão no aceite da 6.1 (custo do trecho curto → 6.5) e condições de carga nas sessões; a 6.4 passou a depender da 35.
 > - Nada implementado nem aprovado.
 
+> **Atualização 2026-11-17 (tarefa 35, P43):** feitas a **35.0** (conferência) e a **35.1** (cópia de segurança com SHA-256 e `dotnet ef database update` só até a RC-5), com a IAApi parada e sem commit. Era a única migration pendente. Nenhum cliente tem regime cadastrado (`TagsRegimesOperacionaisIa` com 0 linhas; o PK7 também não), então nenhuma decisão muda. Os dados existentes continuam iguais (contagem e conteúdo por tabela). **Falta a 35.2**, na próxima sessão com a IAApi: 0 linhas `no such column`. A 6.4 e a RC-12 deixam de estar bloqueadas pelo banco.
+
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
 - O inventário do banco (antiga 5) **subiu para 2**: é a forma mais barata de confirmar três achados (rótulo como `TagRegime`, `TipoRepresentacao` e perfil colapsado em zero).
@@ -268,7 +270,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Risco:** médio. Muda a cadência, não a lógica da decisão.
 
 ##### 6.4 Janela incremental para o histórico das tags de regime — **não aprovada; antes da RC-12; depende da tarefa 35 (P43)**
-- **[16/11] Pré-requisito:** banco local com a migration RC-5 (tarefa 35). Sem ela, a consulta da configuração de regime falha antes de qualquer busca de histórico do regime, e a medição em modo Comparar sairia vazia.
+- **[16/11] Pré-requisito:** banco local com a migration RC-5 (tarefa 35). Sem ela, a consulta da configuração de regime falha antes de qualquer busca de histórico do regime, e a medição em modo Comparar sairia vazia. **[17/11] Atendido pela 35.1** (RC-5 aplicada no banco local); falta confirmar na 35.2 que o erro sumiu do log.
 - **O que muda:** a mesma lógica da 6.1 para os `BuscarHistoricoPorPeriodo` do `OperationalRegimeBaselineProvider`, chaveada por (cliente, tag de regime). Começa em modo Comparar.
 - **Por que antes da RC-12:** com o regime combinado ligado, seriam 18 consultas por ciclo só nas tags de bomba.
 - **Chave:** `Bridge:HistoricoIncremental:IncluirRegime`.
@@ -1504,12 +1506,12 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 - **Risco:** baixo a médio (rotas de leitura usadas pela demo e pelo export; contrato preservado). **Esforço:** M.
 - **Rollback:** reverter o commit de cada passo; LiveMonitor com os valores padrão.
 
-### 35. (Ambiente) Aplicar a migration RC-5 no banco local e avisar quando houver migration pendente (P43) — ⏳ **ABERTA (registrada em 2026-11-16); PRIORIDADE ALTA: antes da RC-12, da 6.4 e da demo; nada aprovado**
+### 35. (Ambiente) Aplicar a migration RC-5 no banco local e avisar quando houver migration pendente (P43) — ⏳ **EM ANDAMENTO: 35.0 e 35.1 concluídas em 2026-11-17 (migration aplicada no banco local, sem commit); falta a 35.2 (próxima sessão com a IAApi); 35.3 opcional, não aprovada**
 - **Problema** (P43; confirmado em log e no código):
-  - O `ia_config.db` local não tem a coluna `MapaEstados`, que vem da migration `20261113160248_RC5_AddTagRegimeComponente`.
+  - O `ia_config.db` local não tinha a coluna `MapaEstados`, que vem da migration `20261113160248_RC5_AddTagRegimeComponente`. **[17/11] Corrigido pela 35.1.**
   - Em 16/11, **270 de 270** predições falharam ao ler `TagsRegimesOperacionaisIa`, e o provider caiu em silêncio no baseline global.
-  - A IAApi não aplica nem confere migrations ao subir.
-  - **Hoje**, provavelmente sem efeito no PK2 (sem regime cadastrado em 13/11) [histórico a validar]. **PK7 não verificado.** **A RC-12 não teria efeito, sem aviso.**
+  - A IAApi não aplica nem confere migrations ao subir (continua assim; é a 35.3).
+  - ~~Hoje, provavelmente sem efeito no PK2 (sem regime cadastrado em 13/11) [histórico a validar]. PK7 não verificado.~~ **[17/11] Confirmado no banco:** `TagsRegimesOperacionaisIa` tem **0 linhas** (nenhum cliente, nem PK2 nem PK7). O P43 não mudou nenhuma decisão até aqui, e a 35.1 também não muda. **A RC-12 não teria efeito, sem aviso** (agora a coluna existe; o aviso continua faltando, 35.3).
 - **Passos** (cada um com aprovação própria):
   - **35.0 Conferência só de leitura** (exige aprovação, porque abre o banco local, que tem configuração dos clientes):
     - com a IAApi parada, `dotnet ef migrations list` para ver as aplicadas e as pendentes;
@@ -1537,8 +1539,59 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
   - 35.1 com cópia conferida (tamanho e abertura);
   - 35.2 sem o erro e sem mudança de decisão no PK2;
   - 35.3 com testes verdes e suíte completa.
-- **Rollback:** com a IAApi parada, restaurar as cópias, ou `dotnet ef database update 20261002183911_B325_AddRichBehaviorSnapshotIdentity` (o `Down` remove a coluna e a tabela). Na 35.3, reverter o commit.
-- **Risco:** baixo no PK2 (aditivo); médio se o PK7 tiver regime. **Esforço:** P.
+- **Resultado da 35.0 (2026-11-17, só leitura; aprovada pela responsável):**
+  - IAApi parada: nenhum processo da API e nada escutando na porta 5145 (só processos do VS Code e do MSBuild).
+  - Runtime (`IAApiApplicationServiceCollectionExtensions.cs:28-29`) e design-time (`Data/AppDbContextFactory.cs`) usam o **mesmo** arquivo relativo `ia_config.db`, na raiz do projeto (ignorado pelo git, `.gitignore:6`).
+  - Para não tocar no original antes da cópia, a leitura foi feita numa **segunda cópia** (no scratchpad da sessão), tirada da cópia de segurança da 35.1. Contagens e metadados sem valores de linha.
+  - `PRAGMA integrity_check` = `ok`; `journal_mode` = `wal`.
+  - **Migrations:** 33 no repositório; **32 aplicadas** (a última, `20261002183911_B325_AddRichBehaviorSnapshotIdentity`); **só a RC-5 pendente**. Confirmado também por `dotnet ef migrations list` (1 linha `(Pending)`).
+  - `dotnet ef migrations has-pending-model-changes`: "No changes have been made to the model since the last migration".
+  - `dotnet ef migrations script 20261002183911_B325_AddRichBehaviorSnapshotIdentity 20261113160248_RC5_AddTagRegimeComponente`: só `ALTER TABLE ... ADD "MapaEstados" TEXT NULL`, `CREATE TABLE "TagsRegimesComponentesIa"`, `CREATE UNIQUE INDEX` e a linha no `__EFMigrationsHistory`, numa transação. Nenhuma tabela é reconstruída.
+  - **Regimes:** `TagsRegimesOperacionaisIa` com **0 linhas** → **PK7 sem regime cadastrado** (e PK2 também). A 35.1 não muda decisão de nenhum cliente.
+- **Resultado da 35.1 (2026-11-17, aprovada pela responsável; sem commit):**
+  - **Cópia de segurança** (10:26:14, IAApi parada) em `C:\Users\Laura Marrari\Documents\IA MARRARI\backup_ia_config_2026-11-17\`, fora do controle de versão, com `SHA256SUMS.txt`:
+
+    | Arquivo | Bytes | SHA-256 |
+    |---|---:|---|
+    | `ia_config.db` | 1.392.640 | `9C9ADE74B99B1012D637E821E73960FDC0E43CAD8CDBB21BA304D338D247882C` |
+    | `ia_config.db-wal` | 4.124.152 | `5CC1F6A134EE88EAD22ED3CB29BCEED1A98BEAC77202D0AA86C637AB3875FBB7` |
+    | `ia_config.db-shm` | 32.768 | `0268CEAAFD0C6CF44D7A602C0E3F3440FC1C09F253AF13211E40BF1A9D82CB99` |
+
+    - hashes do original e da cópia iguais nos 3 arquivos; conferidos de novo no fim da sessão (iguais, mesmo tamanho);
+    - **abertura conferida:** uma cópia dos 3 arquivos abriu com `integrity_check = ok` (é a cópia usada na 35.0).
+  - **Efeito colateral esperado (registrado):** o `dotnet ef migrations list` da 35.0 abriu o original e, ao fechar a última conexão, o SQLite consolidou o `-wal` no `.db` e apagou o `-wal` e o `-shm` (checkpoint normal). Antes de aplicar, o conteúdo foi comparado com o da cópia: **mesmas contagens, mesmo SHA-256 do conteúdo de cada tabela, mesmo schema**, `integrity_check = ok`.
+  - **Aplicação:** `dotnet ef database update 20261113160248_RC5_AddTagRegimeComponente --no-build` (alvo explícito, para não passar da RC-5). Saída: `Applying migration '20261113160248_RC5_AddTagRegimeComponente'. Done.` Depois, `dotnet ef migrations list` sem nenhuma `(Pending)`.
+  - **Schema depois:**
+    - `TagsRegimesOperacionaisIa` com a coluna nova `MapaEstados TEXT NULL` (0 valores não nulos) e as 11 colunas antigas iguais;
+    - tabela `TagsRegimesComponentesIa` criada (`Id`, `ConfiguracaoId`, `Ordem`, `TagRegime`, `MapaEstados`, `ToleranciaEstado`), FK para `TagsRegimesOperacionaisIa(Id)` com `ON DELETE CASCADE`, `CHECK ("Ordem" >= 2)` e índice único novo `IX_TagsRegimesComponentesIa_ConfiguracaoId_Ordem`; nenhum índice removido;
+    - `integrity_check = ok`.
+  - **Dados existentes iguais** (contagem por tabela; e SHA-256 do conteúdo de cada tabela, sem a coluna nova):
+
+    | Tabela | Antes | Depois |
+    |---|---:|---:|
+    | `AnomaliasDetectadas` | 3199 | 3199 |
+    | `RuntimeRolloutSnapshots` | 430 | 430 |
+    | `PerfisIa` | 13 | 13 |
+    | `TagsIaConfig` | 13 | 13 |
+    | `TagsComportamentosOcorrenciasIa` | 10 | 10 |
+    | `TagsComportamentosSnapshotsIa` | 6 | 6 |
+    | `GrupoAnaliseTagsIa` | 3 | 3 |
+    | `TagsComportamentosIa` | 2 | 2 |
+    | `GruposAnaliseIa` | 1 | 1 |
+    | `TagsRegimesOperacionaisIa` | 0 | 0 |
+    | as outras 17 tabelas antigas | 0 | 0 |
+    | `__EFMigrationsLock` (já existia) | 0 | 0 |
+    | `__EFMigrationsHistory` | 32 | **33** (+ RC-5) |
+    | `TagsRegimesComponentesIa` | não existia | **0** |
+
+    - a única tabela antiga com conteúdo diferente é `__EFMigrationsHistory` (a linha da RC-5).
+  - **Não feito:** nenhum regime cadastrado, nenhuma chave ligada, IAApi não iniciada, nenhum código alterado. O `git status` continua sem mudanças de código (o `ia_config.db` é ignorado).
+  - **Observação à parte (não tratada):** o build mostrou `NU1903` (`SQLitePCLRaw.lib.e_sqlite3` 2.1.11 com vulnerabilidade alta conhecida, GHSA-2m69-gcr7-jv3q). Já existia; fica para avaliar fora desta tarefa.
+- **Rollback** (atualizado em 17/11):
+  - **(a) Desfazer só a RC-5, mantendo o que a IAApi gravar depois de 17/11** (preferível se a IAApi já tiver rodado): com a IAApi parada, na raiz do projeto, `dotnet ef database update 20261002183911_B325_AddRichBehaviorSnapshotIdentity`. O `Down` apaga `TagsRegimesComponentesIa` e a coluna `MapaEstados` (no SQLite, o EF reconstrói `TagsRegimesOperacionaisIa`; hoje com 0 linhas). Perde só o que tiver sido cadastrado nessas duas estruturas. Conferir com `dotnet ef migrations list` (RC-5 volta a `(Pending)`).
+  - **(b) Voltar ao estado exato de 17/11, 10:26** (perde tudo o que a IAApi gravou depois, como anomalias e snapshots): com a IAApi parada, mover para fora o `ia_config.db` atual e **também** o `-wal` e o `-shm`, se existirem (não misturar com os da cópia); copiar os 3 arquivos de `backup_ia_config_2026-11-17\` para a raiz do projeto; conferir os SHA-256 com o `SHA256SUMS.txt` **antes** de abrir o banco (abrir consolida o `-wal` e muda os hashes).
+  - Na 35.3, reverter o commit.
+- **Risco:** baixo (aditivo; confirmado que nenhum cliente tem regime cadastrado). **Esforço:** P.
 - **Ordem:** antes da RC-12 (dependência acrescentada na tabela RC), da 6.4 e da demo.
 
 ### 36. (Ferramenta) Log da sessão com horário, sem o SQL do EF e com codificação conhecida (P44) — ⏳ **ABERTA (registrada em 2026-11-16); prioridade média: antes da próxima sessão longa; nada aprovado**
@@ -1587,4 +1640,4 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 | RC-9 | ✅ **Concluída (2026-11-13).** `BaselineDiagnostic.RegimeKey` (parâmetro opcional no fim do construtor; espaços ⇒ nula) com `[JsonIgnore(WhenWritingNull)]` na propriedade. Assim ela fica fora do JSON quando nula nos dois pontos de serialização levantados: o exportador JSONL (`JsonIgnoreCondition.Never`) e o endpoint `GET /intelligence-lab/diagnostics/{id}` (padrão web do `AddControllers`). A cópia do `InMemoryDiagnosticCollector` só repassa o objeto. `PrepararAsync` preenche a chave só com o regime aplicado (vinda da RC-8); a linha `BASELINE POR REGIME APLICADO` ganha `Chave=…` só quando ela existe. Não entra em nenhuma decisão. 12 testes novos: JSON do baseline sem chave igual ao literal do contrato anterior, no JSONL e no padrão web; com chave, `regimeKey` no fim; preparação de ponta a ponta com a chave desligada (sem chave no diagnóstico, no JSON e no log) e ligada; regime não aplicado sem chave. Mutação (sem o `JsonIgnore`): 3 testes falham. Relacionados 505/505; `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal`; suíte completa **999/999**. Ver `PLANO_REGIME_COMBINADO.md` §6.3, RC-9 | `DiagnosticContracts.cs`, `PredictionDetectionPreparationService.cs` | JSON e log iguais com a chave desligada; RC-2 com 0 diferenças | RC-8 | só com a chave (observabilidade) |
 | RC-10 | ✅ **Concluída (2026-11-13).** Replay com `--regime-combinado` (liga `RegimeCombinado:Habilitado` só no provider do replay, com TAG60–TAG81 na lista de tags proibidas do cliente), `--regime TAG27=TAG42+TAG43+TAG46` (componente 1 na linha principal com `MapaEstados`; 2..N em `TagsRegimesComponentesIa`) e `--regime-mapa "TAG42=2:2;*:0"`. Sem a opção, `+` e `--regime-mapa` são recusados (código 2) e o provider é construído como antes. Recusa TAG60–TAG81 em qualquer componente, componente ausente do CSV, repetido ou igual à tag analisada, e mapa inválido ou de tag que não é componente. Coluna `chave_regime` (de `BaselineEfetivo.RegimeKey`) só com a opção; no log, cobertura por chave no treino e na primeira janela móvel, com valores fora do mapa. 11 testes novos (parse, rótulo nas posições 1–3, recusas, 1 componente = golden RC-2 + coluna vazia, golden novo `replay_bombas_regime_combinado.csv` sem/com `HistoricoCausal`, cobertura no log). Mutação (coluna sempre vazia): os 2 goldens novos falham. Ferramenta 44/44; `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal`; suíte completa **1010/1010**. Ver `PLANO_REGIME_COMBINADO.md` §6.3, RC-10 | `tools/Cp300OfflineReplay/` + testes | `tools/Cp300OfflineReplay/` + testes | sem a opção, saída idêntica; TAG60–81 recusada em qualquer componente | RC-8, RC-9 | não (ferramenta) |
 | RC-11 | ⚠️ **Aprovada com ressalvas (2026-11-16).** ✅ **Decisão da responsável (2026-11-16): 3 componentes** (estado da própria bomba, estado da outra bomba e TAG46), com os mapas de §6.2 (`PLANO_REGIME_COMBINADO.md` §7.9). Replay com `--regime-combinado --historico-causal` sobre `dados/cp300_09a13nov.csv` em 5 cenários (preset 1, madrugada de 11/11, preset 6, 18 h normais de 12/11 e preset 3 de 13/11), com 3 componentes (`combr`) e 2 componentes (`comb2r`): 10 execuções, 0 erros e 0 divergências.<br>**(1)** `Compare-Replay.ps1`: 0 diferenças em 12 execuções, sem e com `-HistoricoCausal`.<br>**(2)** Equivalência: 0 linhas diferentes em 8 comparações (`rc0_*_combs`/`comb`, `p3_combs`, `p3b_combs`).<br>**(3)** Metas de §3.1 atendidas: B-01 no preset 1 = 4; B-01 na madrugada = **30 (no limite)**; B-02 no failover = 0; TAG29 com 1º alarme às 15:32 e 0 antes da falha. **Fallbacks por poucos pontos: 174 minutos-tag nas bombas (72 com alarme)**, sempre na 1ª noite com 380 depois de um rodízio: 11/11 00:43–00:45 (9, B-01) e 13/11 00:47–01:12 (63, B-02; classe com 14–29 pontos). Mais 12 na TAG26 (transição da válvula). Foram para o item 24.<br>**(4)** TAG29 às 15:33/15:34: chave `TAG42=2\|TAG43=0\|TAG46=450`, média 169,9/170,1, desvio 27,4/27,7, 434/435 pontos, `OperationalRegime`; **confirmada às 15:37 (no limite)**.<br>**(5)** Custo do preset 6 em Release: 15,2 s com a chave desligada (`combs`) contra 16,4 s ligada (`combr`), +8 %, dentro da variação. I/O (3 consultas por tag) não medido.<br>**Com × sem set-point:** total 830 × 1.028; preset 3 com 5 × 4 de 7 falhas e 37 × 62 falsos; sem set-point falham B-01 no preset 1 (6) e B-02 no failover (40). Nas madrugadas, cada um ganha numa: 11/11 74 × 58; 13/11 113 × 110, com a B-01 16 × 78. Recomendação: 3 componentes. Ver `PLANO_REGIME_COMBINADO.md` §7.<br>**Escopo original:** Equivalência com a etapa 0, metas de §3.1, critério da TAG29 e custo. **Acrescentado em 2026-11-13 (saída da RC-0): antes de decidir os componentes, comparar o regime combinado com e sem set-point.** São 2 componentes (própria bomba e outra bomba, equivale a `comb`) contra 3 (mais TAG46, equivale a `combs`), de dia (preset 1 e preset 6) e de madrugada, nos CSVs de 10–11/11 e de 09–13/11. Medir: alarmes da B-01 e da B-02, falsos fora da falha, failover do preset 6, TAG29 e `origem_baseline = Global`. **Motivo:** com a noite anterior, `comb` teve menos alarmes na madrugada (58 contra 74; B-01 0 contra 30). Mas o set-point ainda foi necessário para a B-02 no failover do preset 6 (40 → 0) (`PLANO_REGIME_COMBINADO.md` §5.7.4). A escolha não exige código: a RC-10 aceita N componentes. Os fallbacks por poucos pontos que sobrarem vão para o item 24 | nenhum código; resultado em `PLANO_REGIME_COMBINADO.md` §7 | regressão byte a byte; mesmas decisões que `e0_*_combs` (3 componentes) e `e0_*_comb` (2 componentes); **TAG29 com detecção confirmada até 15:37 no preset 6** (decisão (a), §5.6.2); se depois, documentar a causa e parar; **tabela com e sem set-point (dia e madrugada) e decisão dos componentes registrada pela responsável antes da RC-12** | RC-0, RC-1, RC-10 | não |
-| RC-12 | ⏳ **NÃO aprovada (2026-11-16).** Por decisão da responsável, fica para **depois da tarefa 6** (cadência do ciclo) e **da tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25). Componentes: os 3 decididos na RC-11 (`PLANO_REGIME_COMBINADO.md` §7.9).<br>Ativação no ambiente de teste do PK2 | banco e configuração do PK2 | `RegimeKey` no diagnóstico durante presets 1 e 6; alarmes na ordem do replay; tempo de ciclo com 3 consultas por tag de bomba; validação no simulador, não em planta | RC-11 + tarefas 6, 27 e **35** (P43: banco com a migration RC-5) + aprovação | **sim** |
+| RC-12 | ⏳ **NÃO aprovada (2026-11-16).** Por decisão da responsável, fica para **depois da tarefa 6** (cadência do ciclo) e **da tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25). Componentes: os 3 decididos na RC-11 (`PLANO_REGIME_COMBINADO.md` §7.9).<br>Ativação no ambiente de teste do PK2 | banco e configuração do PK2 | `RegimeKey` no diagnóstico durante presets 1 e 6; alarmes na ordem do replay; tempo de ciclo com 3 consultas por tag de bomba; validação no simulador, não em planta | RC-11 + tarefas 6, 27 e **35** (P43: banco com a migration RC-5; **35.1 feita em 17/11**, falta a 35.2) + aprovação | **sim** |

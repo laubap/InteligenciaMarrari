@@ -23,7 +23,7 @@
 > - **P27 não se repetiu.**
 > - **Três problemas novos:**
 >   - **P42:** a partir de 16:27, o LiveMonitor sobrecarregou o Bridge e o banco, deixou o monitor 4–5× mais lento e causou todos os timeouts da sessão;
->   - **P43:** o banco local está sem a migration RC-5 (`no such column: MapaEstados` em toda predição);
+>   - **P43:** o banco local está sem a migration RC-5 (`no such column: MapaEstados` em toda predição); **[17/11] RC-5 aplicada (BACKLOG 35.1); nenhum cliente tinha regime cadastrado**;
 >   - **P44:** o log saiu sem horário e com o SQL do EF (702 MB).
 >   - P42 e P43 têm prioridade alta: antes da demo e antes da RC-12.
 >
@@ -93,7 +93,7 @@
 | **P40** | Dependências com alertas: SQLite nativo (alta) na API e em todos os projetos com EF; `System.Security.Cryptography.Xml`/`Pkcs` (alta) nos testes e em 2 ferramentas; `tinypool` (crítica) e `vitest` (moderada) no LiveMonitor, só em desenvolvimento (B323-23) | Confirmado em `dotnet list package --vulnerable` e `npm audit` (16/11) | — (auditoria B3.23; BACKLOG 29) | Risco: falha explorável em biblioteca de terceiros | Média |
 | **P41** | **[preset 3 de 13/11]** Falha no sensor de pressão PT-02 (TAG24), que está dentro da malha de controle, **não aparece na própria tag**: congelado (20) e ganho errado (24) deixam a leitura no set-point, e o efeito vai para as bombas (frequência, corrente, potência, vazão). O mapa do placar só olhava a tag do sensor | Confirmado nos dados e no replay. **Avaliação corrigida em 16/11 (aprovado):** o mapa ganhou `efeitosPorCanal` (canal 3 → tags da malha); com ele, o combinado detecta 20 e 24 nas bombas (3 → 5 de 7). A detecção da IA não mudou | Preset 3 de 13/11 (RES3 §4.2, §4.4) | Falha não detectada na tag alvo; risco de avaliação errada (resolvido no placar) | **Alta** (detecção); avaliação resolvida |
 | **P42** | **[etapa 0]** O LiveMonitor sobrecarrega o Bridge e o banco. Para um gráfico de 2 h, cada consulta de histórico busca **24 h** no Bridge; o proxy desiste em 12 s, mas a busca continua (até 12 simultâneas). As decisões vêm de `GET /api/anomalias` a cada 2 s, que lista **todas** as decisões de todos os clientes e faz **uma consulta de feedback por linha** (N+1, ~3.200 por chamada) | Mecanismo confirmado no código; efeito confirmado em log (16/11, a partir de 16:27); a causalidade é inferência forte, por tempo e mecanismo | Sessão da etapa 0 (MED0 §6.2) | Monitor 4–5× mais lento (ciclo de 131 s → 306 s e ≥ 697 s; idade da leitura até 12 min); 4 timeouts; 1 leitura sem decisão; log de 702 MB (P44). A ferramenta da demo degrada a IA que ela mostra | **Alta** (antes da demo) |
-| **P43** | **[etapa 0]** O banco local (`ia_config.db`) está **sem a migration RC-5**. Toda predição falha ao ler `TagsRegimesOperacionaisIa` (`no such column: t.MapaEstados`), e o provider cai em silêncio no baseline global. A IAApi não aplica migrations ao subir | Confirmado em log (270 de 270 predições) e no código. Migrations aplicadas e regimes cadastrados no PK7: **não verificados** (o banco não foi aberto) | Sessão da etapa 0 (MED0 §6.3) | Hoje, provavelmente nenhum no PK2 (sem regime cadastrado em 13/11). Risco no PK7, se tiver regime. **A RC-12 não teria efeito**, sem nenhum aviso | **Alta** (antes da RC-12 e da demo) |
+| **P43** | **[etapa 0]** O banco local (`ia_config.db`) está **sem a migration RC-5**. Toda predição falha ao ler `TagsRegimesOperacionaisIa` (`no such column: t.MapaEstados`), e o provider cai em silêncio no baseline global. A IAApi não aplica migrations ao subir | Confirmado em log (270 de 270 predições) e no código. **[17/11] Confirmado no banco (BACKLOG 35.0):** 32 de 33 migrations aplicadas, só a RC-5 pendente; `TagsRegimesOperacionaisIa` com 0 linhas (PK2 e PK7 sem regime). **RC-5 aplicada pela 35.1** (cópia de segurança com SHA-256; dados iguais) | Sessão da etapa 0 (MED0 §6.3) | Nenhum efeito na decisão até aqui (nenhum cliente tem regime). Sem a 35.1, **a RC-12 não teria efeito**, sem nenhum aviso; o aviso continua faltando (35.3) | **Alta** → **banco corrigido em 17/11**; falta a 35.2 (log sem o erro) |
 | **P44** | **[etapa 0]** O log da sessão sai **sem data e hora** no início das linhas: o `TimestampFormat` passado pelo `Start-IAApiComLog.ps1` não teve efeito, embora as outras variáveis tenham tido. Com `LogLevel:Default = Information`, o EF grava **cada comando SQL** (960 mil entradas, 702 MB em 87 min). O texto está na página de código do console (acentos trocados) | Confirmado em log; causa do horário ausente: hipótese | Sessão da etapa 0 (MED0 §1, §6.2) | Linha do tempo só pelo PERF_DIAG (sem ele, nenhuma); passo a do P27 incompleto; disco e custo de log; análise difícil | Média (barato; antes da próxima sessão longa) |
 
 ---
@@ -788,17 +788,18 @@
 - **Evidência:**
   - **Confirmado em log:** 270 de 270 predições (PK2 e PK7), em `Preparation.RegimeBaseline`, de 15:19 a 16:46 de 16/11.
   - **Confirmado no código:** a migration existe. O projeto não chama `Migrate()`, `EnsureCreated()` nem `GetPendingMigrations()` em nenhum lugar fora dos testes, então o banco só muda com `dotnet ef database update` manual.
-  - **Não verificado** (exige abrir o banco, com aprovação): quais migrations estão aplicadas e se o PK7 tem regime cadastrado.
+  - ~~**Não verificado** (exige abrir o banco, com aprovação): quais migrations estão aplicadas e se o PK7 tem regime cadastrado.~~ **[17/11] Confirmado no banco** (BACKLOG 35.0, numa cópia): 32 de 33 migrations aplicadas (última `20261002183911_B325_AddRichBehaviorSnapshotIdentity`), **só a RC-5 pendente**; `TagsRegimesOperacionaisIa` com **0 linhas**.
 - **Efeito na decisão:**
-  - **PK2:** provavelmente nenhum hoje. Em 13/11, o banco não tinha nenhuma linha em `TagsRegimesOperacionaisIa` (INV §3) [histórico a validar], e "sem configuração" também cai no global.
-  - **PK7:** se tiver regime cadastrado, está rodando com o baseline global desde que o código da RC-5 passou a ser usado [hipótese]. O `RegimeBaseline` do PK7 levou 321 ms em média, contra 50 ms do PK2, o que não prova nada sozinho.
+  - **PK2:** nenhum. ~~Em 13/11, o banco não tinha nenhuma linha em `TagsRegimesOperacionaisIa` (INV §3) [histórico a validar]~~ confirmado em 17/11: 0 linhas; "sem configuração" também cai no global.
+  - **PK7:** ~~se tiver regime cadastrado, está rodando com o baseline global [hipótese]~~ **descartado em 17/11:** o PK7 não tem regime cadastrado, então também não mudou de decisão. A diferença de tempo do `RegimeBaseline` (321 ms × 50 ms) tem outra causa, não investigada.
   - **RC-12:** com o banco assim, ligar o regime combinado no PK2 **não teria efeito, sem aviso**. O aceite da RC-12 (`RegimeKey` no diagnóstico) pegaria isso, mas só depois de gastar a sessão.
   - **Testes e replay** usam bancos temporários ou em memória, criados pelo modelo atual. Por isso a suíte e o replay passam e não pegam este problema.
 - **Prioridade:** alta. Precisa ser resolvido antes da RC-12, da 6.4 e da demo.
-- **Solução candidata** (nada aprovado; BACKLOG 35):
-  - conferir o banco em só leitura;
-  - fazer cópia de segurança e aplicar a migration;
-  - na subida, avisar quando houver migration pendente, sem aplicar sozinho.
+- **Solução** (BACKLOG 35):
+  - ✅ conferir o banco em só leitura (35.0, 17/11);
+  - ✅ fazer cópia de segurança e aplicar a migration (35.1, 17/11, sem commit). Cópia com SHA-256 em `C:\Users\Laura Marrari\Documents\IA MARRARI\backup_ia_config_2026-11-17\`. Schema conferido (`MapaEstados` e `TagsRegimesComponentesIa`). Contagem e conteúdo das tabelas iguais antes e depois, exceto `__EFMigrationsHistory` (+1). Rollback na tarefa 35;
+  - ⏳ confirmar na próxima sessão com a IAApi que o `no such column` sumiu (35.2);
+  - ⏳ na subida, avisar quando houver migration pendente, sem aplicar sozinho (35.3, opcional, não aprovada).
 - **BACKLOG:** **35** (prioridade alta, antes da RC-12); relacionados: RC-5, RC-8, RC-12, 6.4 e 19.
 
 ### P44. Log da sessão sem horário e com o SQL do EF [etapa 0]
