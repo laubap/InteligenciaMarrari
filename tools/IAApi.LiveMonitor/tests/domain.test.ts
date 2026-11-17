@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ageLabel, fromDiagnostic, latestDecision, latestReading, mergeDecisions, newAnomalies, parseDecisions, parseHistory, readingState, timestamp } from '../src/domain';
+import { ageLabel, decisionsSince, fromDiagnostic, latestDecision, latestReading, mergeDecisions, newAnomalies, parseDecisions, parseHistory, readingState, timestamp } from '../src/domain';
 import type { Decision, Diagnostic } from '../src/types';
 
 const now = Date.parse('2026-11-04T12:00:05Z');
@@ -48,6 +48,42 @@ describe('contratos e semântica operacional', () => {
     const first = decision();
     const merged = mergeDecisions([first], [decision({ receivedAt: now + 10000 }), decision({ id: 'db:2', analyzedAt: now + 500 })]);
     expect(merged).toHaveLength(2); expect(merged[1].receivedAt).toBe(now); expect(merged[0].id).toBe('db:2');
+  });
+  it('desde (34.2): volta à hora sem fuso da IAApi, com folga para trás', () => {
+    const rows = [{ id: 1, tagName: 'A', ehAnomalia: false, valor: 1, clienteId: 'PK2', dataDeteccao: '2026-11-16T16:27:17.123' },
+      { id: 2, tagName: 'A', ehAnomalia: false, valor: 1, clienteId: 'PK2', dataDeteccao: '2026-11-16T16:20:00' }];
+    const parsed = parseDecisions(rows, 'PK2', '-03:00', now);
+    expect(decisionsSince(parsed, '-03:00', 0)).toBe('2026-11-16T16:27:17.123');
+    expect(decisionsSince(parsed, '-03:00')).toBe('2026-11-16T16:22:17.123');
+    expect(decisionsSince(parseDecisions(rows, 'PK2', '+05:30', now), '+05:30', 0)).toBe('2026-11-16T16:27:17.123');
+    expect(decisionsSince([], '-03:00')).toBeUndefined();
+    expect(decisionsSince(parsed, 'inválido')).toBeUndefined();
+  });
+  it('consulta incremental (desde) acumula as mesmas decisões e alertas que a consulta completa', () => {
+    // Servidor simulado: linhas chegam ao longo do tempo, algumas gravadas fora de ordem.
+    const offset = '-03:00';
+    const base = Date.parse('2026-11-16T19:00:00Z');
+    const raw = (i: number, atrasoMs = 0) => ({ id: i, clienteId: 'PK2', tagName: `T${i % 4}`, ehAnomalia: i % 7 === 0, valor: i, score: i / 10,
+      dataDeteccao: new Date(base + i * 5000 - atrasoMs - 3 * 3600000).toISOString().slice(0, 23) });
+    const gravadas: ReturnType<typeof raw>[] = [];
+    const servidor = (since?: string) => gravadas.filter(r => since === undefined || timestamp(r.dataDeteccao, offset)! >= timestamp(since, offset)!)
+      .sort((a, b) => b.dataDeteccao.localeCompare(a.dataDeteccao));
+    let completa: Decision[] = [], incremental: Decision[] = [];
+    let alertasCompleta: Decision[] = [], alertasIncremental: Decision[] = [];
+    for (let poll = 0; poll < 1100; poll++) {
+      gravadas.push(raw(gravadas.length + 1));
+      if (poll % 50 === 10) gravadas.push(raw(gravadas.length + 1, 60000)); // gravada 1 min "atrasada"
+      const init = poll > 0;
+      const tudo = parseDecisions(servidor(), 'PK2', offset, now);
+      alertasCompleta = mergeDecisions(alertasCompleta, newAnomalies(completa, tudo, init), 20);
+      completa = mergeDecisions(completa, tudo, Math.max(1000, tudo.length));
+      const novas = parseDecisions(servidor(init ? decisionsSince(incremental, offset) : undefined), 'PK2', offset, now);
+      alertasIncremental = mergeDecisions(alertasIncremental, newAnomalies(incremental, novas, init), 20);
+      incremental = mergeDecisions(incremental, novas, Math.max(1000, incremental.length + novas.length));
+    }
+    expect(completa.length).toBeGreaterThan(1000); // acima do limite padrão de 1.000 do mergeDecisions
+    expect(incremental).toEqual(completa);
+    expect(alertasIncremental).toEqual(alertasCompleta);
   });
   it('não alerta no carregamento inicial, em repetição ou no preenchimento de histórico', () => {
     const d = decision({ anomaly: true });

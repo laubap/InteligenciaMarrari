@@ -51,6 +51,21 @@ export function mergeDecisions(previous: Decision[], incoming: Decision[], max =
   for (const d of incoming) if (!result.has(d.id)) result.set(d.id, d);
   return [...result.values()].sort((a, b) => b.analyzedAt - a.analyzedAt || b.id.localeCompare(a.id, undefined, { numeric: true })).slice(0, max);
 }
+/**
+ * Tarefa 34.2 (P42): valor de `desde` para a próxima consulta de decisões.
+ * DataDeteccao vem sem fuso (hora local da IAApi); `analyzedAt` foi lido com
+ * `offset`, então a volta usa o mesmo offset e sai no mesmo formato, sem fuso.
+ * A folga para trás cobre linhas gravadas fora de ordem; as repetidas são
+ * descartadas pelo id em `mergeDecisions`. Sem decisões, não há cursor.
+ */
+export function decisionsSince(decisions: Decision[], offset: string, overlapMs = 300000): string | undefined {
+  const newest = decisions.reduce((max, d) => Math.max(max, d.analyzedAt), -Infinity);
+  const match = /^([+-])(\d\d):(\d\d)$/.exec(offset);
+  if (!Number.isFinite(newest) || !match) return undefined;
+  const offsetMs = (match[1] === '-' ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3])) * 60000;
+  const local = new Date(newest - overlapMs + offsetMs);
+  return Number.isFinite(local.getTime()) ? local.toISOString().slice(0, 23) : undefined;
+}
 export function latestDecision(db: Decision[], diagnostics: Decision[], tag: string): Decision | undefined {
   return [...db, ...diagnostics].filter(d => d.tag === tag).sort((a, b) => b.analyzedAt - a.analyzedAt || (a.source === 'diagnostic' ? -1 : 1))[0];
 }

@@ -82,12 +82,50 @@ var resposta =
         }
     }
 
+    /// <summary>
+    /// Decisoes gravadas, da mais recente para a mais antiga.
+    /// Sem parametros, devolve todas as linhas de todos os clientes (contrato
+    /// original). Tarefa 34.2 (P42), parametros opcionais:
+    ///   clienteId: so as linhas desse cliente (comparacao exata);
+    ///   desde:     so DataDeteccao &gt;= desde, inclusivo. Mesma convencao de
+    ///              DataDeteccao: hora local da IAApi, sem fuso;
+    ///   limite:    no maximo N linhas (as mais recentes), N &gt;= 1.
+    /// Tarefa 34.1: o FeedbackSemelhante sai igual ao de antes, mas os
+    /// feedbacks vem de uma unica consulta (antes, uma por linha).
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> Listar()
+    public async Task<IActionResult> Listar(
+        [FromQuery] string? clienteId = null,
+        [FromQuery] DateTime? desde = null,
+        [FromQuery] int? limite = null)
     {
-        var registros = await _context.AnomaliasDetectadas
-            .OrderByDescending(x => x.DataDeteccao)
-            .ToListAsync();
+        if (limite is < 1)
+        {
+            return BadRequest(new { erro = "limite deve ser maior ou igual a 1." });
+        }
+
+        IQueryable<AnomaliaDetectada> consulta = _context.AnomaliasDetectadas;
+
+        if (clienteId is not null)
+            consulta = consulta.Where(x => x.ClienteId == clienteId);
+
+        if (desde is not null)
+        {
+            var inicio = desde.Value;
+            consulta = consulta.Where(x => x.DataDeteccao >= inicio);
+        }
+
+        consulta = consulta.OrderByDescending(x => x.DataDeteccao);
+
+        if (limite is not null)
+            consulta = consulta.Take(limite.Value);
+
+        var registros = await consulta.ToListAsync();
+
+        // Uma consulta de feedback para a lista inteira (antes: uma por linha).
+        var feedbacksPorTag = registros.Count == 0
+            ? new Dictionary<(string ClienteId, string TagName), List<FeedbackComparavel>>()
+            : _feedbackAnomaliaAnaliseService.CarregarFeedbacksPorTag(clienteId);
 
         var anomalias = registros.Select(x => new
         {
@@ -106,12 +144,12 @@ var resposta =
             x.TendenciaValor,
             x.DataDeteccao,
 
-            FeedbackSemelhante = _feedbackAnomaliaAnaliseService.GerarAnaliseFeedbacks(
-                x.ClienteId,
-                x.TagName,
-                x.Score,
-                x.ValorRecebido
-            )
+            FeedbackSemelhante = feedbacksPorTag.TryGetValue((x.ClienteId, x.TagName), out var feedbacks)
+                ? FeedbackAnomaliaAnaliseService.AnalisarFeedbacks(
+                    feedbacks,
+                    x.Score,
+                    x.ValorRecebido)
+                : null
         }).ToList();
 
         return Ok(anomalias);

@@ -32,6 +32,25 @@ describe('proxy local somente leitura', () => {
   it('encoda nomes de tag sem permitir troca de rota', () => {
     expect(upstreamPath(new URL('http://local/monitor-api/history?client=PK2&tag=A%2FB%20%26'))).toBe('/api/tags/historico/PK2/A%2FB%20%26?horas=2');
   });
+  it('decisões: filtra cliente na IAApi e repassa só um desde bem formado (34.2)', () => {
+    const path = (q: string) => upstreamPath(new URL('http://local/monitor-api/decisions' + q));
+    expect(path('?client=PK2')).toBe('/api/anomalias?clienteId=PK2');
+    expect(path('')).toBe('/api/anomalias?clienteId=PK2');
+    expect(path('?client=A%26B')).toBe('/api/anomalias?clienteId=A%26B');
+    expect(path('?client=PK2&since=2026-11-16T16%3A27%3A17.123')).toBe('/api/anomalias?clienteId=PK2&desde=2026-11-16T16%3A27%3A17.123');
+    expect(path('?client=PK2&since=2026-11-16T16:27:17')).toBe('/api/anomalias?clienteId=PK2&desde=2026-11-16T16%3A27%3A17');
+    for (const bad of ['2026-11-16', '2026-11-16T16:27:17Z', '2026-11-16T16:27:17&limite=1', 'x'])
+      expect(path('?client=PK2&since=' + encodeURIComponent(bad))).toBeNull();
+  });
+  it('decisões: chama a IAApi com clienteId e desde', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] }); vi.stubGlobal('fetch', fetch);
+    await request('/monitor-api/decisions?client=PK2&since=2026-11-16T16%3A22%3A17.000');
+    const called = new URL(fetch.mock.calls[0][0]);
+    expect(called.pathname).toBe('/api/anomalias');
+    expect(called.searchParams.get('clienteId')).toBe('PK2');
+    expect(called.searchParams.get('desde')).toBe('2026-11-16T16:22:17.000');
+    expect(called.searchParams.has('limite')).toBe(false);
+  });
   it('transmite apenas GET, filtra cliente e não transmite chave em rota pública', async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [{ clienteId: 'PK2', id: 1 }, { clienteId: 'OTHER', id: 2 }] }); vi.stubGlobal('fetch', fetch);
     const result = await request('/monitor-api/decisions?client=PK2');

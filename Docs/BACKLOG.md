@@ -1456,7 +1456,7 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 - **Rollback:** desligar a chave e reiniciar a API (o detector deixa de ser registrado); no código, reverter os commits de cada passo.
 
 
-### 34. (Robustez, demo) LiveMonitor sem sobrecarregar o Bridge e o banco (P42) — ⏳ **ABERTA (registrada em 2026-11-16); PRIORIDADE ALTA: antes da demo e das sessões 6.0b, 6.1 e 6.2; nada aprovado**
+### 34. (Robustez, demo) LiveMonitor sem sobrecarregar o Bridge e o banco (P42) — ⏳ **EM ANDAMENTO: 34.1 e 34.2 concluídas em 2026-11-17 (sem commit); faltam 34.3, 34.4 e a sessão de aceite; PRIORIDADE ALTA: antes da demo e das sessões 6.0b, 6.1 e 6.2**
 - **Problema** (P42; mecanismo confirmado no código, efeito confirmado em log em 16/11):
   - Para um gráfico de 2 h, o `TagHistoricoController` busca **24 h** no Bridge por tag. O LiveMonitor pede isso a cada 15 s, 3 de cada vez. O proxy desiste em 12 s, mas a busca síncrona continua: foram **até 12 simultâneas**, com 36,6 s em média e 4 timeouts.
   - `GET /api/anomalias` devolve **todas** as decisões de todos os clientes e faz **uma consulta de feedback por linha** (~3.200 por chamada). O LiveMonitor chama a cada 2 s; foram ~958 mil consultas em 19 min.
@@ -1471,14 +1471,59 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
     - nas sessões de medição, LiveMonitor fechado, ou aberto só numa fase registrada;
     - export só no fim;
     - na demo, até 34.1–34.4, abrir com poucas tags selecionadas e intervalo de histórico maior (ex.: `MONITOR_HISTORY_MS=60000`; mudança de configuração, exige aprovação; efeito a medir).
-  - **34.1 `GET /api/anomalias` sem N+1, com o mesmo JSON:**
+  - **34.1 `GET /api/anomalias` sem N+1, com o mesmo JSON:** ✅ **concluída em 2026-11-17 (sem commit)**
     - buscar os feedbacks com o mesmo *join* numa única consulta, agrupar por (cliente, tag) e aplicar a mesma regra em memória;
     - a resposta tem de sair **idêntica**: mesmos campos, ordem e valores de `FeedbackSemelhante`.
-  - **34.2 Parâmetros opcionais em `GET /api/anomalias`** (`clienteId`, `desde`, `limite`):
+    - **Feito (confirmado no código e em teste):**
+      - `FeedbackAnomaliaAnaliseService`:
+        - o *join* virou `ConsultarFeedbacks()`, o mesmo de antes, sem as colunas `Descricao`/`AcaoTomada`, que a regra não usa;
+        - a regra virou `AnalisarFeedbacks`, estática, sem banco e com o mesmo código;
+        - `GerarAnaliseFeedbacks`, usado na predição (`PredictionPostDecisionAnalysisService`, `PostDecision.Feedback`), continua com uma consulta por chamada e o mesmo resultado;
+        - novo `CarregarFeedbacksPorTag(clienteId?)`: uma consulta, ordenada pelo Id do feedback, agrupada por (cliente, tag) com comparação ordinal (= colação BINARY do SQLite).
+      - `AnomaliaController.Listar`: 1 consulta das decisões + 1 dos feedbacks (só a primeira, se a lista vier vazia), em vez de 1 + N. Mesmo tipo anônimo, mesma ordem dos campos.
+      - **Desempate do motivo mais comum:** a regra pega o primeiro grupo na ordem das linhas. A consulta por tag não tem `ORDER BY`. Sem índice em `ClienteId`/`TagName` nem em `AnomaliaId` (só a PK e `MotivoAnomaliaIAId`), o SQLite varre `FeedbackAnomaliasIa` na ordem do rowid (= Id). A consulta única ordena pelo Id do feedback e reproduz essa ordem. Há um teste em que o desempate depende da ordem do feedback, oposta à da anomalia.
+    - **Teste** (`IAApi.Tests/AnomaliaListarEquivalenciaTests.cs`, SQLite em memória):
+      - **referência congelada:** cópia do `Listar` e do `GerarAnaliseFeedbacks` do commit `7177744`, rodada no mesmo banco;
+      - **base:** 240 decisões e 7 pares cliente/tag, com `c1` × `C1`, feedback de anomalia inexistente, feedback com tag diferente da anomalia, motivo nulo, empates de `DataDeteccao` e valores negativos;
+      - JSON igual byte a byte, no controller e **pelo HTTP** (Kestrel em 127.0.0.1, só o `AnomaliaController`, com o formatador real do MVC);
+      - **comandos SQL por chamada (contados por *interceptor*): 2, contra 241 antes**; lista vazia: 1;
+      - `GerarAnaliseFeedbacks` (caminho da predição) igual ao de antes em 240 × 7 combinações;
+      - **mutação** (feedback em ordem decrescente): 8 testes falham.
+  - **34.2 Parâmetros opcionais em `GET /api/anomalias`** (`clienteId`, `desde`, `limite`): ✅ **concluída em 2026-11-17 (sem commit)**
     - **sem eles, a resposta é a de hoje** (contrato preservado);
-    - o LiveMonitor (`server/proxy.ts`, `src/api.ts`) passa `clienteId` e um limite compatível com o `mergeDecisions` (1.000);
+    - ~~o LiveMonitor (`server/proxy.ts`, `src/api.ts`) passa `clienteId` e um limite compatível com o `mergeDecisions` (1.000);~~ **mudou na execução (pedido da responsável, 17/11): o LiveMonitor passa `clienteId` e `desde`, sem `limite`** (motivo abaixo);
     - o `Export-AnomaliasIaReal.ps1` passa `clienteId` e `desde`;
     - reduz, sem resolver, a exposição entre clientes (P34).
+    - **Feito (confirmado no código e em teste):**
+      - **IAApi:**
+        - `clienteId`: igualdade exata, filtro no SQL. Com ele, a consulta de feedback também é só desse cliente;
+        - `desde`: `DataDeteccao >= desde`, inclusivo, na mesma convenção de `DataDeteccao` (hora local da IAApi, sem fuso);
+        - `limite`: `Take` depois do `ORDER BY DataDeteccao DESC` (as mais recentes). O `ORDER BY` é o mesmo de antes;
+        - `limite < 1`, ou valor que não converte → HTTP 400.
+      - **LiveMonitor:**
+        - o proxy manda `clienteId` sempre e só repassa `since` → `desde` no formato `yyyy-MM-ddTHH:mm:ss[.f…]`. Outro formato → 404, sem chamar a IAApi;
+        - o filtro por cliente no proxy fica, como defesa para IAApi anterior à 34.2;
+        - `useMonitor`: a 1ª consulta traz todas as decisões do cliente. As seguintes passam `desde` = `dataDeteccao` mais recente recebida **menos 5 min** (`decisionsSince`, em `domain.ts`), para cobrir linhas gravadas fora de ordem. As repetidas saem pelo ID no `mergeDecisions`.
+      - **Por que sem `limite` no LiveMonitor:**
+        - hoje cada consulta traz tudo, e `mergeDecisions(…, max(1000, incoming.length))` guarda **todas** as decisões do cliente. A lista da sessão de teste, os contadores e o CSV do monitor usam essa lista;
+        - com `limite=1000`, uma sessão com mais de 1.000 decisões (12 tags ≈ 720/h) perderia as mais antigas;
+        - com `desde`, cada consulta já cai para os últimos ~5 min. O teto do `mergeDecisions` passou a `max(1000, acumuladas + novas)`, que guarda o mesmo que hoje.
+      - **Export:** `?clienteId={Cliente}&desde={Inicio}`. Os filtros locais (cliente, `Inicio`, `Fim`) continuam, então o arquivo sai igual também com IAApi anterior à 34.2.
+    - **Testes:**
+      - **IAApi** (mesmo arquivo da 34.1), **22/22**:
+        - cada parâmetro e a combinação dos três iguais à lista de antes, filtrada pelas mesmas regras;
+        - `desde` exatamente igual ao `DataDeteccao` de uma linha → a linha vem;
+        - pelo HTTP, `clienteId` + `desde` + `limite` chegam ao filtro; `limite=0`, `limite=abc` e `desde=ontem` → 400.
+      - **LiveMonitor** (`npx vitest run`): **32/32** (eram 28) e `tsc --noEmit` sem erro. Novos:
+        - rota do proxy com `clienteId`/`desde` e recusa de `since` malformado;
+        - `decisionsSince`: volta à hora sem fuso, com offset −03:00 e +05:30;
+        - **simulação de 1.100 consultas** com linhas gravadas 1 min fora de ordem: a lista acumulada e os alertas saem **iguais** aos da consulta completa, inclusive acima de 1.000 decisões;
+        - mutação (folga 0): 2 testes falham.
+      - **Export:** sem teste automatizado. Teste de fumaça com servidor HTTP falso em 127.0.0.1 (não é a IAApi): a versão de antes (HEAD) e a nova geram **o mesmo CSV** (SHA-256 igual); a nova pede `/api/anomalias?clienteId=PK2&desde=2026-11-11T15%3A06%3A00`.
+    - **Limitações:**
+      - `desde` é comparado como texto no SQLite, no formato do EF (`yyyy-MM-dd HH:mm:ss.FFFFFFF`). Não foi verificado se o banco real tem linhas gravadas fora do EF, em outro formato **[a validar]**. Se tiver, a IAApi pode não devolvê-las, e o filtro local do export não recupera o que não veio.
+      - Linha gravada mais de 5 min depois do seu `DataDeteccao` só chega ao LiveMonitor quando ele for reaberto. Hoje `DataDeteccao = DateTime.Now` logo antes do `SaveChanges` (`AnomaliaHistoricoService`).
+      - Efeito em sessão real (consultas por chamada, tempo do monitor) **não medido**: é o aceite de sessão desta tarefa.
   - **34.3 Histórico do controller só no período pedido:**
     - `TagHistoricoController` usa `BuscarHistoricoPorPeriodo(cliente, tag, agora − horas, agora)` no lugar das 24 h;
     - preservar o formato da resposta, a ordem, o filtro de `NaN`/infinito e o fallback "últimas 20 leituras";
@@ -1495,10 +1540,10 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 - **Não muda:** a decisão de anomalia, o laço do monitor, `IHistoricoService`, `BridgeHistoricoService` e o contrato HTTP quando os parâmetros novos não são enviados.
 - **Aceite:**
   - **offline:**
-    - JSON de `GET /api/anomalias` igual ao atual numa base de teste com feedbacks (comparação de ouro);
-    - número de comandos SQL por chamada constante (≤ 2), sem crescer com o número de linhas, contado por *interceptor* ou *logger* no teste;
+    - ✅ (17/11) JSON de `GET /api/anomalias` igual ao atual numa base de teste com feedbacks (comparação de ouro);
+    - ✅ (17/11) número de comandos SQL por chamada constante (≤ 2), sem crescer com o número de linhas, contado por *interceptor* ou *logger* no teste;
     - histórico com 1 chamada `BuscarHistoricoPorPeriodo` de ~2 h e nenhuma de 24 h, com a mesma resposta numa base fixa, inclusive período vazio;
-    - testes do LiveMonitor; suíte completa (isolamento conferido antes); `Compare-Replay.ps1` com 0 diferenças, como sanidade;
+    - testes do LiveMonitor; suíte completa (isolamento conferido antes); `Compare-Replay.ps1` com 0 diferenças, como sanidade. ✅ **Para 34.1–34.2 (17/11):** LiveMonitor 32/32; suíte completa **1168/1168**; `Compare-Replay.ps1` **0 diferenças em 12 execuções, sem e com `-HistoricoCausal`**;
   - **sessão** (com aprovação): 30 min com o LiveMonitor aberto nas 12 tags e PERF_DIAG.
     - `Preparation.History` do monitor dentro de ±20 % do valor sem o LiveMonitor (4,9 s em 16/11);
     - 0 timeouts; histórico do LiveMonitor com ≤ 3 buscas simultâneas no Bridge;

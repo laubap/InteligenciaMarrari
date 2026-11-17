@@ -29,7 +29,12 @@ export function upstreamPath(url: URL): string | null {
   switch (url.pathname) {
     case '/monitor-api/tags': return '/api/tags';
     case '/monitor-api/metadata': return `/api/tags/bridge/${encodeURIComponent(client)}`;
-    case '/monitor-api/decisions': return '/api/anomalias';
+    case '/monitor-api/decisions': {
+      // 34.2 (P42): o filtro por cliente e o `desde` vão para a IAApi.
+      const since = url.searchParams.get('since');
+      if (since !== null && !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,7})?$/.test(since)) return null;
+      return `/api/anomalias?clienteId=${encodeURIComponent(client)}${since ? `&desde=${encodeURIComponent(since)}` : ''}`;
+    }
     case '/monitor-api/history': return tag ? `/api/tags/historico/${encodeURIComponent(client)}/${encodeURIComponent(tag)}?horas=2` : null;
     case '/monitor-api/diagnostics': return tag ? `/api/intelligence-lab/diagnostics?limit=100&clienteId=${encodeURIComponent(client)}&tagName=${encodeURIComponent(tag)}` : null;
     case '/monitor-api/shadow': return `/api/intelligence-lab/diagnostics/multivariate-shadow?limit=100&clienteId=${encodeURIComponent(client)}`;
@@ -74,7 +79,8 @@ export function createMiddleware(env: Env) {
       });
       if (!response.ok) return reply(response.status, { error: `IAApi respondeu HTTP ${response.status}.` });
       let body: unknown = await response.json();
-      // Reduzir transferência ao navegador; o endpoint original não tem paginação.
+      // Reduzir transferência ao navegador. Em decisions a IAApi já filtra por
+      // cliente (34.2); o filtro fica como defesa, para IAApi sem o parâmetro.
       if (Array.isArray(body) && ['tags', 'decisions'].some(s => url.pathname.endsWith('/' + s))) {
         const client = url.searchParams.get('client') || config.public.client;
         body = body.filter(row => row.clienteId === client);

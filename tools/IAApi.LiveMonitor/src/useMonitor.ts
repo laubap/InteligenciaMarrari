@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { fromDiagnostic, mergeDecisions, newAnomalies, parseDecisions, parseHistory } from './domain';
+import { decisionsSince, fromDiagnostic, mergeDecisions, newAnomalies, parseDecisions, parseHistory } from './domain';
 import { mapLimited, startPolling } from './polling';
 import type { Config, Decision, Shadow, Snapshot } from './types';
 
@@ -18,13 +18,17 @@ export function useMonitor(config: Config, selected: string[], interval: number)
     };
     const stopDecisions = startPolling(async signal => {
       try {
-        const raw = await api.decisions(config.client, signal);
+        // 34.2 (P42): a primeira consulta traz todas as decisões do cliente; as
+        // seguintes, só as recentes (`desde`). A lista acumulada continua com
+        // tudo o que já foi recebido, como quando cada consulta trazia tudo.
+        const since = initialized.current ? decisionsSince(data.current.decisions, config.sourceOffset) : undefined;
+        const raw = await api.decisions(config.client, signal, since);
         if (signal.aborted) return;
         const now = Date.now();
         const incoming = parseDecisions(raw, config.client, config.sourceOffset, now);
         const fresh = newAnomalies(data.current.decisions, incoming, initialized.current);
         if (fresh.length) setAlerts(old => mergeDecisions(old, fresh, 20));
-        data.current.decisions = mergeDecisions(data.current.decisions, incoming, Math.max(1000, incoming.length));
+        data.current.decisions = mergeDecisions(data.current.decisions, incoming, Math.max(1000, data.current.decisions.length + incoming.length));
         data.current.decisionsError = undefined;
         data.current.decisionsReceivedAt = now;
         data.current.lastResponseAt = now;

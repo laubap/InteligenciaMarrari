@@ -8,11 +8,14 @@
     para as decisoes (tools/IAApi.LiveMonitor/server/proxy.ts:
     /monitor-api/decisions -> /api/anomalias):
 
-        GET {ApiUrl}/api/anomalias      (Controllers/AnomaliaController.cs : Listar)
+        GET {ApiUrl}/api/anomalias?clienteId={Cliente}&desde={Inicio}
+            (Controllers/AnomaliaController.cs : Listar)
 
-    O endpoint devolve TODAS as linhas de AnomaliaDetectada (todos os clientes,
-    sem filtro nem paginacao, da mais recente para a mais antiga). O filtro por
-    cliente e por periodo e feito aqui, antes de gravar; linhas de outros
+    Desde a tarefa 34.2 (P42) a IAApi filtra por cliente e por DataDeteccao >=
+    Inicio, e devolve as linhas da mais recente para a mais antiga. O filtro
+    por cliente e pelo periodo (Inicio e Fim) continua tambem aqui, antes de
+    gravar; com uma IAApi anterior a 34.2, que ignora os parametros e devolve
+    todas as linhas de todos os clientes, o arquivo sai igual. Linhas de outros
     clientes nao vao para o arquivo. A tabela recebe uma linha por decisao
     (anomalia ou nao): PredictionFinalizationService.Finalizar chama
     AnomaliaHistoricoService.Registrar em toda leitura processada.
@@ -70,8 +73,8 @@
     Se ja existir, exige -Sobrescrever.
 
 .PARAMETER TimeoutSeg
-    Timeout do GET (padrao 300 s; o endpoint nao pagina e calcula um resumo
-    de feedback por linha).
+    Timeout do GET (padrao 300 s; o endpoint nao pagina e, numa IAApi anterior
+    a 34.1, calcula um resumo de feedback com uma consulta por linha).
 
 .PARAMETER PermitirRemoto
     Aceita ApiUrl fora do loopback. Use so com autorizacao.
@@ -197,7 +200,11 @@ if ((Test-Path -LiteralPath $saidaPath) -and -not $Sobrescrever) {
 }
 
 # --- Consulta (unico GET) -------------------------------------------------
-$url = $uri.GetLeftPart([UriPartial]::Authority) + '/api/anomalias'
+# 34.2 (P42): cliente e inicio vao como filtro para a IAApi. desde usa a mesma
+# convencao de DataDeteccao (hora local da IAApi, sem fuso) e e inclusivo.
+$url = $uri.GetLeftPart([UriPartial]::Authority) + '/api/anomalias' +
+    '?clienteId=' + [Uri]::EscapeDataString($Cliente) +
+    '&desde=' + [Uri]::EscapeDataString($ini.ToString("yyyy-MM-dd'T'HH:mm:ss", $inv))
 Write-Host "GET $url (timeout $TimeoutSeg s)"
 $relogio = [Diagnostics.Stopwatch]::StartNew()
 $resp = Invoke-WebRequest -Uri $url -Method Get -UseBasicParsing -TimeoutSec $TimeoutSeg -MaximumRedirection 0 `
