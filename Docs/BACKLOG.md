@@ -184,9 +184,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Por quê:** metade do tempo de cada tag é a **segunda** busca de 24 h, a da tendência pós-decisão (`MEDICAO_ETAPA0.md` §3). O `PredictionHistoryReuse` já existe e a elimina. Medir isso antes da 6.1 separa os dois ganhos e mostra quanto falta para 1 min.
 - **Como:**
   - sessão igual à da 6.0 (`-HistoricoCausal -PerfDiag`, Development, PK2 com 12 tags e PK7 com 1, simulador rodando, pelo menos 1 h), com `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1` no ambiente do processo;
-  - o `Start-IAApiComLog.ps1` não tem opção para isso. Há duas saídas:
-    - definir a variável na janela antes de chamar o script (o processo filho herda o ambiente);
-    - acrescentar um `-ReusoHistorico` ao script, gravado no `config.json`. É uma mudança pequena, com aprovação própria;
+  - **atualizado em 17/11 (tarefa 36.2):** o `Start-IAApiComLog.ps1` agora tem o **`-ReusarHistorico`**, que liga a variável e a grava no `config.json`. Comando da sessão: `.\tools\Start-IAApiComLog.ps1 -HistoricoCausal -PerfDiag -ReusarHistorico`. Definir a variável na janela **não funciona mais** (o script a sobrescreve com `0`);
   - o experimento só vale em Development (trava do próprio experimento).
 - **Condições da sessão:**
   - LiveMonitor fechado, ou tarefa 34 feita, com o estado registrado no relatório (P42);
@@ -1679,7 +1677,20 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 - **Risco:** baixo (aditivo; confirmado que nenhum cliente tem regime cadastrado). **Esforço:** P.
 - **Ordem:** antes da RC-12 (dependência acrescentada na tabela RC), da 6.4 e da demo.
 
-### 36. (Ferramenta) Log da sessão com horário, sem o SQL do EF e com codificação conhecida (P44) — ⏳ **ABERTA (registrada em 2026-11-16); prioridade média: antes da próxima sessão longa; nada aprovado**
+### 36. (Ferramenta) Log da sessão com horário, sem o SQL do EF e com codificação conhecida (P44) — 🔶 **36.1 e 36.2 FEITAS em 2026-11-17 (sem commit); 36.3 e 36.4 abertas; prioridade média: antes da próxima sessão longa**
+- **Feito em 17/11 (36.1 e 36.2, aprovadas pela responsável; sem commit):**
+  - **36.1 (causa confirmada em teste):** sem `Logging:Console:FormatterName`, o provedor de console escolhe o formatador `simple` copiando as opções **antigas** (`Logging:Console:TimestampFormat`) e **descarta** `Logging:Console:FormatterOptions`. O script só definia `FormatterOptions__TimestampFormat`; por isso o horário nunca saiu. As duas hipóteses do plano ("chave não lida como esperado"; "outro formatador ativo") se resumem a isso: a chave não é lida porque nenhum formatador foi nomeado.
+    - Teste novo `IAApi.Tests/Monitoring/ConsoleLogFormatoSessaoTests.cs` (5 testes, **5 de 5**): monta o host como o `Program.cs` (`WebApplication.CreateBuilder`, sem iniciar servidor), com configuração em memória, e lê o que o console de fato escreveu. (1) só `FormatterOptions` → **sem** horário (reproduz 16/11); (2) com `FormatterName=simple` → `2026-… info: …`; (3) a chave antiga também funcionaria, mas é a API obsoleta (descartada); (4) SQL do EF em `Warning` some em `Information` e mantém `Warning`/`Error`, sem afetar outras categorias; (5) sem filtro o `Executed DbCommand` aparece (o caso de 16/11).
+    - Confirmado em log (16/11): as linhas saíram como `info: Microsoft.Hosting.Lifetime[14]`, e o `config.json` da sessão mostra que a variável do horário **foi** definida. Confirmado no código: o `Program.cs` não configura logging e o `appsettings*.json` não define `FormatterName`.
+  - **36.2 (`tools/Start-IAApiComLog.ps1`):**
+    - `Logging__Console__FormatterName = simple` acrescentado (corrige o horário);
+    - `Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command = Warning` acrescentado (só a sessão; `appsettings*.json` não muda; as falhas do EF continuam no log);
+    - **`-ReusarHistorico` (pedido para a sessão 6.0b):** liga `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1`; desligado por padrão (a variável é **sempre** definida, `0` sem o switch, para um `1` esquecido na janela não ligar o reuso); recusa subir fora de Development (o gate do experimento só liga nesse ambiente), antes de criar arquivos; gravado no `config.json` (`ReusarHistorico` e a variável); independente do `-PerfDiag`;
+    - **atenção:** definir a variável na janela antes de chamar o script **deixou de funcionar** (o script a sobrescreve com `0`); a 6.0b usa `-ReusarHistorico`;
+    - todas as variáveis novas estão gravadas no `config.json`; README (`tools/README.md`) atualizado.
+  - **Testes do script:** `tools/Start-IAApiComLog.Tests.ps1` passou de 25 para **51 verificações, todas aprovadas**. A seção nova **executa o script** com um `dotnet` falso no PATH (`.cmd` temporário que só imprime as variáveis), sem build, logs numa pasta temporária e porta livre: a IAApi real não sobe, e não há acesso a Bridge, banco ou rede. Cobre `FormatterName`, horário, filtro do EF, `-ReusarHistorico` (`0`/`1`/recusa em Production sem criar pasta), variáveis esquecidas na sessão e `config.json`.
+  - **Não validado:** uma subida real. Falta confirmar no log da próxima sessão que toda linha `info:`/`warn:`/`fail:` tem data e hora e que não há `Executed DbCommand`.
+  - **Impacto na detecção:** nenhum (só variáveis de ambiente do processo filho e um teste; nenhuma linha de código de produção foi alterada). **Rollback:** reverter `tools/Start-IAApiComLog.ps1`, `tools/Start-IAApiComLog.Tests.ps1`, `tools/README.md` e apagar `IAApi.Tests/Monitoring/ConsoleLogFormatoSessaoTests.cs`.
 - **Problema** (P44; confirmado em log):
   - o log de 16/11 saiu **sem data e hora** no início das linhas, embora o script defina `Logging__Console__FormatterOptions__TimestampFormat` (as outras variáveis tiveram efeito);
   - **960 mil** entradas `Executed DbCommand` do EF (`LogLevel:Default = Information`) somaram **702 MB** em 87 min;

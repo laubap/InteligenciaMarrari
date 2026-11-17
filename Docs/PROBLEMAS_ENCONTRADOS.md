@@ -811,7 +811,7 @@
   - **Sem data e hora:** o `tools/Start-IAApiComLog.ps1` define `Logging__Console__FormatterOptions__TimestampFormat = "yyyy-MM-dd HH:mm:ss "` para o processo filho (linha 210). Mesmo assim, as linhas saíram sem data e hora (ex.: `info: Microsoft.Hosting.Lifetime[14]`).
     - As outras variáveis, definidas do mesmo jeito, tiveram efeito: `HISTORICO RECORTADO` e PERF_DIAG aparecem.
     - O `Program.cs` não configura o logging (provedores padrão).
-    - **Causa: hipótese, não investigada.**
+    - **Causa (confirmada em teste, 17/11):** sem `Logging:Console:FormatterName`, o provedor de console escolhe o formatador `simple` copiando as opções antigas (`Logging:Console:TimestampFormat`) e descarta `Logging:Console:FormatterOptions`. O script só definia `FormatterOptions__TimestampFormat`. Teste: `IAApi.Tests/Monitoring/ConsoleLogFormatoSessaoTests.cs`. **Corrigido no script (36.2, sem commit)** com `Logging__Console__FormatterName = simple`; falta confirmar na próxima sessão real.
   - **Volume:** `LogLevel:Default = Information` (`appsettings.json` e `appsettings.Development.json`) inclui `Microsoft.EntityFrameworkCore.Database.Command`, que grava cada comando SQL com o texto. Foram **960.008** entradas do EF entre as ~974 mil do log, e **702 MB** em 87 min (~36 MB/min depois de 16:27, por causa do P42).
   - **Codificação:** o arquivo está na página de código do console (cp850 nesta máquina). Acentos aparecem trocados (`Predi�ao`, `Conclu¡da` lido como latin-1).
   - As linhas de `Console.WriteLine` (`HISTORICO RECORTADO`, `LIMPEZA DE HISTORICO`, interpretação) nunca tiveram horário (P27, tarefa 17).
@@ -822,6 +822,7 @@
   - Sessões longas (≥ 2 h, ou noturnas) podem gerar vários GB.
   - Neste log, o custo de logging não apareceu no monitor (o "restante" dentro da predição ficou em ~40 ms), mas não foi isolado.
 - **Prioridade:** média. É barato e deve ser feito antes da próxima sessão longa.
+- **Situação (17/11, sem commit):** horário e SQL do EF em `Warning` **corrigidos no script** (36.1 e 36.2); codificação (36.3) e tamanho (36.4) abertas. Ainda não validado numa subida real.
 - **BACKLOG:** **36**; relacionados: 6, 17, 19 e P27.
 
 ### Problemas de segurança da auditoria B3.23 (P33 a P40)

@@ -32,16 +32,29 @@
     Variaveis de ambiente definidas (sobrepoem appsettings*.json):
       ASPNETCORE_ENVIRONMENT                               = -Ambiente (Development)
       ASPNETCORE_URLS                                      = -Url (http://localhost:5145)
+      Logging__Console__FormatterName                      = simple
       Logging__Console__FormatterOptions__TimestampFormat  = "yyyy-MM-dd HH:mm:ss "
       Logging__Console__FormatterOptions__ColorBehavior    = Disabled
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command = Warning
       AnomalyDetection__HistoricoCausal__Habilitado        = true so com -HistoricoCausal
       AnomalyDetection__RegimeCombinado__Habilitado        = true so com -RegimeCombinado
       IAAPI_PERF_DIAGNOSTICS                               = 1 so com -PerfDiag (senao 0)
-    As tres chaves sao SEMPRE definidas (false/0 quando o switch nao e passado),
-    para que o estado fique explicito e registrado no config.json do log. No
-    caso do PERF_DIAG, o 0 explicito tambem impede que um
-    IAAPI_PERF_DIAGNOSTICS=1 esquecido na sessao do PowerShell ligue o
-    diagnostico sem querer.
+      IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY            = 1 so com -ReusarHistorico (senao 0)
+    As chaves de deteccao e as duas variaveis IAAPI_* sao SEMPRE definidas
+    (false/0 quando o switch nao e passado), para que o estado fique explicito e
+    registrado no config.json do log. O 0 explicito tambem impede que um
+    IAAPI_PERF_DIAGNOSTICS=1 ou IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1
+    esquecido na sessao do PowerShell ligue o recurso sem querer.
+
+    Data e hora no log (P44, tarefa 36): o FormatterName=simple e OBRIGATORIO.
+    Sem ele, o provedor de console escolhe o formatador "simple" copiando as
+    opcoes antigas (Logging:Console:TimestampFormat) e DESCARTA
+    Logging:Console:FormatterOptions; foi por isso que o log de 16/11 saiu sem
+    horario. Provado por IAApi.Tests\Monitoring\ConsoleLogFormatoSessaoTests.cs.
+
+    SQL do EF (P44): o filtro em Warning vale so para esta sessao (o
+    appsettings*.json nao muda). As falhas do EF (Failed executing DbCommand,
+    avisos) continuam no log; so some o "Executed DbCommand" em Information.
 
     Arquivos (pasta dados\ e ignorada pelo git):
       dados\logs\iaapi_<yyyyMMdd_HHmmss>.log         stdout (logs do console)
@@ -64,6 +77,16 @@
     nao muda a decisao de anomalia, mas acrescenta linhas "PERF_DIAG" ao log e
     um pequeno custo por predicao. O PERF_DIAG so liga com o ambiente
     Development; com -PerfDiag e outro -Ambiente, o script recusa subir.
+
+.PARAMETER ReusarHistorico
+    Liga o experimento de reuso do historico da predicao
+    (IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1;
+    Docs/prediction-history-reuse-experiment.md), para a sessao 6.0b da BACKLOG 6.
+    Desligado por padrao. Com ele, a tendencia de valor deixa de fazer a segunda
+    consulta de historico ao Bridge e usa a mesma aquisicao da predicao; a
+    tendencia (e trechos da mensagem) pode diferir, a decisao do detector nao.
+    Parametro proprio, separado do -PerfDiag. So liga com o ambiente
+    Development; com outro -Ambiente, o script recusa subir.
 
 .PARAMETER Configuracao
     Debug (padrao, o mesmo do "dotnet run") ou Release.
@@ -98,6 +121,11 @@
     Sessao da etapa 0 da BACKLOG 6 (6.0): recorte causal (P31) e PERF_DIAG ligados.
 
 .EXAMPLE
+    .\tools\Start-IAApiComLog.ps1 -HistoricoCausal -PerfDiag -ReusarHistorico
+
+    Sessao 6.0b da BACKLOG 6: igual a 6.0, com o reuso do historico ligado.
+
+.EXAMPLE
     Get-Content (Get-Content .\dados\logs\iaapi.pid.json | ConvertFrom-Json).Log -Wait -Tail 50
 #>
 [CmdletBinding()]
@@ -105,6 +133,7 @@ param(
     [switch]$HistoricoCausal,
     [switch]$RegimeCombinado,
     [switch]$PerfDiag,
+    [switch]$ReusarHistorico,
     [ValidateSet('Debug', 'Release')]
     [string]$Configuracao = 'Debug',
     [string]$Url = 'http://localhost:5145',
@@ -143,6 +172,12 @@ if (-not (Test-EnderecoLocal $Url)) {
 if ($PerfDiag -and -not [string]::Equals($Ambiente, 'Development', [StringComparison]::OrdinalIgnoreCase)) {
     throw (("-PerfDiag exige -Ambiente Development (recebido: '{0}'): fora dele o PERF_DIAG " +
         "fica desligado mesmo com IAAPI_PERF_DIAGNOSTICS=1. Nao subi nada.") -f $Ambiente)
+}
+
+# 0c. O reuso do historico tambem so liga em Development (PredictionHistoryReuseOptions).
+if ($ReusarHistorico -and -not [string]::Equals($Ambiente, 'Development', [StringComparison]::OrdinalIgnoreCase)) {
+    throw (("-ReusarHistorico exige -Ambiente Development (recebido: '{0}'): fora dele o reuso " +
+        "fica desligado mesmo com IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1. Nao subi nada.") -f $Ambiente)
 }
 
 $raiz = Split-Path -Parent $PSScriptRoot
@@ -207,11 +242,16 @@ $arquivoConfig = Join-Path $PastaLogs ("iaapi_{0}.config.json" -f $carimbo)
 $variaveis = [ordered]@{
     'ASPNETCORE_ENVIRONMENT'                              = $Ambiente
     'ASPNETCORE_URLS'                                     = $Url
+    # FormatterName=simple e obrigatorio: sem ele o FormatterOptions e descartado (P44).
+    'Logging__Console__FormatterName'                     = 'simple'
     'Logging__Console__FormatterOptions__TimestampFormat' = 'yyyy-MM-dd HH:mm:ss '
     'Logging__Console__FormatterOptions__ColorBehavior'   = 'Disabled'
+    # So a sessao: o SQL "Executed DbCommand" (Information) sai do log; Warning/Error do EF ficam.
+    'Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command' = 'Warning'
     'AnomalyDetection__HistoricoCausal__Habilitado'       = $(if ($HistoricoCausal) { 'true' } else { 'false' })
     'AnomalyDetection__RegimeCombinado__Habilitado'       = $(if ($RegimeCombinado) { 'true' } else { 'false' })
     'IAAPI_PERF_DIAGNOSTICS'                              = $(if ($PerfDiag) { '1' } else { '0' })
+    'IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY'           = $(if ($ReusarHistorico) { '1' } else { '0' })
 }
 
 $salvas = @{}
@@ -262,7 +302,8 @@ $registro = [ordered]@{
     HistoricoCausal = [bool]$HistoricoCausal
     RegimeCombinado = [bool]$RegimeCombinado
     PerfDiag        = [bool]$PerfDiag
-    Variaveis       = $variaveis
+    ReusarHistorico = [bool]$ReusarHistorico
+    Variaveis      = $variaveis
 }
 $json = $registro | ConvertTo-Json -Depth 3
 Set-Content -LiteralPath $arquivoPid -Value $json -Encoding UTF8
@@ -270,8 +311,8 @@ Set-Content -LiteralPath $arquivoConfig -Value $json -Encoding UTF8
 
 Write-Host ''
 Write-Host ("IAApi rodando: PID {0}, {1}" -f $proc.Id, $Url)
-Write-Host ("  HistoricoCausal = {0}; RegimeCombinado = {1}; PerfDiag = {2}" -f
-    [bool]$HistoricoCausal, [bool]$RegimeCombinado, [bool]$PerfDiag)
+Write-Host ("  HistoricoCausal = {0}; RegimeCombinado = {1}; PerfDiag = {2}; ReusarHistorico = {3}" -f
+    [bool]$HistoricoCausal, [bool]$RegimeCombinado, [bool]$PerfDiag, [bool]$ReusarHistorico)
 Write-Host ("  Log:      {0}" -f $log)
 Write-Host ("  Erros:    {0}" -f $logErro)
 Write-Host ("  PID em:   {0}" -f $arquivoPid)

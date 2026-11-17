@@ -25,6 +25,7 @@ cd 'C:\Users\Laura Marrari\Documents\IA MARRARI\IAApi_RECUPERADO'
 .\tools\Start-IAApiComLog.ps1 -HistoricoCausal                    # só P31
 .\tools\Start-IAApiComLog.ps1 -HistoricoCausal -RegimeCombinado   # as duas
 .\tools\Start-IAApiComLog.ps1 -HistoricoCausal -PerfDiag          # etapa 0 da BACKLOG 6 (6.0): P31 + PERF_DIAG
+.\tools\Start-IAApiComLog.ps1 -HistoricoCausal -PerfDiag -ReusarHistorico   # sessão 6.0b: igual à 6.0, com o reuso do histórico
 ```
 
 O script:
@@ -40,20 +41,37 @@ Variáveis de ambiente definidas só para o processo da IAApi. Os valores anteri
 |---|---|
 | `ASPNETCORE_ENVIRONMENT` | `-Ambiente` (padrão `Development`, como no `launchSettings.json`) |
 | `ASPNETCORE_URLS` | `-Url` (padrão `http://localhost:5145`, o mesmo do LiveMonitor) |
+| `Logging__Console__FormatterName` | `simple` (**obrigatório** para o horário sair; ver abaixo) |
 | `Logging__Console__FormatterOptions__TimestampFormat` | `yyyy-MM-dd HH:mm:ss ` |
 | `Logging__Console__FormatterOptions__ColorBehavior` | `Disabled` (sem códigos de cor no arquivo) |
+| `Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command` | `Warning` (some o SQL do EF; ver abaixo) |
 | `AnomalyDetection__HistoricoCausal__Habilitado` | `true` só com `-HistoricoCausal`; senão `false` |
 | `AnomalyDetection__RegimeCombinado__Habilitado` | `true` só com `-RegimeCombinado`; senão `false` |
 | `IAAPI_PERF_DIAGNOSTICS` | `1` só com `-PerfDiag`; senão `0` |
+| `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY` | `1` só com `-ReusarHistorico`; senão `0` |
 
-As duas chaves de detecção são **sempre** definidas, inclusive como `false`. Assim, o estado de cada subida fica explícito no `config.json` do log. Elas não existem hoje em `appsettings*.json`, e o padrão das classes de opções também é `false`.
+As duas chaves de detecção e as duas variáveis `IAAPI_*` são **sempre** definidas, inclusive como `false`/`0`. Assim, o estado de cada subida fica explícito no `config.json` do log. As chaves de detecção não existem hoje em `appsettings*.json`, e o padrão das classes de opções também é `false`.
+
+**Data e hora no log (P44, tarefa 36).**
+- **Causa (confirmada em teste):** sem `Logging:Console:FormatterName`, o provedor de console escolhe o formatador `simple` copiando as opções **antigas** (`Logging:Console:TimestampFormat`) e **descarta** `Logging:Console:FormatterOptions`. O script de 16/11 só definia `FormatterOptions__TimestampFormat`, então o horário nunca saiu (`info: Microsoft.Hosting.Lifetime[14]`, sem data). O `ColorBehavior` caiu no mesmo descarte; não deu para notar porque a saída redirecionada para arquivo já não tem cores.
+- **Correção:** o script passou a definir também `FormatterName = simple`. O teste que prova a causa e a correção é `IAApi.Tests/Monitoring/ConsoleLogFormatoSessaoTests.cs`.
+- **O que o horário cobre:** as linhas do `ILogger` (`info:`, `warn:`, `fail:`, inclusive `PERF_DIAG`). Os `Console.WriteLine` do código (`HISTORICO RECORTADO`, `LIMPEZA DE HISTORICO`, interpretação) continuam **sem** horário (tarefa 17).
+- **Formato esperado:** `2026-11-17 10:00:00 info: Microsoft.Hosting.Lifetime[14]`, com a mensagem na linha seguinte.
+
+**SQL do EF em `Warning` (P44).** A categoria `Microsoft.EntityFrameworkCore.Database.Command` em `Information` gravou 960 mil linhas `Executed DbCommand` (702 MB em 87 min) no log de 16/11. Com o filtro, essas linhas somem. As falhas do EF (`Failed executing DbCommand`, avisos de migration pendente como as do P43) continuam no log. O filtro vale **só para a sessão**: o `appsettings*.json` não muda e as demais categorias seguem em `Information`.
+
+**`-ReusarHistorico` (reuso do histórico da predição, desligado por padrão).** Liga `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1` ([Docs/prediction-history-reuse-experiment.md](../Docs/prediction-history-reuse-experiment.md)), para a sessão 6.0b da BACKLOG 6.
+- **O que faz:** a tendência de valor deixa de fazer a segunda consulta de histórico ao Bridge e usa a mesma aquisição da predição. A decisão do detector não muda; a tendência (e trechos da mensagem) pode diferir.
+- **Parâmetro próprio:** é independente do `-PerfDiag`. Para a 6.0b, use os dois juntos (`-HistoricoCausal -PerfDiag -ReusarHistorico`).
+- **Só em Development:** o gate do experimento exige Development e o valor exato `1`. Com `-ReusarHistorico` e outro `-Ambiente`, o script **recusa subir** antes de criar qualquer arquivo.
+- **Variável sempre definida:** sem o switch, fica em `0`. Por isso, **definir `$env:IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY = '1'` na janela antes de chamar o script não funciona mais**: o script a sobrescreve com `0` no processo filho. Use `-ReusarHistorico`.
+- **Registro:** o `config.json` grava `ReusarHistorico` e a variável.
 
 **`-PerfDiag` (PERF_DIAG, desligado por padrão).** Liga a instrumentação descrita em [Docs/performance-diagnostics.md](../Docs/performance-diagnostics.md). Foi aprovada para a etapa 0 da BACKLOG 6 (6.0).
 - **O que faz:** só mede. Não muda a decisão de anomalia. Acrescenta ao log linhas `PERF_DIAG ...` (`Monitoring.Reading`, `Prediction.Total`, `Preparation.History`, `Bridge.Transport` etc.), com um pequeno custo por predição.
 - **Valor da variável:** é sempre definida. Sem o switch, fica em `0`, o que impede que um `IAAPI_PERF_DIAGNOSTICS=1` esquecido na sessão do PowerShell ligue o diagnóstico sem querer. O `config.json` registra `PerfDiag`.
 - **Só em Development:** o PERF_DIAG só liga com o ambiente `Development`. Com `-PerfDiag` e outro `-Ambiente`, o script **recusa subir** antes de criar qualquer arquivo, para não rodar uma sessão de medição sem medição.
 - **Filtro de log:** as linhas saem em `Information`, na categoria `IAApi.Services.Diagnostics.PerformanceDiagnostics`. O `appsettings*.json` atual (`Default: Information`) já deixa passar.
-- **Fora do script:** o experimento `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY` (reuso do histórico) **não** é ligado por este script.
 
 Outros parâmetros: `-Configuracao Debug|Release`, `-PastaLogs`. Ajuda completa: `Get-Help .\tools\Start-IAApiComLog.ps1 -Full`.
 
@@ -63,7 +81,7 @@ Outros parâmetros: `-Configuracao Debug|Release`, `-PastaLogs`. Ajuda completa:
 |---|---|
 | `dados\logs\iaapi_<yyyyMMdd_HHmmss>.log` | Saída do console (logs com data e hora) |
 | `dados\logs\iaapi_<yyyyMMdd_HHmmss>.err.log` | stderr |
-| `dados\logs\iaapi_<yyyyMMdd_HHmmss>.config.json` | Parâmetros, chaves (inclusive `PerfDiag`) e variáveis desta subida |
+| `dados\logs\iaapi_<yyyyMMdd_HHmmss>.config.json` | Parâmetros, chaves (inclusive `PerfDiag` e `ReusarHistorico`) e variáveis desta subida |
 | `dados\logs\iaapi.pid.json` | PID e hora de início da última subida (lido pelo `Stop-IAApi.ps1`) |
 
 Acompanhar o log:
@@ -86,7 +104,8 @@ Get-Content (Get-Content .\dados\logs\iaapi.pid.json | ConvertFrom-Json).Log -Wa
 
 ### Limites
 
-- O log cresce sem rotação. Em testes longos, confira o espaço em disco.
-- O script não liga o `IAAPI_PERF_DIAGNOSTICS`, que precisa de aprovação própria (BACKLOG 6).
+- O log cresce sem rotação. Com o SQL do EF em `Warning` o volume cai muito, mas em testes longos confira o espaço em disco (tarefa 36.4, opcional).
+- O arquivo sai na página de código do console (cp850 nesta máquina), então acentos aparecem trocados se for lido como UTF-8 (tarefa 36.3, ainda não feita).
 - Mudar uma chave exige parar e subir de novo, porque as variáveis de ambiente de um processo já iniciado não mudam.
-- Validado só quanto à sintaxe (parser do PowerShell 5.1, 13/11/2026). **Ainda não foi executado.**
+- **Validação (17/11/2026):** `powershell -NoProfile -File .\tools\Start-IAApiComLog.Tests.ps1` → 51 verificações, todas aprovadas. Além do endereço local (P34), o teste **executa o script** com um `dotnet` falso no PATH (um `.cmd` temporário que só imprime as variáveis), sem build, com logs numa pasta temporária e porta livre: nada da IAApi sobe, e não há acesso a Bridge, banco ou rede. Confere `FormatterName`, horário, filtro do EF, `-ReusarHistorico` (padrão `0`, `1` só com o switch, recusa fora de Development), variáveis esquecidas na sessão e o `config.json`.
+- **Ainda não validado numa subida real:** que a IAApi de fato escreva `2026-11-17 hh:mm:ss info: ...` com essas variáveis e que `Executed DbCommand` desapareça. O teste do host (`ConsoleLogFormatoSessaoTests`) cobre o provedor de console com a mesma configuração, mas só a próxima sessão confirma no log real.
