@@ -801,7 +801,7 @@
 - **Solução** (BACKLOG 35):
   - ✅ conferir o banco em só leitura (35.0, 17/11);
   - ✅ fazer cópia de segurança e aplicar a migration (35.1, 17/11, sem commit). Cópia com SHA-256 em `C:\Users\Laura Marrari\Documents\IA MARRARI\backup_ia_config_2026-11-17\`. Schema conferido (`MapaEstados` e `TagsRegimesComponentesIa`). Contagem e conteúdo das tabelas iguais antes e depois, exceto `__EFMigrationsHistory` (+1). Rollback na tarefa 35;
-  - ⏳ confirmar na próxima sessão com a IAApi que o `no such column` sumiu (35.2);
+  - ✅ confirmar na próxima sessão com a IAApi que o `no such column` sumiu (35.2). **Confirmado em log na sessão 6.0b (17/11):** 0 ocorrências; `RegimeBaseline` `Succeeded` em 448 de 448 predições; baseline global em 448 de 448 (sem regime cadastrado; `MEDICAO_ETAPA0.md` §10.8);
   - ⏳ na subida, avisar quando houver migration pendente, sem aplicar sozinho (35.3, opcional, não aprovada).
 - **BACKLOG:** **35** (prioridade alta, antes da RC-12); relacionados: RC-5, RC-8, RC-12, 6.4 e 19.
 
@@ -822,8 +822,45 @@
   - Sessões longas (≥ 2 h, ou noturnas) podem gerar vários GB.
   - Neste log, o custo de logging não apareceu no monitor (o "restante" dentro da predição ficou em ~40 ms), mas não foi isolado.
 - **Prioridade:** média. É barato e deve ser feito antes da próxima sessão longa.
-- **Situação (17/11, sem commit):** horário e SQL do EF em `Warning` **corrigidos no script** (36.1 e 36.2); codificação (36.3) e tamanho (36.4) abertas. Ainda não validado numa subida real.
+- **Situação (17/11, sem commit):** horário e SQL do EF em `Warning` **corrigidos no script** (36.1 e 36.2); codificação (36.3) e tamanho (36.4) abertas. ~~Ainda não validado numa subida real.~~
+  - **Validado na sessão 6.0b (17/11), em log** (`MEDICAO_ETAPA0.md` §10.7):
+    - 18.527 de 18.527 cabeçalhos do `ILogger` com data e hora;
+    - 0 `Executed DbCommand`;
+    - 15,6 MB em 77 min (~12 MB/h).
+  - Continuam sem horário as linhas de `Console.WriteLine` (tarefa 17), e a codificação continua a do console (36.3).
+  - **Correção do "Efeito" acima [inferência]:** o custo de logging aparecia, sim. Com o EF em `Warning`, a finalização caiu de 347 para 37 ms em média (p95 de 2,3 s para 0,1 s), mas junto com outras mudanças, sem isolar.
 - **BACKLOG:** **36**; relacionados: 6, 17, 19 e P27.
+
+### P45. `Stop-IAApi.ps1`: o processo continua vivo 15 s depois do `Stop-Process -Force` [sessão 6.0b]
+
+- **O que aconteceu (17/11, fim da sessão 6.0b; relato da equipe + arquivos):**
+  - O `tools/Stop-IAApi.ps1` não conseguiu encerrar a IAApi (PID 105992) em 15 s. O script usa `Stop-Process -Force` + `Wait-Process -Timeout 15` (`tools/Stop-IAApi.ps1:104-110`) e sai com código 3, mantendo o arquivo de PID.
+  - O `dados/logs/iaapi.pid.json` continuava lá depois da sessão, o que confirma esse caminho.
+  - Horas depois, o processo já não existia: PID ausente, porta 5145 sem escuta, banco abrindo em modo exclusivo.
+- **O que a IAApi fazia no momento (confirmado em log):**
+  - A última linha é de **13:01:35**, no meio da predição da PK2.TAG27. Logo antes estão "Predição iniciada", o bloco `BUSCANDO HISTORICO RECENTE NO BRIDGE` (busca síncrona de 24 h, `BridgeHistoricoService.BuscarHistorico` → `BuscarJson`, sem cancelamento) e o PERF_DIAG de `Prediction.OperationalContext`.
+  - Não há `Bridge.Transport` dessa busca nem nenhuma linha de encerramento.
+  - A última decisão gravada é a da TAG26, às 13:01:34,8; a da TAG27 se perdeu (comportamento já documentado no script).
+- **Leitura [inferência]:**
+  - Depois de 13:01:35 não há nenhuma linha. Se o processo tivesse seguido rodando, a busca terminaria ou estouraria o timeout de 60 s, e isso apareceria no log.
+  - O mais provável é que as threads tenham parado por volta de 13:01:35 e que o **fim do processo no Windows** tenha passado de 15 s.
+  - A hora exata do `Stop` não está registrada (o relato da equipe diz ~13:05).
+- **Hipóteses (não verificadas):**
+  - E/S de rede síncrona pendente no kernel (a busca ao Bridge em andamento) atrasando o término;
+  - antivírus ou indexação segurando o log ou o `ia_config.db`.
+  - O Event Viewer não foi consultado.
+- **Efeito:**
+  - Nenhum na decisão.
+  - **Risco operacional:** procedimentos que exigem "IAApi parada" (cópia de segurança da 35.1, migration da 27.3b na demo, cópias do banco para análise) podem começar com o processo ainda terminando e o `-wal` aberto.
+  - O `Start-IAApiComLog.ps1` não fica bloqueado: só recusa subir se o PID salvo estiver vivo, com a mesma hora de início (linhas 195-210).
+- **Mitigação já usada (17/11):** antes de copiar o banco, conferir o PID, a porta e a **abertura exclusiva** dos três arquivos (`ia_config.db`, `-wal`, `-shm`).
+- **Solução proposta (não aprovada; BACKLOG 36.5):** no `Stop-IAApi.ps1`, quando der a saída 3:
+  - esperar mais (por exemplo, até 60 s) e informar o estado a cada 15 s;
+  - registrar a hora do `Stop` e a última linha do log num arquivo ao lado do log;
+  - dizer como conferir antes de mexer no banco (`-Diagnostico`, porta, abertura exclusiva).
+  - Investigar a causa só se o caso se repetir (Event Viewer; `handle.exe` ou Resource Monitor no PID).
+- **Prioridade:** baixa. A ferramenta de sessão funciona, e o risco é coberto pela conferência antes de mexer no banco.
+- **BACKLOG:** 36.5; relacionados: 27.3b (backup antes da migration), 35.1, P27 e tarefa 22, passo 3 (cancelamento até o Bridge).
 
 ### Problemas de segurança da auditoria B3.23 (P33 a P40)
 
