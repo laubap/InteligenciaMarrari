@@ -29,6 +29,8 @@
 >
 > Itens marcados com **[etapa 0]**.
 
+> **Atualização com o diagnóstico do Bridge (17/11/2026, só leitura do fonte e do IL da DLL do `..\PowerServerCurrentTagsPropGet`; nada executado):** problema novo **P46**. O custo fixo de ~4 s por requisição (MED0 §10.10) tem causa provável no próprio Bridge: conexão WCF nova e autenticada a cada pedido, chamada de teste `GetInfo("Echo")` e download do catálogo completo de propriedades, em thread única e sem fechar as conexões. Comportamento confirmado no código; peso de cada etapa ainda **não medido**. Proposta na **BACKLOG 39**, ligada à tarefa 6 (6.1–6.3 pausadas por isso) e à RC-12. **Prioridade alta, antes da demo** (decisão da responsável, 17/11): 39.0 e 39.1 primeiro.
+
 **Como ler o status**
 
 | Status | Significado |
@@ -95,6 +97,8 @@
 | **P42** | **[etapa 0]** O LiveMonitor sobrecarrega o Bridge e o banco. Para um gráfico de 2 h, cada consulta de histórico busca **24 h** no Bridge; o proxy desiste em 12 s, mas a busca continua (até 12 simultâneas). As decisões vêm de `GET /api/anomalias` a cada 2 s, que lista **todas** as decisões de todos os clientes e faz **uma consulta de feedback por linha** (N+1, ~3.200 por chamada) | Mecanismo confirmado no código; efeito confirmado em log (16/11, a partir de 16:27); a causalidade é inferência forte, por tempo e mecanismo | Sessão da etapa 0 (MED0 §6.2) | Monitor 4–5× mais lento (ciclo de 131 s → 306 s e ≥ 697 s; idade da leitura até 12 min); 4 timeouts; 1 leitura sem decisão; log de 702 MB (P44). A ferramenta da demo degrada a IA que ela mostra. **[17/11] Decisões corrigidas no código, confirmado em teste offline (BACKLOG 34.1–34.2, sem commit): 2 consultas por chamada, filtro por cliente e `desde`. Não medido em sessão.** **[17/11] Histórico corrigido no código, confirmado em teste offline (BACKLOG 34.3–34.4, sem commit): a IAApi busca no Bridge só o período pedido (2 h; período vazio → 24 h, como antes), e o proxy do LiveMonitor espera a IAApi (125 s), não cancela a chamada quando a página fecha e faz uma busca por tag de cada vez; histórico a cada 60 s. Não medido em sessão** | **Alta** (antes da demo) |
 | **P43** | **[etapa 0]** O banco local (`ia_config.db`) está **sem a migration RC-5**. Toda predição falha ao ler `TagsRegimesOperacionaisIa` (`no such column: t.MapaEstados`), e o provider cai em silêncio no baseline global. A IAApi não aplica migrations ao subir | Confirmado em log (270 de 270 predições) e no código. **[17/11] Confirmado no banco (BACKLOG 35.0):** 32 de 33 migrations aplicadas, só a RC-5 pendente; `TagsRegimesOperacionaisIa` com 0 linhas (PK2 e PK7 sem regime). **RC-5 aplicada pela 35.1** (cópia de segurança com SHA-256; dados iguais) | Sessão da etapa 0 (MED0 §6.3) | Nenhum efeito na decisão até aqui (nenhum cliente tem regime). Sem a 35.1, **a RC-12 não teria efeito**, sem nenhum aviso; o aviso continua faltando (35.3) | **Alta** → **banco corrigido em 17/11**; falta a 35.2 (log sem o erro) |
 | **P44** | **[etapa 0]** O log da sessão sai **sem data e hora** no início das linhas: o `TimestampFormat` passado pelo `Start-IAApiComLog.ps1` não teve efeito, embora as outras variáveis tenham tido. Com `LogLevel:Default = Information`, o EF grava **cada comando SQL** (960 mil entradas, 702 MB em 87 min). O texto está na página de código do console (acentos trocados) | Confirmado em log; causa do horário ausente: hipótese | Sessão da etapa 0 (MED0 §1, §6.2) | Linha do tempo só pelo PERF_DIAG (sem ele, nenhuma); passo a do P27 incompleto; disco e custo de log; análise difícil | Média (barato; antes da próxima sessão longa) |
+| **P45** | **[sessão 6.0b]** O `Stop-IAApi.ps1` não encerrou a IAApi em 15 s (`Stop-Process -Force` + `Wait-Process -Timeout 15`; saída 3, arquivo de PID mantido). A última linha do log é de 13:01:35, no meio de uma busca síncrona de 24 h ao Bridge (TAG27, decisão perdida); horas depois o processo já não existia | Saída 3 e arquivo de PID confirmados nos arquivos; última linha confirmada em log; **causa: hipótese** (E/S de rede síncrona pendente; antivírus ou indexação) | Fim da sessão 6.0b, 17/11 | Nenhum na decisão. Risco operacional: procedimentos com "IAApi parada" (backup, migration, cópia do banco) podem começar com o processo ainda terminando | Baixa (mitigado pela conferência de PID, porta e abertura exclusiva; BACKLOG 36.5) |
+| **P46** | **[diagnóstico do Bridge, 17/11]** O Bridge tem custo fixo de ~4 s por requisição. A cada pedido, em todo endpoint, abre uma conexão WCF nova e autenticada ao PSi4 (factory, TCP, handshake), faz uma chamada extra de teste (`GetInfo("Echo")`) e baixa o **catálogo inteiro** de propriedades (`CurrentTagsPropGet`) só para ler a unidade. As conexões **nunca são fechadas**. Thread única | Comportamento e vazamento **confirmados no código do Bridge** (fonte + IL da DLL, só leitura); custo de cada etapa: **hipótese**, nada medido no Bridge. Sintoma confirmado em log na IAApi (`MED0` §10.10: p50 4,1–4,4 s para qualquer tamanho) | — (diagnóstico de código; MED0 §10.10) | Atraso: impede a meta de 1 min (6.1–6.3 pausadas) e encarece a RC-12 (3 consultas de regime por tag de bomba); fila e timeouts sob carga (P42) | **Alta** (antes da demo; 39.0 e 39.1 primeiro) |
 
 ---
 
@@ -862,6 +866,51 @@
 - **Prioridade:** baixa. A ferramenta de sessão funciona, e o risco é coberto pela conferência antes de mexer no banco.
 - **BACKLOG:** 36.5; relacionados: 27.3b (backup antes da migration), 35.1, P27 e tarefa 22, passo 3 (cancelamento até o Bridge).
 
+### P46. Bridge com custo fixo de ~4 s por requisição: conexão nova, chamada de teste e catálogo completo a cada pedido [diagnóstico do Bridge, 17/11]
+
+- **Origem:** diagnóstico **só de leitura** do Bridge (`..\PowerServerCurrentTagsPropGet`, repositório próprio, fora da IAApi), feito em 17/11. Foram lidos o fonte (`PowerServerCurrentTagsPropGet\Program.cs`, arquivo único) e o IL da DLL proprietária `Marrari.PowerServer.dll` (Mono.Cecil, sem executar nada dela). Não houve compilação, execução do Bridge nem chamada ao PSi4. O `.exe` em uso (`bin/Debug/net48`) foi conferido contra o fonte atual (mesmos endpoints, mesmo endereço do servidor e mesmas chamadas a `Client.Create`). As linhas citadas abaixo são do `Program.cs` do Bridge.
+- **Sintoma (confirmado em log, IAApi; `MEDICAO_ETAPA0.md` §10.10):** p50 de ~4,1–4,4 s por requisição, qualquer que seja o tamanho: lote de 1 ou 12 tags, `/historico` de 24 h, pedaços de 2 h ou ≤ 60 pontos. É o que pausou a 6.1–6.3 (BACKLOG 6) e o que pesa nas 3 consultas do regime por tag de bomba na RC-12.
+- **Como o Bridge atende uma requisição [confirmado no código do Bridge e no IL da DLL]:**
+  - .NET Framework 4.8, console, `HttpListener` em `http://localhost:5001/`, Newtonsoft.Json.
+  - **Laço de thread única** (`Program.cs:29-33`, `while(true) { GetContext(); Processar(); }`): uma requisição por vez.
+  - **A cada requisição, em todo endpoint**, `Marrari.PowerServer.Client.Create` (DLL) monta tudo do zero: `EndpointAddress` net.tcp (IP literal, porta padrão 808, sem DNS); `CustomBinding` novo com `BinaryMessageEncoding` e segurança **`UserNameOverTransport`** (usuário e senha em **toda mensagem**), TCP sem TLS; **`ChannelFactory<IPowerService>` novo** (contrato com 104 operações, `ProtoEndpointBehavior` do protobuf-net); `CreateChannel()` + `Open` (timeout de 3 s); e **`GetInfo("Echo")`**, uma ida e volta autenticada só para validar versão e login.
+  - **Ninguém chama `Close`/`Abort`** no canal nem no factory.
+  - `/historico` (`:252-353`): `Client.Create` → `SelectiveMinutesRangeGet([tag], inicio, fim)` → **`CurrentTagsPropGet()`**, que traz o **catálogo inteiro** de propriedades de todas as tags (~40 campos por tag), só para ler a unidade → JSON.
+  - `/valores-atuais` (`:168-250`): `Client.Create` → `SelectiveMinutesRangeGet(tags, agora − 2 min, agora)` → `CurrentTagsPropGet()` completo → JSON.
+  - Só o `HttpListener` e o processo são reaproveitados. Do lado do PSi4, nada.
+- **Candidatos ao custo fixo:**
+
+  | # | Candidato | Onde (Bridge) | Situação |
+  |---|---|---|---|
+  | A | Conexão nova por requisição (binding, factory, TCP, handshake net.tcp) + `GetInfo("Echo")` | `Program.cs:298`, `:191`, `:123`, `:88`; DLL `Client.Create` IL_0019–IL_00e7 | Comportamento **confirmado no código**; custo **hipótese** |
+  | B | `CurrentTagsPropGet()` traz o catálogo completo em toda requisição; custo constante, como o medido | `:306`, `:202`, `:135` | Comportamento **confirmado no código**; peso **hipótese** (depende do tamanho do catálogo e do servidor) |
+  | C | Custo por mensagem no servidor: com `UserNameOverTransport`, cada uma das 3 mensagens (Echo, Range, Props) é autenticada; ~1,3 s cada daria os 4 s | DLL `ClearTcpBinding.CreateBindingElements` | Tipo de segurança **confirmado no código**; custo no servidor **hipótese** (não visível pelo cliente) |
+  | D | **Vazamento de conexões:** canal e factory nunca fechados; sessões abertas no PSi4 até expirar a inatividade (padrão WCF: 10 min) | mesmas linhas de A | Vazamento **confirmado no código**; efeito na latência **hipótese** |
+  | E | Thread única: requisições concorrentes entram em fila | `:29-33` | Thread única **confirmada no código**; impacto depende da concorrência (ver "Cruzamento") |
+  | F | `Console.WriteLine` síncrono | `:292-296`, `:313-317`, `:335` | **Descartado como causa principal:** `/valores-atuais` não loga e também leva ~4 s. Ressalva: QuickEdit no console trava o processo |
+  | G | `Sleep`, espera fixa ou retry | — | **Confirmado no código que não existe** (nem no Bridge nem em `Client.Create`); o `Open` de 3 s é teto, não espera |
+  | H | DNS ou fallback IPv6/IPv4 | Bridge → PSi4 por IP literal | DNS **descartado** nesse trecho; IAApi → Bridge por `localhost`: **hipótese fraca**, verificável com uma medição |
+  | I | Serialização (protobuf/JSON) | `:359` | **Descartado:** 24 h (1.440 linhas) e 2 h (120) custam o mesmo |
+
+- **Hipótese principal:** A + B + C juntos (montagem da conexão e 3 idas e voltas autenticadas, uma delas com o catálogo completo). **Ressalva:** se a medição mostrar o tempo quase todo em `SelectiveMinutesRangeGet`, o gargalo é do PSi4, não do Bridge.
+- **Cruzamento com evidências já registradas na IAApi [inferência]:**
+  - O HTTP 500 do Bridge na TAG27 em 16/11 ("open operation … 00:00:03", P10 e P42) tem o mesmo valor do timeout de `Open` de 3 s do `Client.Create`: compatível com a conexão nova por requisição falhando sob carga.
+  - P42: até 12 buscas simultâneas do LiveMonitor, com média de 36,6 s. Com thread única (E) e ~4 s por requisição, uma fila de ~6–12 dá 24–48 s: compatível.
+  - Na 6.0b (LiveMonitor fechado), o laço do monitor é sequencial (P11, confirmado no código), então a fila (E) não explica os ~4 s daquela sessão; eles seriam custo do próprio Bridge/PSi4. A conferir na medição (BACKLOG 39.0, comparação IAApi × Bridge).
+- **O que falta medir:** qual etapa leva a maior parte dos ~4 s (BACKLOG 39.0). Nada foi medido no Bridge.
+- **Efeito na detecção:** nenhum direto na decisão. Indireto: cada requisição de ~4 s alonga o ciclo e envelhece a leitura (P10, P11, P18, P26); é o que hoje impede a meta de 1 min (6.x) e que deixa a RC-12 com ~140 s de ciclo estimado (`PLANO_REGIME_COMBINADO.md` §7.9.1).
+- **Outras observações do diagnóstico (fora do desempenho; confirmadas no código do Bridge):**
+  - endereço do servidor no código diverge do README do Bridge;
+  - **credenciais fixas no código** (`Program.cs:14-16`; valores não reproduzidos aqui);
+  - respostas 500 devolvem `ex.ToString()` completo, com stack trace (`:70-74`; mesmo tipo de problema do P39 na IAApi);
+  - sem `tagName`, `/historico` consulta uma tag padrão em vez de responder 400 (`:256-257`);
+  - `valor` pode vir como a string `"NaN"` (padrão de `Tag.Value`, serializado pelo Newtonsoft). **Não verificado** se a IAApi trata esse caso;
+  - datas de `inicio`/`fim` lidas com `DateTime.TryParse` dependente da cultura da máquina (`:269-270`);
+  - o executável em uso é o build de Debug.
+- **Solução proposta (BACKLOG 39; nada aprovado):** medir por etapa sem mudar o contrato (39.0); depois, uma correção por vez, medindo cada uma: fechar o canal (39.1), cache do catálogo de propriedades (39.2), reaproveitar a conexão com o `ClientEx` que a DLL já tem (39.3); opcionais (39.4); endpoint aditivo de histórico em lote (39.5).
+- **Prioridade:** ~~a definir pela responsável~~ **alta, antes da demo** (decisão da responsável, 17/11; BACKLOG 39): 39.0 e 39.1 primeiro. É o bloqueio declarado da 6.1–6.3 e o principal fator do custo da RC-12 com regime ligado.
+- **BACKLOG:** **39**; relacionados: 6 (6.1–6.5), RC-12, 38, 34, 22 (passo 3), P10, P11, P26, P42.
+
 ### Problemas de segurança da auditoria B3.23 (P33 a P40)
 
 **Contexto comum** (confirmado no código, HEAD `05c64c3`, 16/11). Conferência só por leitura (BACKLOG 29, fase A): a API não foi iniciada e nenhum endpoint foi chamado. Fonte original: `git show 15f1ca9^:Docs/B3.23_CODEX_AUDIT_RESULT.md`, §9, §11, §12 e §18.
@@ -1112,6 +1161,7 @@ A tabela 3.1 lista **quais** métodos rodaram. Estas linhas detalham **caminhos 
      - corrigir o P42 (LiveMonitor sobrecarregando o Bridge e o banco → BACKLOG **34**) e o P43 (migration RC-5 ausente no banco local → BACKLOG **35**, também antes da RC-12);
      - antes da próxima sessão longa, o P44 (log → BACKLOG **36**);
      - depois, a 6.0b (reuso do histórico) e a 6.1 (`BACKLOG.md` 6.x).
+   - **[17/11, decisão da responsável] Antes da demo:** P46 (custo fixo de ~4 s por requisição do Bridge → BACKLOG **39**), começando pela **39.0** (medir por etapa) e pela **39.1** (fechar o canal). Cada passo com aprovação própria.
 2. **Barato e só de proteção:** bloquear rótulos como tag de regime em produção (P14 → BACKLOG **11**). ~~Junto, fazer o inventário do banco do PK2.~~ **Inventário feito em 13/11 (`Docs/INVENTARIO_PK2.md`):** só TAG22–33 ativas, nenhum regime, contexto, comportamento ou modelo IF. Perfil de 30/10 colapsado na B-02 (P32): retreinar só com aprovação e período limpo (passo 5).
 3. **Ativar o regime recomendado no PK2, com aprovação:** TAG28/30/32 ← TAG43, TAG26 ← TAG45, TAG24 ← TAG46. Validado no replay: preset 1 245 → 41 alarmes; madrugada 1.282 → 660 (P02, P04, P05; RES §4). **[preset 6]** 325 → 223, e os alarmes falsos fora da falha caem de 175 para 27, mas surgem 56 minutos-tag com a B-02 sozinha depois do failover (P03; RES6 §2.3). A detecção da TAG29 não muda. Só configuração no banco, reversível.
 4. **Regime combinado para as bombas** (P03, P08 → BACKLOG **12**). É o que falta para a B-01, que ainda gera 566 alarmes de madrugada. Testar no replay antes de produção, com a mesma tabela da RES §4.
