@@ -8,6 +8,7 @@ Ferramentas locais de apoio à IAApi. Cada pasta tem o próprio README quando ex
 | `Stop-IAApi.ps1` | Para a IAApi iniciada pelo script acima, usando o PID salvo (abaixo) |
 | `Cp300Export/` | Exporta histórico do Bridge (`Export-Cp300Historico.ps1`) e decisões da IA real (`Export-AnomaliasIaReal.ps1`) |
 | `Cp300OfflineReplay/` | Replay offline CP300 com o código de produção ([README](Cp300OfflineReplay/README.md)) |
+| `CalibracaoAvisosTreino/` | Script Python offline que calibrou os limites dos avisos do treino do perfil a partir do CSV do CP300 ([README](CalibracaoAvisosTreino/README.md)) |
 | `IAApi.LiveMonitor/` | Monitor local, somente leitura ([README](IAApi.LiveMonitor/README.md)) |
 | `IntelligenceLab*/`, `IAApi.Benchmarks/` | Laboratório de inteligência e benchmarks ([README do replay](IntelligenceLabReplay/README.md)) |
 

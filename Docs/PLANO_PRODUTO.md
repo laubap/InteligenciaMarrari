@@ -16,8 +16,17 @@ Tarefa no backlog: **37** (`Docs/BACKLOG.md`). A tarefa 27 teve a ordem revista 
 > 2. IAFront e LiveMonitor juntos com proxy no IAFront, **sem mudar a API**.
 > 3. A gravação usa **exatamente o perfil simulado**, sem recalcular, com um identificador da simulação.
 > 4. A tabela de versões do perfil **entra na demo**, com backup antes da migration.
-> 5. Limites dos avisos: proposta calibrada nos dados do CP300 no §3.2, **aguardando aprovação**.
+> 5. Limites dos avisos: proposta calibrada nos dados do CP300 no §3.2. ~~aguardando aprovação~~ **Aprovados na segunda rodada (abaixo).**
 > 6. Regime na demo: configurar e simular pela tela; **ativar só se a RC-12 passar num ensaio antes da demo**.
+>
+> **Segunda rodada (2026-11-17; detalhe no §9):**
+> - limites do §3.2 **aprovados**, configuráveis por cliente;
+> - nomes de rotas, tabela e configuração escolhidos por Claude, a pedido da responsável, seguindo o padrão do projeto (§9.2);
+> - validade da simulação: **15 min**;
+> - leitura do §3.3 **confirmada**: com período, gravar exige o `simulacaoId`, e o `Gravar = true` que recalculava sai do desenho;
+> - script de calibração trazido para `tools/CalibracaoAvisosTreino/`, com README;
+> - **tarefa 6:** na demo, fica o reuso do histórico como está (Development, ~2,2 min por tag); 6.1 a 6.3 **pausadas** até investigar o custo fixo de ~4 s por requisição do Bridge;
+> - **RC-12:** deixa de depender da 6.1–6.3. Pré-requisito passa a ser a **6.0b (feita)** e o **`HistoricoCausal` ligado**.
 >
 > Nada implementado.
 
@@ -34,7 +43,7 @@ Tarefa no backlog: **37** (`Docs/BACKLOG.md`). A tarefa 27 teve a ordem revista 
 3. **O regime operacional (simples ou combinado) não tem nenhum endpoint.** As tabelas `TagsRegimesOperacionaisIa` e `TagsRegimesComponentesIa` só são lidas pelo provider, pelo replay e pelos testes. Para configurar o regime pela tela, é preciso criar a API.
 4. **Risco que a tela tem de evitar:** gravar uma linha de regime com `Ativo = true` muda a detecção na leitura seguinte, **mesmo com o regime combinado desligado**. Nesse caso o provider usa só o componente 1, sem mapa, e esse regime não foi validado no replay.
 5. **Retreino ao vivo:** a 27.3 vira o "back-end" de uma tela no IAFront (simular → prévia → gravar → voltar). Para "voltar ao anterior" é preciso guardar a versão anterior do perfil. Hoje `PerfisIa` tem uma linha por tag, que é sobrescrita a cada treino. A proposta é uma tabela aditiva de versões, que já é a base do "histórico de treinos" do produto.
-6. **Demo do fim do mês: o prazo é apertado.** A ordem proposta põe primeiro a tela de retreino e depois a configuração do regime. A ativação do regime (RC-12) continua dependendo das tarefas 6, 25 e 35.2 e de aprovação. Na demo, o regime pode ser **configurado e simulado** pela tela sem ser ativado.
+6. **Demo do fim do mês: o prazo é apertado.** A ordem proposta põe primeiro a tela de retreino e depois a configuração do regime. ~~A ativação do regime (RC-12) continua dependendo das tarefas 6, 25 e 35.2 e de aprovação.~~ **[17/11, §9]** A ativação do regime (RC-12) depende da 6.0b (feita), do `HistoricoCausal` ligado (25), da 27, da 35 (feita) e de aprovação; não mais da 6.1–6.3. Na demo, o regime pode ser **configurado e simulado** pela tela sem ser ativado.
 
 ---
 
@@ -226,7 +235,7 @@ Tarefa no backlog: **37** (`Docs/BACKLOG.md`). A tarefa 27 teve a ordem revista 
 
 ### 3.2 Avisos sobre o período (calculados na simulação; não mudam a decisão)
 
-**Situação: proposta calibrada nos dados do CP300, aguardando aprovação** (decisão 5).
+**Situação: ✅ aprovada em 2026-11-17 (§9), com os limites configuráveis por cliente.** Os valores abaixo são o padrão global da seção `TreinoPerfil` (§9.2).
 
 Os avisos servem só para a tela. Os bloqueios só impedem a simulação ou a gravação. Nenhum dos dois entra na decisão de anomalia.
 
@@ -240,7 +249,7 @@ Os avisos servem só para a tela. Os bloqueios só impedem a simulação ou a gr
 - **Métricas:** iguais às do treino.
   - A limpeza é IQR 1,5× com percentil linear (`Services/HistoricoLimpezaService.cs:33-53`, `:65-81`) [código].
   - **Conferência do script:** no período validado ele reproduz exatamente o `dados/p3b_sem.stdout`: 1.437 pontos por tag, as mesmas médias e desvios e 302 outliers na TAG24.
-- **Execução:** só leitura do CSV, com um script Python (`avisos_cp300.py`) no scratchpad da sessão. Não houve compilação, teste, replay nem chamada à API. O script é temporário: se a proposta for aprovada, vale trazê-lo para `tools/` (com aprovação).
+- **Execução:** só leitura do CSV, com um script Python (`avisos_cp300.py`). Não houve compilação, teste, replay nem chamada à API. **[17/11] Trazido para `tools/CalibracaoAvisosTreino/`, sem mudança, com README;** a saída com `dados/cp300_09a13nov.csv` foi conferida idêntica à da calibração.
 - **Limite da evidência:** dados do **simulador**, e não de planta. Ruído, quantização e paradas reais podem ser diferentes. Os limites devem ficar **por cliente, em configuração**, com estes valores como padrão, e ser recalibrados com dados da planta.
 
 **O que os dados mostram** (TAG22–TAG33):
@@ -306,16 +315,16 @@ Os avisos servem só para a tela. Os bloqueios só impedem a simulação ou a gr
   - Nenhum bloqueio.
   - O ensaio (27.5) confere que a tela mostra exatamente isso.
 - **Fora do runtime:** a trava da TAG73 (gabarito do simulador) continua só no replay. Rótulo nunca entra no runtime (tarefas 11 e 12). Na demo, o período usado é o validado offline na 27.2.
-- **Onde ficam os limites:** numa seção de configuração própria do treino (nome a decidir; por cliente, com padrão global). Ela não é lida pela detecção. Mudar um limite muda só os avisos da tela.
+- **Onde ficam os limites:** na seção **`TreinoPerfil`** (§9.2; por cliente, com padrão global). Ela fica **fora** de `AnomalyDetection` e não é lida pela detecção. Mudar um limite muda só os avisos e bloqueios da tela.
 
 ### 3.3 "Gravar" grava exatamente o que foi simulado
 
 **Decidido (17/11, decisão 3): gravar usa exatamente o perfil simulado, sem recalcular.**
-- **Simulação:** devolve um `simulacaoId` e guarda o candidato em memória por pouco tempo (proposta: 15 min, a aprovar). Guarda também o período e a versão do perfil atual em que a prévia se baseou.
+- **Simulação:** devolve um `simulacaoId` e guarda o candidato em memória por pouco tempo (**15 min, aprovado em 17/11**, `TreinoPerfil:SimulacaoValidadeMinutos`). Guarda também o período e a versão do perfil atual em que a prévia se baseou.
 - **Gravação com o id:** grava **esse** perfil, sem nova busca ao Bridge. Isso também evita uma segunda carga no Bridge durante a demo.
 - **Id vencido ou desconhecido** (por exemplo, a API reiniciou) → `409`, e a tela pede nova simulação.
 - **Perfil atual mudou entre a simulação e a gravação** (outra gravação ou um "voltar" no meio) → `409`. Assim, a prévia "atual × novo" que o usuário viu continua verdadeira no momento de gravar.
-- **Consequência para o contrato da 27.3 (interpretação a confirmar):**
+- **Consequência para o contrato da 27.3 (✅ interpretação confirmada em 17/11; contrato no §9.2):**
   - **com período**, gravar **exige** o `simulacaoId`;
   - o `Gravar = true` que recalculava sai do desenho;
   - **sem período**, o `treinar-perfil` continua idêntico ao de hoje (24 h, grava na hora), por compatibilidade;
@@ -325,11 +334,11 @@ Os avisos servem só para a tela. Os bloqueios só impedem a simulação ou a gr
 
 **Decidido (17/11, decisão 4): entra na demo, com backup antes da migration** (cópia do `ia_config.db` com `-wal` e `-shm` e SHA-256, com a API parada, no padrão da 35.1; conferência depois, no padrão da 35.2).
 
-- **Desenho:** tabela aditiva `PerfisIaVersoes` (nome a decidir):
+- **Desenho:** tabela aditiva **`PerfisVersoesIa`** (entidade `TagPerfilVersaoIa`; nome decidido em 17/11, §9.2):
   - cópia **completa** da linha de `PerfisIa` (todas as colunas);
   - período usado (nulo quando foi o treino de 24 h), origem (`gravacao`, `restauracao`) e data.
 - **Gravação:**
-  - antes de sobrescrever `PerfisIa`, o caminho novo copia a linha atual para `PerfisIaVersoes`, na mesma transação;
+  - antes de sobrescrever `PerfisIa`, o caminho novo copia a linha atual para `PerfisVersoesIa`, na mesma transação;
   - "voltar" copia a versão anterior de volta para `PerfisIa` e guarda também a que estava em uso. Assim, voltar pode ser desfeito.
 - **Impacto na detecção:** nenhum por si só. A predição continua lendo só `PerfisIa`, e um teste deve provar que a `PredictionContextLoader` não muda. O que muda a detecção é o conteúdo restaurado, como em qualquer gravação.
 - **Precisa de migration.** Aplicar no banco do ambiente da demo com backup, no padrão da 35.1, e conferir no padrão da 35.2. Lição do P43: uma migration pendente faz a predição falhar ao ler tabelas alteradas. Esta tabela é nova e a predição não a lê, mas a conferência continua obrigatória.
@@ -347,7 +356,7 @@ O que muda: a 27.3 passa a incluir a tela e o "voltar". O código (27.3) não es
 | 27.1 | Replay `--perfis <json>` | Não | — |
 | 27.2 | Medição offline banco × candidato. **Decide quais tags e qual período serão escolhidos na demo** | Não | 27.1 |
 | 27.3a | API: período e simulação no `treinar-perfil` (Q1), resposta com perfil atual e candidato completos, série para o gráfico, avisos (§3.2) e `simulacaoId` (§3.3) | Não (sem os campos novos, igual a hoje) | — (em paralelo com 27.1 e 27.2) |
-| 27.3b | API: `PerfisIaVersoes` + "voltar ao anterior" (§3.4) + `GET` do perfil completo de uma tag, com o cliente | Não (tabela que a predição não lê) | 27.3a; migration aplicada com backup |
+| 27.3b | API: `PerfisVersoesIa` + "voltar ao anterior" (§3.4) + `GET` do perfil completo de uma tag, com o cliente | Não (tabela que a predição não lê) | 27.3a; migration aplicada com backup |
 | 27.3c | IAFront: tela Treino do perfil (§3.1) | Não (a tela só chama a API) | 27.3a, 27.3b; D1 |
 | 27.4 | (Opcional, **depois da demo**) o replay usa o mesmo método | Não | 27.3a |
 | 27.5 | **Ensaio autorizado** com o Bridge: backup Q3; simular pela tela o período escolhido (aceite: 1.437 pontos por tag e estatísticas iguais às do `p3b_sem.stdout`); gravar e voltar numa tag de ensaio, conferindo `PerfisIa` igual ao backup depois do "voltar" | Sim, por minutos, numa tag de ensaio; volta no mesmo ensaio | 27.2, 27.3c, aprovação |
@@ -369,25 +378,25 @@ Ordem: primeiro tudo o que o retreino precisa, depois o regime. Se o prazo apert
 
 | # | O que | Onde | Muda a decisão? | Aceite | Rollback | Esforço |
 |---|---|---|---|---|---|---|
-| D0 | Decisões (§6): IAFront como casa da Configuração; porta e CORS; nomes de rotas e tabela; limiares dos avisos | doc | Não | Registradas no backlog | — | P |
+| D0 | Decisões (§6): IAFront como casa da Configuração; porta e CORS; nomes de rotas e tabela; limiares dos avisos | doc | Não | Registradas no backlog | — | P (✅ **feita em 17/11**: §8 e §9) |
 | D1 | IAFront volta a funcionar no ambiente da demo: cliente por variável (`VITE_CLIENTE_ID`, padrão `PK7`, como hoje); proxy do Vite para `/api` (o navegador deixa de depender do CORS, e o IAFront pode subir em outra porta junto do LiveMonitor, **sem mudar a API**); nova entrada de menu "Configuração"; o cartão de `ConfiguracoesIA` fica fora da demo ou marcado "sem efeito na detecção" | IAFront | Não | IAFront e LiveMonitor abertos juntos; o IAFront lista as tags do PK2 | Reverter o commit do IAFront | P |
-| D2 | **27.3a** (§3.5) | `PerfilTagController`, `PerfilTagService` (método novo; o atual não muda), DTOs | Não | Sem período, chamada e resposta iguais às de hoje (teste); com período, só `[inicio, fim)`, não grava sem `Gravar`/id, avisos calculados, `409` com id vencido | Reverter o commit | M |
+| D2 | **27.3a** (§3.5) | `PerfilTagController`, `PerfilTagService` (método novo; o atual não muda), DTOs | Não | Sem período, chamada e resposta iguais às de hoje (teste); com período, só `[inicio, fim)`, nunca grava (só simula); gravar só com `simulacaoId` + `gravar = true` (§9.2), avisos e bloqueios calculados com a seção `TreinoPerfil`, `409` com id vencido (15 min) ou perfil atual mudado | Reverter o commit | M |
 | D3 | **27.3b** (§3.4): migration aditiva, versão antes de gravar, voltar | modelo, migration, serviço, controller | Não | Gravar → versão criada na mesma transação; voltar → `PerfisIa` igual à versão (todas as colunas); voltar duas vezes → estado original; `PredictionContextLoader` intocada | `Down` da migration + reverter o commit; dados: backup Q3 | M |
 | D4 | **27.3c**: tela Treino do perfil (§3.1) | IAFront | Não | Simular, prévia, avisos, gravar e voltar contra a API com fakes (ou a API local com o Bridge falso da tarefa 22) | Reverter o commit do IAFront | M |
 | D5 | **API de regime**, só cadastro (§4.3) | controller e serviço novos; reaproveita o parser da RC-4 e o `IsForbidden` da RC-7 | **Não** (salva sempre inativo) | Validações; nada é ativado; criar com `Ativo = false` mesmo que o modelo tenha `true` como padrão | Reverter o commit | M |
 | D6 | **Prévia de cobertura do regime** (`simular`, só leitura) | mesmo serviço; reaproveita o resolver da RC-6 e as consultas do provider | Não | Para a configuração alvo, cobertura por chave igual à do replay da RC-10/11 no mesmo período (tolerância de alinhamento) | Reverter o commit | M |
 | D7 | **Tela Regime**: componentes em ordem (tag do catálogo + mapa), parâmetros, prévia, salvar inativo, ativar e desativar (protegidos, §4.3); "copiar para as tags da mesma bomba" | IAFront | Não (a ativação é a RC-12) | Cadastra a configuração alvo de §7.9 sem ativar | Reverter o commit; apagar as linhas inativas | M |
-| D8 | **Ensaio geral autorizado** (Bridge e simulador): 27.5; avisos da tela iguais aos esperados no §3.2; regime cadastrado inativo e prévia conferida; **ensaio da RC-12** (decisão 6): ativar pela tela com a chave ligada, rodar os presets 1 e 6 e aplicar o aceite da RC-12; depois **desativar** até a demo | sessão | Sim, só durante o ensaio e com volta | Checklist; resultado da RC-12 registrado (passou ou não, com o motivo) | Voltar pela tela; backup Q3; regime com `Ativo = false` e chave em `false` | M |
+| D8 | **Ensaio geral autorizado** (Bridge e simulador): 27.5; avisos da tela iguais aos esperados no §3.2; regime cadastrado inativo e prévia conferida; **ensaio da RC-12** (decisão 6): ativar pela tela com a chave ligada, **com `-HistoricoCausal` e `-ReusarHistorico` (Development)**, rodar os presets 1 e 6 e aplicar o aceite da RC-12, **medindo o tempo de ciclo com as consultas do regime (§9.3)**; depois **desativar** até a demo | sessão | Sim, só durante o ensaio e com volta | Checklist; resultado da RC-12 registrado (passou ou não, com o motivo) | Voltar pela tela; backup Q3; regime com `Ativo = false` e chave em `false` | M |
 | D9 | **Demo:** 27.6 ao vivo; regime configurado e simulado pela tela; **ativação só se a RC-12 tiver passado no ensaio da D8** (decisão 6) e com a aprovação explícita da sessão | sessão | Sim | Hora de cada gravação; `RegimeKey` no diagnóstico, se ativado | Voltar pela tela; chave do regime em `false`; `Ativo = false` | — |
 
-**Pré-requisitos já no backlog que valem para a demo:** 34 (aceite do LiveMonitor), 35.2, 25 (para a 27.7), 28 (escala da nota no LiveMonitor) e a mitigação do P34 (API só em loopback, pelo `Start-IAApiComLog.ps1`). **Nada da demo pode expor a API fora da máquina:** o IAFront escreve sem autenticação.
+**Pré-requisitos já no backlog que valem para a demo:** 34 (aceite do LiveMonitor), 35.2 (✅ feita), 25 (para a 27.7), 28 (escala da nota no LiveMonitor) e a mitigação do P34 (API só em loopback, pelo `Start-IAApiComLog.ps1`). **[17/11, §9.1]** A IAApi da demo sobe em **Development com `-HistoricoCausal -ReusarHistorico`** (o reuso só liga em Development; ~2,2 min por tag na 6.0b). **Nada da demo pode expor a API fora da máquina:** o IAFront escreve sem autenticação.
 
 ### 4.2 Fica para o produto
 
 | # | O que | Observação |
 |---|---|---|
 | P1 | **Autenticação e política por cliente** (P34 definitiva) na API; login no IAFront no lugar do cliente fixo | Muda o contrato HTTP de todos os consumidores; o LiveMonitor continua só em loopback. Esforço G |
-| P2 | **Histórico de treinos:** listar versões por tag (período, pontos, quem, quando, motivo), comparar duas quaisquer e restaurar qualquer uma | Tela sobre a `PerfisIaVersoes` do D3; "quem" depende do P1. Base para a F1 (referência por regime) |
+| P2 | **Histórico de treinos:** listar versões por tag (período, pontos, quem, quando, motivo), comparar duas quaisquer e restaurar qualquer uma | Tela sobre a `PerfisVersoesIa` do D3; "quem" depende do P1. Base para a F1 (referência por regime) |
 | P3 | **Sugestão automática de associações:** componentes de regime e grupos candidatos | Reaproveitar `POST /api/diagnosticos-multivariados/correlacoes` e o `behavior-memory/discover` antes de criar algo; **sempre como sugestão**, nunca aplicada sozinha |
 | P4 | Tags monitoradas pela tela: ativar/desativar com validação (existe no catálogo do Bridge; não é rótulo; aviso de tag sem perfil); `IaAtiva` explícito (P15); lista por cliente | Pequeno; pode entrar antes, se a demo sobrar tempo |
 | P5 | Grupo multivariado pela tela (o CRUD já existe) | Ativar ou promover continua atrás das salvaguardas e de aprovação |
@@ -398,7 +407,7 @@ Ordem: primeiro tudo o que o retreino precisa, depois o regime. Se o prazo apert
 ### 4.3 Proteções da API de regime (D5–D7)
 
 - **Criar e editar nunca ativa:** linha nova com `Ativo = false`, explicitamente. Editar uma configuração **ativa** é recusado (`409`: "desative antes de editar").
-- **Ativar** (`PATCH …/ativar`, padrão já usado em `JanelasTreinamentoController`):
+- **Ativar** (`PATCH /api/regimes-operacionais/{id}/ativar`, §9.2; padrão já usado em `JanelasTreinamentoController`):
   - recusa (`409`) configuração com mais de 1 componente ou com mapa quando `RegimeCombinado:Habilitado = false` nesta instância. Evita aplicar o regime de 1 componente sem mapa (§2c);
   - o `GET` mostra o estado da chave, só para leitura;
   - ativar é a RC-12 e exige aprovação.
@@ -432,12 +441,14 @@ Ordem: primeiro tudo o que o retreino precisa, depois o regime. Se o prazo apert
 
 Itens 1 a 6 decididos em 17/11 (ver §8).
 
-**Ainda pendentes:**
-- aprovar os limites do §3.2;
-- os nomes das rotas (`/api/regimes-operacionais/...`?), da tabela de versões e da seção de configuração dos avisos;
-- o tempo de vida da simulação (15 min?);
-- a interpretação do §3.3 (com período, gravar exige `simulacaoId`);
-- os pré-requisitos da RC-12 no ensaio (§8, item 6).
+~~**Ainda pendentes:**~~ **[17/11] Todos resolvidos na segunda rodada (§9):**
+- ~~aprovar os limites do §3.2~~ aprovados, configuráveis por cliente;
+- ~~os nomes das rotas, da tabela de versões e da seção de configuração dos avisos~~ escolhidos no §9.2;
+- ~~o tempo de vida da simulação (15 min?)~~ 15 min;
+- ~~a interpretação do §3.3~~ confirmada;
+- ~~os pré-requisitos da RC-12 no ensaio~~ 6.0b (feita) e `HistoricoCausal` ligado, no lugar da 6.1–6.3 (§9.1).
+
+**Nada pendente de decisão para começar a D1–D3**, mas cada passo de implementação continua exigindo aprovação própria.
 
 ## 7. Limitações desta análise
 
@@ -453,10 +464,10 @@ Itens 1 a 6 decididos em 17/11 (ver §8).
 | 2 | IAFront e LiveMonitor juntos, **com proxy no IAFront, sem mudar a API** | D1: proxy do Vite para `/api` e o IAFront em outra porta. O CORS (`Program.cs:10-17`) **não muda**. Aceite da D1: os dois abertos ao mesmo tempo |
 | 3 | Gravar usa **exatamente o perfil simulado**, sem recalcular, com identificador da simulação | §3.3: `simulacaoId` obrigatório para gravar com período; `409` se o id venceu ou se o perfil atual mudou desde a simulação. Entra na 27.3a (D2) |
 | 4 | Tabela de versões do perfil **na demo**, com backup antes da migration | §3.4 e 27.3b (D3) na demo. Backup no padrão da 35.1 e conferência no padrão da 35.2, antes da D8 |
-| 5 | Limites dos avisos propostos a partir dos dados do CP300, **para aprovação** | §3.2: proposta calibrada em janelas limpas e com falha. **Não aprovada ainda** |
+| 5 | Limites dos avisos propostos a partir dos dados do CP300, **para aprovação** | §3.2: proposta calibrada em janelas limpas e com falha. ~~Não aprovada ainda~~ **Aprovada em 17/11 (§9)** |
 | 6 | Regime na demo: configurar e simular pela tela; **ativar só se a RC-12 passar num ensaio antes da demo** | D8 ganha o ensaio da RC-12; D9 ativa só se ele passar e com a aprovação explícita da sessão |
 
-**Pontos em aberto da decisão 6:**
+**Pontos em aberto da decisão 6** (~~em aberto~~ **resolvidos em 17/11 pela segunda rodada, §9.1**; texto original mantido abaixo):
 - O ensaio da RC-12 **é** a RC-12 executada no ambiente de teste do PK2: muda a detecção durante o ensaio e exige aprovação explícita no dia.
 - **Pré-requisitos que o plano da RC-12 ainda lista** (`PLANO_REGIME_COMBINADO.md` §7.9):
   - tarefa **6** (cadência do ciclo);
@@ -467,4 +478,108 @@ Itens 1 a 6 decididos em 17/11 (ver §8).
 - **Cabe à responsável escolher**, antes da D8, entre:
   - (a) manter a 6 como pré-requisito, e então a ativação provavelmente não entra na demo;
   - (b) dispensá-la só para o ensaio e a demo, registrando o motivo.
-- Este plano não toma essa decisão.
+- Este plano não toma essa decisão. **[17/11] Decidido (§9.1):** variante de (b) — a 6.1–6.3 deixa de ser pré-requisito; o pré-requisito da tarefa 6 passa a ser a **6.0b**, já feita. Com o reuso, cada tag é avaliada a cada ~2,2 min (46 % dos minutos-tag), e não mais ~1 em cada 10 min como no P26.
+
+## 9. Segunda rodada de decisões (2026-11-17, responsável)
+
+*Registrado só em documentação. Nada implementado: cada passo D1–D9 continua com aprovação própria.*
+
+### 9.1 Decisões
+
+| # | Decisão | Efeito no plano |
+|---|---|---|
+| 7 | **Limites dos avisos do §3.2 aprovados**, configuráveis por cliente | §3.2 vira o padrão global da seção `TreinoPerfil` (§9.2). Os bloqueios (7 dias, 720 pontos) também ficam configuráveis; as checagens lógicas (`fim > inicio`, `fim <= agora`) não |
+| 8 | **Nomes de rotas, tabela e configuração:** Claude escolhe, seguindo o padrão do projeto | §9.2 |
+| 9 | **Validade da simulação: 15 min** | `TreinoPerfil:SimulacaoValidadeMinutos = 15` |
+| 10 | **Leitura do §3.3 confirmada:** com período, gravar exige o `simulacaoId`; o `Gravar = true` que recalculava sai do desenho; sem período, o `treinar-perfil` fica como hoje | Contrato no §9.2 |
+| 11 | **Script de calibração em `tools/`, com README** | ✅ Feito em 17/11: `tools/CalibracaoAvisosTreino/` (script sem mudança; saída conferida idêntica à da calibração) |
+| 12 | **Tarefa 6 na demo:** fica o reuso do histórico como está (Development, `-ReusarHistorico`, ~2,2 min por tag na 6.0b). **6.1 a 6.3 pausadas** até investigar o custo fixo de ~4 s por requisição do Bridge | BACKLOG 6. A IAApi da demo e do ensaio (D8) sobe em Development com `-HistoricoCausal -ReusarHistorico` |
+| 13 | **RC-12 deixa de depender da 6.1–6.3.** O pré-requisito da tarefa 6 passa a ser a **6.0b (feita)**, com o **`HistoricoCausal` ligado** | Resolve o ponto em aberto da decisão 6 (§8). Continuam: 27 (27.6 antes do ensaio), 35 (feita), RC-11 e aprovação no dia |
+
+- **6.4 (✅ confirmado pela responsável em 17/11):** a 6.4 (janela incremental das tags de regime) estava marcada "antes da RC-12". Ela usa a mesma lógica da 6.1 e fica **pausada** junto com ela. **Não é mais pré-requisito** da RC-12.
+- **`PLANO_REGIME_COMBINADO.md` §7.9:** ✅ atualizado em 17/11 com os novos pré-requisitos da RC-12 (§7.9.1).
+
+### 9.2 Nomes escolhidos (padrão do projeto)
+
+**Padrão observado [código]:**
+- rotas `api/<nome-no-plural>` em português e kebab-case (`api/janelas-treinamento`, `api/grupos-analise`, `api/categorias-falha-ia`); ações como verbo (`treinar-perfil`, `configurar`, `{id:int}/ativar`, `{id:int}/desativar`);
+- tabelas no plural com sufixo `Ia` (`TagsRegimesOperacionaisIa`, `JanelasTreinamentoTagsIa`, `TagsComportamentosSnapshotsIa`); entidades no singular com `Ia` (`TagPerfilIa`, `TagRegimeComponenteIa`);
+- migrations com prefixo da tarefa (`RC5_AddTagRegimeComponente`, `MV08_4D1_AddMultivariateIndustrialEventReviews`);
+- opções com `SectionName` e valores padrão na própria classe, sem mudar o `appsettings.json` (`HistoricoCausalOptions`, RC-4, RC-7); listas por cliente como dicionário `…PorCliente` (RC-7).
+
+#### Treino do perfil (D2, D3; `PerfilTagController`, rota `api/tags`, já existente)
+
+| Rota | Corpo | O que faz |
+|---|---|---|
+| `POST /api/tags/treinar-perfil` | `{ clienteId, tagName }` | **Igual a hoje** (últimas 24 h, grava na hora). `gravar` é ignorado |
+| `POST /api/tags/treinar-perfil` | `{ clienteId, tagName, inicio, fim }` | **Simula; nunca grava.** Devolve `simulacaoId`, `validaAte`, perfil atual e candidato completos, série do período, avisos, informações e bloqueios |
+| `POST /api/tags/treinar-perfil` | `{ clienteId, tagName, simulacaoId, gravar: true }` | Grava **o candidato guardado**, sem nova busca ao Bridge, e cria a versão (D3) na mesma transação. `409`: id vencido ou desconhecido, ou perfil atual diferente do que a simulação viu. `400`: id de outra tag ou cliente; `inicio`/`fim` junto com `simulacaoId`; `gravar = true` com período e sem id |
+| `GET /api/tags/perfis/{clienteId}/{tagName}` | — | Perfil completo de uma tag (todas as colunas de `PerfisIa`) e o `carimbo` do perfil atual |
+| `POST /api/tags/perfis/{clienteId}/{tagName}/restaurar-anterior` | `{ carimboAtual }` | "Voltar ao anterior": copia a versão anterior para `PerfisIa` e guarda a que estava em uso como nova versão (origem `restauracao`). `409` se o carimbo não bate; `404` sem versão anterior |
+| *(produto, P2)* `GET /api/tags/perfis/{clienteId}/{tagName}/versoes` | — | Histórico de treinos. Nome reservado; fora da demo |
+
+- **Carimbo:** hash das colunas do `PerfisIa` da tag, guardado com a simulação e devolvido no `GET`. Serve para os `409` sem acrescentar coluna ao `PerfisIa`, que a predição lê (lição do P43). [a conferir na implementação]
+- **Rotas:** `api/tags/perfis/{c}/{t}` tem um segmento a mais que `api/tags/{clienteId}/{tagName}` (`TagConfigController`) e não deve colidir. Um teste de rota confirma. [a conferir na implementação]
+- `retreinar-perfil` não ganha os campos novos (§5).
+
+#### Tabela de versões (D3)
+
+- **Tabela `PerfisVersoesIa`**, entidade `TagPerfilVersaoIa`, `DbSet<TagPerfilVersaoIa> PerfisVersoesIa`.
+- **Colunas:** `Id`; cópia de **todas** as colunas de `PerfisIa` (inclusive `ClienteId`, `TagName` e `DataTreinamento`); `PeriodoInicio` e `PeriodoFim` (nulos no treino de 24 h); `Origem` (`gravacao` ou `restauracao`); `SimulacaoId` (nulo quando não houver); `DataVersao`.
+- **Índice** `(ClienteId, TagName, DataVersao)`.
+- **Migration** `<timestamp>_T37_AddTagPerfilVersao`, só aditiva.
+
+#### Regime (D5–D7; controller e serviço novos)
+
+- `RegimesOperacionaisController`, rota **`api/regimes-operacionais`** (mesmo nome da tabela `TagsRegimesOperacionaisIa`); serviço `RegimeOperacionalCadastroService` (padrão do `GrupoAnaliseCadastroService`).
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/regimes-operacionais/{clienteId}` | Configurações do cliente e o estado da chave `RegimeCombinado:Habilitado` nesta instância (só leitura) |
+| `GET /api/regimes-operacionais/{clienteId}/{tagName}` | Configuração da tag, com os componentes |
+| `POST /api/regimes-operacionais` | Cria **sempre com `Ativo = false`** |
+| `PUT /api/regimes-operacionais/{id:int}` | Edita; `409` se ativa |
+| `POST /api/regimes-operacionais/simular` | Prévia de cobertura (D6), com o mesmo corpo do `POST`, sem gravar |
+| `PATCH /api/regimes-operacionais/{id:int}/ativar` | É a RC-12; recusas do §4.3 |
+| `PATCH /api/regimes-operacionais/{id:int}/desativar` | Rollback |
+| `DELETE /api/regimes-operacionais/{id:int}` | Só configuração inativa; `409` se ativa |
+
+#### Configuração dos limites (D2)
+
+- **Seção `TreinoPerfil`**, no nível de cima, **fora de `AnomalyDetection`**, para deixar claro que a detecção não a lê. Classe `TreinoPerfilOptions` (`SectionName = "TreinoPerfil"`).
+- Padrões na classe; o `appsettings.json` **não muda**. Um cliente só aparece na configuração quando precisar de valor diferente.
+- `TreinoPerfil:LimitesPorCliente:{clienteId}` sobrescreve **campo a campo** os de `TreinoPerfil:Limites`.
+- Lida por `IOptions`: mudar um limite exige reinício, como a lista da RC-7. Mudar sem reinício fica com o P7.
+- **Aceite extra:** um teste mostra que nenhum serviço da predição depende de `TreinoPerfilOptions`.
+
+```json
+"TreinoPerfil": {
+  "SimulacaoValidadeMinutos": 15,
+  "Limites": { "...": "padrão abaixo" },
+  "LimitesPorCliente": { "PK2": { "PontosMinimos": 720 } }
+}
+```
+*(exemplo de formato; nada será gravado no `appsettings.json`)*
+
+| Campo | Padrão | Tipo | Dispara quando |
+|---|---|---|---|
+| `DuracaoMaximaDias` | 7 | bloqueio | duração > 7 dias |
+| `PontosMinimos` | 720 | bloqueio | pontos < 720 |
+| `DuracaoMinimaHoras` | 24 | aviso | duração < 24 h |
+| `BuracoMaximoMinutos` | 15 | aviso | maior intervalo sem leitura ≥ 15 min |
+| `CoberturaMinimaPercentual` | 95 | aviso | cobertura < 95 % |
+| `ZerosMaximoPercentual` | 50 | aviso | zeros > 50 % |
+| `ZerosInformativoPercentual` | 10 | informação | zeros entre 10 % e 50 % ("tag com estados") |
+| `ValorCongeladoMinutos` | 15 | aviso | trecho constante não nulo ≥ 15 min |
+| `OutliersMaximoPercentual` | 10 | aviso | IQR remove ≥ 10 % |
+| `AnomaliasNoPeriodoMinimo` | 1 | aviso | ≥ 1 anomalia da tag registrada no período |
+| `MudancaMediaDesvios` | 2 | aviso | \|Δmédia\| > 2 desvios do perfil atual |
+| `RazaoDesvioMinima` / `RazaoDesvioMaxima` | 0,5 / 2 | aviso | razão desvio novo ÷ atual fora de [0,5; 2] |
+
+### 9.3 Atenção para o ensaio da RC-12 (inferência; não muda a decisão 13)
+
+- **[código]** Com o regime combinado ligado, o provider faz **3 consultas de histórico por tag de bomba**, síncronas e em sequência (`OperationalRegimeBaselineProvider.cs:335-341` e `:389-409`). Nas 6 tags de bomba do PK2, são **+18 requisições por ciclo**.
+- **[inferência, não medido]** Com o custo fixo de ~4 s por requisição visto na 6.0b, isso somaria cerca de **+70 a +80 s** ao ciclo do PK2: de ~61 s para ~140 s. O intervalo por tag voltaria de ~2,2 para **~3,5 min**, o nível da 6.0.
+- O aceite da RC-12 já mede o "tempo de ciclo com 3 consultas por tag de bomba". O ensaio da D8 deve registrar esse número e a idade da leitura (p95) antes de decidir a ativação na demo.
+- A investigação do custo fixo do Bridge (decisão 12) passa a interessar também à RC-12.
+- **[17/11] Preparação registrada: tarefa 38 do backlog.** As 6 tags de bomba usam as mesmas 3 tags de estado (TAG42, TAG43 e TAG46). Buscar cada uma **uma vez por ciclo e por cliente**, reaproveitando entre as tags, leva de 18 para 3 requisições. Ganho estimado: ciclo do PK2 com regime de ~140 s para ~75 s, ~2,4 min por tag [inferência]. Primeiro em modo `Comparar` e depois em `Usar`, dentro do ensaio da D8.

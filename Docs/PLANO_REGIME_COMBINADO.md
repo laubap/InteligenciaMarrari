@@ -868,10 +868,10 @@ RC-0, RC-1, RC-2 e RC-7 são independentes entre si. RC-3 pode começar logo dep
   - Metas de §3.1 atendidas, com a B-01 de madrugada no limite (30). TAG29 confirmada às 15:37, no limite. CPU +8 %, dentro da variação.
   - Ressalvas: 174 minutos-tag de fallback por poucos pontos nas bombas (72 com alarme), na primeira noite depois de um rodízio (item 24); custo de I/O não medido.
   - Tabela com e sem set-point em §7.6. **Decisão da responsável (16/11/2026): 3 componentes** (§7.9).
-  - **RC-12 não aprovada:** fica para depois das tarefas 6 e 27, numa sessão acompanhada, junto com a chave do `HistoricoCausal` (§7.9).
+  - **RC-12 não aprovada:** fica para depois das tarefas 6 e 27, numa sessão acompanhada, junto com a chave do `HistoricoCausal` (§7.9). **[17/11]** Da tarefa 6, só a 6.0b (feita); ver §7.9.1.
 
 #### RC-12. Ativação no ambiente de teste do PK2 (última etapa; exige aprovação explícita)
-- **Situação (16/11/2026): NÃO aprovada.** Por decisão da responsável (§7.9), vem depois da **tarefa 6** (cadência do ciclo) e da **tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal`. Componentes: os 3 de §6.2.
+- **Situação (16/11/2026): NÃO aprovada.** Por decisão da responsável (§7.9), vem depois da **tarefa 6** (cadência do ciclo) e da **tarefa 27** (retreino do perfil do PK2). **[17/11] Pré-requisitos revistos em §7.9.1:** da tarefa 6, só a 6.0b (feita); preparação recomendada: tarefa 38 do backlog. Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal`. Componentes: os 3 de §6.2.
 - **Objetivo:**
   - aplicar a migration da RC-5 no banco do PK2, com backup antes;
   - cadastrar a lista de rótulos TAG60–TAG81 do PK2 (RC-7);
@@ -1078,8 +1078,8 @@ Preset 6 (2.015 leituras), com a mesma entrada (`cp300_09a13nov_derivado.csv`) e
 **O que falta para a RC-12** (atualizado em 16/11/2026, depois da decisão da §7.9):
 1. ~~Registrar a decisão dos componentes~~ **Feito:** 3 componentes (§7.9).
 2. **Aprovação explícita da RC-12**, que muda a detecção no ambiente de teste do PK2. **Ainda não aprovada** (§7.9).
-3. **Pré-requisitos definidos pela responsável** (§7.9):
-   - **tarefa 6** (cadência do ciclo) concluída: sem ela, o diagnóstico vê ~1 minuto em cada 10 (P26);
+3. **Pré-requisitos definidos pela responsável** (§7.9; **[17/11] revistos em §7.9.1**):
+   - ~~**tarefa 6** (cadência do ciclo) concluída: sem ela, o diagnóstico vê ~1 minuto em cada 10 (P26);~~ **[17/11]** da tarefa 6, só a **6.0b** (feita; ~2,2 min por tag);
    - **tarefa 27** (retreino do perfil do PK2, P32) concluída: o perfil de 30/10 é o que entra nos fallbacks para o global;
    - **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25, P31) no mesmo ambiente.
 4. **Na própria RC-12:**
@@ -1105,3 +1105,24 @@ Preset 6 (2.015 leituras), com a mesma entrada (`cp300_09a13nov_derivado.csv`) e
   - da **tarefa 27** (retreino do perfil do PK2).
 - **Forma:** numa **sessão acompanhada**, junto com a chave `AnomalyDetection:HistoricoCausal`. A aprovação explícita continua sendo exigida nessa sessão.
 - **Nada foi alterado** no código, na configuração nem no banco por esta decisão.
+
+#### 7.9.1 Pré-requisitos da RC-12 revistos (17/11/2026, responsável)
+
+*Substitui a lista "depois da tarefa 6 e da tarefa 27" acima. Registro em `BACKLOG.md` (tarefa 6 e linha RC-12) e em `PLANO_PRODUTO.md` §9.*
+
+- **Tarefa 6:** a RC-12 **não depende mais da 6.1–6.4**, que ficam **pausadas** até investigar o custo fixo de ~4 s por requisição do Bridge. Da tarefa 6, o pré-requisito passa a ser só a **6.0b, já feita** (17/11): reuso do histórico da predição, ciclo do PK2 de ~61 s, ~2,2 min por tag e idade p95 da leitura de ~1,7 min.
+  - Como o reuso só liga em Development, a sessão da RC-12 sobe em **Development com `-HistoricoCausal -ReusarHistorico`**.
+- **Lista atual:**
+  1. RC-11 (feita, com ressalvas; 3 componentes);
+  2. **6.0b** (feita);
+  3. chave **`AnomalyDetection:HistoricoCausal` ligada** na mesma sessão (tarefa 25);
+  4. **tarefa 27**: perfil do PK2 retreinado (27.6) antes do ensaio;
+  5. **tarefa 35**: migration RC-5 no banco local (35.1 e 35.2 feitas em 17/11);
+  6. **ensaio antes da demo** (`PLANO_PRODUTO.md`, passo D8). Na demo, a ativação só acontece se o ensaio passar;
+  7. **aprovação explícita** na sessão.
+- **Cadastro:** pela tela do IAFront, sempre salvo inativo (`PLANO_PRODUTO.md` D5–D7). A RC-12 fica só com a ativação. **[código]** Uma linha com `Ativo = true` e a chave do regime combinado desligada aplica só o componente 1, sem mapa.
+- **Custo de I/O (§7.7) [código + inferência]:**
+  - as 3 consultas do regime por tag de bomba são síncronas e em sequência (`OperationalRegimeBaselineProvider.cs:335-341`, `:389-409`): +18 requisições por ciclo nas 6 tags;
+  - com ~4 s por requisição (6.0b), o ciclo do PK2 iria de ~61 s para ~140 s (~3,5 min por tag), **não medido**.
+  - As 6 tags usam as mesmas 3 tags de estado (TAG42, TAG43, TAG46). **Preparação da RC-12: tarefa 38 do backlog** (buscar cada tag de regime uma vez por ciclo e cliente e reaproveitar): 18 → 3 requisições.
+- **Nada foi alterado** no código, na configuração nem no banco por esta revisão.

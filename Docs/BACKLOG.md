@@ -48,6 +48,18 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 > - **Novo P45 (baixa):** o `Stop-IAApi.ps1` não encerrou o processo em 15 s; proposta 36.5.
 > - Nada aprovado.
 
+> **Atualização 2026-11-17 (segunda rodada de decisões da responsável; `PLANO_PRODUTO.md` §9):**
+> - **Tarefa 37:** limites dos avisos do §3.2 **aprovados**, configuráveis por cliente (seção `TreinoPerfil`); validade da simulação de **15 min**; leitura do `Gravar = true` **confirmada** (com período, gravar exige `simulacaoId`); nomes de rotas, tabela (`PerfisVersoesIa`) e configuração escolhidos por Claude seguindo o padrão do projeto (`PLANO_PRODUTO.md` §9.2). Script de calibração trazido para `tools/CalibracaoAvisosTreino/`, com README (saída conferida idêntica).
+> - **Tarefa 6:** na demo, fica o reuso do histórico como está (Development, `-ReusarHistorico`, ~2,2 min por tag). **6.1 a 6.3 pausadas** até investigar o custo fixo de ~4 s por requisição do Bridge.
+> - **RC-12:** deixa de depender da 6.1–6.3. O pré-requisito da tarefa 6 passa a ser a **6.0b (feita)**, com o **`HistoricoCausal` ligado**.
+> - **Atenção [inferência]:** com o regime combinado ligado, +18 requisições por ciclo no PK2 (3 por tag de bomba, em sequência [código]); com ~4 s cada, o intervalo por tag voltaria a ~3,5 min. O ensaio da RC-12 mede isso.
+> - Nada implementado.
+
+> **Atualização 2026-11-17 (confirmações da responsável):**
+> - a **6.4 fica pausada** junto com a 6.1 e deixa de ser pré-requisito da RC-12 (confirmado);
+> - `PLANO_REGIME_COMBINADO.md` §7.9 atualizado com os novos pré-requisitos da RC-12 (§7.9.1);
+> - **nova tarefa 38** (preparação da RC-12): buscar o histórico de cada tag de regime uma vez por ciclo e por cliente e reaproveitar entre as tags que dependem dela. As 6 tags de bomba usam as mesmas TAG42, TAG43 e TAG46: 18 → 3 requisições por ciclo. Nada implementado.
+
 **O que mudou nesta sessão**
 - A antiga tarefa 1 (recuperar a tabela de cenários) foi **concluída**: `CENARIOS_CP300.md`. O que falta virou a nova tarefa 1 (exportar o histórico).
 - O inventário do banco (antiga 5) **subiu para 2**: é a forma mais barata de confirmar três achados (rótulo como `TagRegime`, `TipoRepresentacao` e perfil colapsado em zero).
@@ -104,7 +116,12 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 ### 6. Medir a duração do ciclo e a cadência real por tag no ambiente de teste — **PRIORIDADE 2 (era 1; logo depois da 25 desde 2026-11-13)**
 - **Subtarefas 6.0 a 6.5 (registradas em 2026-11-16):** avaliar cada tag a cada minuto sem buscar 24 h por tag a cada ciclo. Ficam no fim desta tarefa, ligadas às tarefas 22 e 25 (e, desde a medição, 34 e 35). A 6.0 foi medida em 16/11 e a **6.0b em 17/11** (`MEDICAO_ETAPA0.md` §10). As de 6.1 a 6.5 não estão aprovadas.
 - Sem mudança. `IAAPI_PERF_DIAGNOSTICS` numa sessão autorizada. **Risco:** médio. **Esforço:** P.
-- **Bloqueia a RC-12** (decisão de 2026-11-16, `PLANO_REGIME_COMBINADO.md` §7.9): a ativação do regime combinado no PK2 só vem depois desta tarefa e da 27. Com o regime ligado, o provider faz 3 consultas de histórico por tag de bomba (18 por ciclo nas 6 tags, contra 6 hoje), e esse custo não foi medido no replay (RC-11, §7.7).
+- **[17/11] Decisão da responsável (segunda rodada; `PLANO_PRODUTO.md` §9.1):**
+  - **para a demo, fica o reuso do histórico como está** (6.0b: Development com `-HistoricoCausal -ReusarHistorico`; ~2,2 min por tag, idade p95 de ~1,7 min). O reuso só liga em Development, então a demo e o ensaio sobem em Development;
+  - **6.1, 6.2 e 6.3 pausadas** até investigarmos o custo fixo de ~4 s por requisição do Bridge (6.0b; `MEDICAO_ETAPA0.md` §10.10). A investigação ainda não tem plano nem aprovação;
+  - **a RC-12 deixa de depender da 6.1–6.3:** da tarefa 6, o pré-requisito passa a ser só a **6.0b (feita)**, com o `HistoricoCausal` ligado;
+  - **✅ confirmado pela responsável (17/11):** a 6.4 ("antes da RC-12") também deixa de ser pré-requisito e fica pausada com a 6.1, cuja lógica ela reaproveita. A redução das consultas do regime dentro do ciclo foi para a **tarefa 38**.
+- ~~**Bloqueia a RC-12**~~ **[17/11: substituído pela decisão acima]** (decisão de 2026-11-16, `PLANO_REGIME_COMBINADO.md` §7.9): a ativação do regime combinado no PK2 só vem depois desta tarefa e da 27. Com o regime ligado, o provider faz 3 consultas de histórico por tag de bomba (18 por ciclo nas 6 tags, contra 6 hoje), e esse custo não foi medido no replay (RC-11, §7.7).
 - **Por que subiu (P26, confirmado em log, IA real no preset 3, 12/11 14:21–15:09):**
   - Cada tag do PK2 foi avaliada só 3 a 5 vezes em ~48 min, cerca de 1 vez a cada ~10 min, contra 1 leitura por minuto do simulador.
   - O ciclo do PK2 se repetiu a cada 5 a 18 min. Com o Bridge livre, uma tag levou 2–10 s; sob carga, 60–110 s.
@@ -245,7 +262,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
     - Proposta (não aprovada):
       - 6.1 só em modo Comparar, para confirmar o custo do trecho curto e servir de base à 6.5;
       - não fazer a sessão da 6.2 enquanto o p95 do trecho não ficar ≤ ~2,5 s;
-      - para a demo, a responsável decide entre o reuso sozinho (2,2 min por tag) e a variante "sem espera quando atrasado" (~1,2 min, que exige aprovação e uma sessão).
+      - para a demo, a responsável decide entre o reuso sozinho (2,2 min por tag) e a variante "sem espera quando atrasado" (~1,2 min, que exige aprovação e uma sessão). **[17/11] Decidido: o reuso sozinho.** 6.1–6.3 pausadas.
     - **Atenção:** o reuso só liga em Development.
   - **Fora do escopo:** 52 anomalias do PK2, concentradas na troca de bombas depois de 12:25 (P32, tarefas 9 e 27), não avaliadas contra o gabarito. Também 52 HTTP 400 do LM Studio, uma por anomalia, com fallback.
   - **Parada:** o `Stop-IAApi.ps1` não encerrou o processo em 15 s (**P45**, proposta 36.5). A decisão da TAG27 em andamento se perdeu.
@@ -275,7 +292,7 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Rollback:** tirar a variável e reiniciar.
 - **Risco:** baixo (experimento já coberto por testes; a decisão não muda). **Esforço:** P (só a sessão).
 
-##### 6.1 Janela incremental em modo Comparar — **não aprovada**
+##### 6.1 Janela incremental em modo Comparar — **não aprovada; ⏸️ PAUSADA (17/11) até investigar o custo fixo de ~4 s por requisição do Bridge**
 - **Decorador de `IHistoricoService`** (novo arquivo em `Services/`), registrado em `BridgeServiceCollectionExtensions.cs` só com a chave. Sem a chave, a DI fica idêntica à atual.
 - **Chave:** `Bridge:HistoricoIncremental:Modo = Desligado | Comparar | Usar`. Padrão `Desligado`; a chave fica fora do `appsettings`.
 - **Valores aprovados:**
@@ -324,14 +341,14 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Rollback:** `Modo = Desligado` (ou sem a chave) e reiniciar.
 - **Risco:** baixo (a decisão não muda). **Esforço:** M.
 
-##### 6.2 Janela incremental em modo Usar, com o `PredictionHistoryReuse` — **não aprovada; depende de 6.0, 6.0b e 6.1, e da tarefa 34 (ou do LiveMonitor fechado)**
+##### 6.2 Janela incremental em modo Usar, com o `PredictionHistoryReuse` — **⏸️ PAUSADA (17/11); não aprovada; depende de 6.0, 6.0b e 6.1, e da tarefa 34 (ou do LiveMonitor fechado)**
 - **O que muda:** `Modo = Usar`. Na sessão, o `IAAPI_EXPERIMENT_REUSE_PREDICTION_HISTORY=1` vem do ambiente; o reuso não está no `-PerfDiag`, e levá-lo para configuração fora de Development exige aprovação própria.
 - **Impacto na detecção:** o que chega aos detectores pode diferir na borda da janela e nas correções tardias fora da sobreposição (até a recarga de 60 min).
 - **Sessão:** alternar desligado → ligado → desligado, 1 h cada, com `HistoricoCausal` e PERF_DIAG ligados nas três fases. Metas da tabela da 6.0. **[16/11]** O LiveMonitor fica **no mesmo estado nas três fases**, de preferência fechado (P42: sozinho, ele multiplicou o tempo do monitor por 4–5). O export fica para o fim. A linha de base da fase "desligado" pode reaproveitar a 6.0b, se as condições forem as mesmas.
 - **Rollback:** a chave.
 - **Risco:** médio.
 
-##### 6.3 Cadência fixa de 1 minuto no laço — **não aprovada; o teste offline dependia da tarefa 22 (feita em 16/11, passos 1 e 2)**
+##### 6.3 Cadência fixa de 1 minuto no laço — **⏸️ PAUSADA (17/11); não aprovada; o teste offline dependia da tarefa 22 (feita em 16/11, passos 1 e 2)**
 - **[16/11] Quando:** só depois que a 6.2 (ou a 6.5) medir ciclo ≤ ~50 s. Com o ciclo de hoje (131 s no PK2), a cadência fixa só pularia tiques.
 - **[17/11, depois da 6.0b; `MEDICAO_ETAPA0.md` §10.11] Com o reuso, a 6.3 sozinha não chega a 1 min.** O trabalho do laço é de ~71 s (PK2 61 s + PK7 10 s), maior que 60 s.
   - Como está escrita ("pula o tique", esperando o próximo), daria ~2,0 min por tag, com Warning em todo ciclo.
@@ -344,10 +361,10 @@ Ordem: primeiro medição e diagnóstico, depois correções. **Nenhuma tarefa e
 - **Rollback:** a chave.
 - **Risco:** médio. Muda a cadência, não a lógica da decisão.
 
-##### 6.4 Janela incremental para o histórico das tags de regime — **não aprovada; antes da RC-12; depende da tarefa 35 (P43)**
+##### 6.4 Janela incremental para o histórico das tags de regime — **não aprovada; ~~antes da RC-12~~ [17/11, ✅ confirmado] não é mais pré-requisito da RC-12; ⏸️ pausada com a 6.1; depende da tarefa 35 (P43)**
 - **[16/11] Pré-requisito:** banco local com a migration RC-5 (tarefa 35). Sem ela, a consulta da configuração de regime falha antes de qualquer busca de histórico do regime, e a medição em modo Comparar sairia vazia. **[17/11] Atendido pela 35.1** (RC-5 aplicada no banco local); falta confirmar na 35.2 que o erro sumiu do log.
 - **O que muda:** a mesma lógica da 6.1 para os `BuscarHistoricoPorPeriodo` do `OperationalRegimeBaselineProvider`, chaveada por (cliente, tag de regime). Começa em modo Comparar.
-- **Por que antes da RC-12:** com o regime combinado ligado, seriam 18 consultas por ciclo só nas tags de bomba.
+- **Por que antes da RC-12:** com o regime combinado ligado, seriam 18 consultas por ciclo só nas tags de bomba. **[17/11]** Pela decisão da segunda rodada, a RC-12 vai sem ela; o custo dessas 18 consultas é medido no ensaio da RC-12 (`PLANO_PRODUTO.md` §9.3). Para reduzi-las a 3 dentro do ciclo, sem esperar a 6.4: **tarefa 38**.
 - **Chave:** `Bridge:HistoricoIncremental:IncluirRegime`.
 - **Aceite:** replay com o regime combinado com 0 diferenças.
 
@@ -930,7 +947,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
   - relatório de pontos por regime no treino;
   - aprovação da responsável antes do retreino real.
 - **Depende de:** 25 (para medir o efeito na IA real) e 8.
-- **Bloqueia a RC-12** (decisão de 2026-11-16, `PLANO_REGIME_COMBINADO.md` §7.9): a ativação do regime combinado no PK2 só vem depois desta tarefa e da 6. Quando a classe do regime tem menos de 30 pontos na janela de 24 h, a tag cai no perfil global. Isso aconteceu em 174 minutos-tag das bombas no replay da RC-11 (§7.5), e o perfil global hoje é o de 30/10, com a B-02 colapsada.
+- **Bloqueia a RC-12** (decisão de 2026-11-16, `PLANO_REGIME_COMBINADO.md` §7.9): a ativação do regime combinado no PK2 só vem depois desta tarefa e da 6 (**[17/11] da 6, só a 6.0b, já feita**; a 27 continua: 27.6 antes do ensaio). Quando a classe do regime tem menos de 30 pontos na janela de 24 h, a tag cai no perfil global. Isso aconteceu em 174 minutos-tag das bombas no replay da RC-11 (§7.5), e o perfil global hoje é o de 30/10, com a B-02 colapsada.
 
 #### 27 — Plano detalhado (2026-11-16; só planejado, **nada aprovado nem implementado**)
 *Feito só com leitura, com a IAApi em sessão de medição: nada compilado, nenhum teste ou replay rodado, a API não foi chamada.*
@@ -974,7 +991,7 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
     - **Sem `Inicio`/`Fim`**: o mesmo código e a mesma resposta de hoje; `Gravar` é ignorado.
   - **Com período: simula por padrão.** O endpoint calcula e devolve o perfil, sem `SaveChanges`, e só grava com `Gravar = true`. O caminho novo é seguro por padrão e o antigo não muda.
   - O recorte é `[inicio, fim)`, como no replay: filtrar `< fim` depois de `BuscarHistoricoPorPeriodo`. **Não mudar o método compartilhado**: o regime e o IF dependem do fim inclusivo.
-  - Validações, com valores a aprovar:
+  - Validações, com valores a aprovar (**[17/11] aprovados**, configuráveis por cliente na seção `TreinoPerfil`; `PLANO_PRODUTO.md` §9.2):
     - `fim > inicio` e `fim <= agora`;
     - duração máxima, por exemplo 7 dias, por causa da carga no Bridge (P10);
     - mínimo de pontos, por exemplo ≥ 720, para não repetir o treino de ~3 h de 30/10.
@@ -1063,8 +1080,8 @@ Tudo nesta tabela foi **confirmado no código**. Os efeitos em teste real estão
 | 27.0 | Plano | Não | — | Feito em 16/11 |
 | 27.1 | Replay `--perfis <json>` (igual à tabela anterior) | Não | — | Igual à tabela anterior |
 | 27.2 | Medição offline banco × candidato. **Decide quais tags e qual período serão escolhidos ao vivo na demo** | Não | 27.1 | Igual à tabela anterior |
-| 27.3a | API: Q1 (período, `[inicio, fim)`, simulação por padrão, validações) + resposta com o perfil atual **e** o candidato completos, a série do período para o gráfico, **avisos sobre o período** (PLANO_PRODUTO §3.2; limites propostos, a aprovar) e `simulacaoId`. **Decidido em 17/11:** com período, gravar usa exatamente o perfil simulado, exige o id e não recalcula (§3.3) | Não: sem os campos novos, igual a hoje | — (**em paralelo com 27.1 e 27.2**) | O aceite anterior da 27.3 (sem o `Gravar = true` que recalculava), mais: avisos nos casos de teste; `409` com id vencido ou com o perfil atual mudado desde a simulação; o perfil gravado é igual, campo a campo, ao simulado |
-| 27.3b | API: versões do perfil (`PerfisIaVersoes`, tabela aditiva com migration; nome a decidir), cópia da linha antes de gravar na mesma transação, "voltar ao anterior" reversível, `GET` do perfil completo de uma tag (com cliente) | Não: a predição continua lendo só `PerfisIa` | 27.3a; migration aplicada com backup (padrão da 35.1) e conferida (padrão da 35.2) | Gravar cria a versão; voltar deixa `PerfisIa` igual à versão em todas as colunas; voltar duas vezes volta ao estado original; `PredictionContextLoader` intocada |
+| 27.3a | API: Q1 (período, `[inicio, fim)`, simulação por padrão, validações) + resposta com o perfil atual **e** o candidato completos, a série do período para o gráfico, **avisos sobre o período** (PLANO_PRODUTO §3.2; ~~limites propostos, a aprovar~~ **aprovados em 17/11**, seção `TreinoPerfil`) e `simulacaoId` (**validade de 15 min**; contrato no PLANO_PRODUTO §9.2). **Decidido em 17/11:** com período, gravar usa exatamente o perfil simulado, exige o id e não recalcula (§3.3) | Não: sem os campos novos, igual a hoje | — (**em paralelo com 27.1 e 27.2**) | O aceite anterior da 27.3 (sem o `Gravar = true` que recalculava), mais: avisos nos casos de teste; `409` com id vencido ou com o perfil atual mudado desde a simulação; o perfil gravado é igual, campo a campo, ao simulado |
+| 27.3b | API: versões do perfil (**`PerfisVersoesIa`**, entidade `TagPerfilVersaoIa`, tabela aditiva com migration `T37_AddTagPerfilVersao`; nomes decididos em 17/11), cópia da linha antes de gravar na mesma transação, "voltar ao anterior" reversível, `GET` do perfil completo de uma tag (com cliente): `GET /api/tags/perfis/{clienteId}/{tagName}` e `POST …/restaurar-anterior` | Não: a predição continua lendo só `PerfisIa` | 27.3a; migration aplicada com backup (padrão da 35.1) e conferida (padrão da 35.2) | Gravar cria a versão; voltar deixa `PerfisIa` igual à versão em todas as colunas; voltar duas vezes volta ao estado original; `PredictionContextLoader` intocada |
 | 27.3c | IAFront: tela "Configuração → Treino do perfil" (escolher o período por tag, simular, prévia atual × novo, avisos, gravar, voltar) | Não: a tela só chama a API | 27.3a, 27.3b; 37-D1 | Fluxo completo contra a API com fakes (Bridge falso da tarefa 22) |
 | 27.4 | (Opcional, **depois da demo**) o replay usa o mesmo método | Não | 27.3a | Igual à tabela anterior |
 | 27.5 | **Ensaio autorizado** com o Bridge: backup Q3; simular pela tela o período escolhido; gravar e voltar numa tag de ensaio | Sim, por minutos, numa tag de ensaio, com volta no mesmo ensaio | 27.2, 27.3c, aprovação | 1.437 pontos por tag e estatísticas iguais às do `p3b_sem.stdout`; avisos iguais aos esperados (PLANO_PRODUTO §3.2: outliers na TAG24, mudança grande em TAG24/27/28/30/31/32, nenhum bloqueio); depois do "voltar", `PerfisIa` igual ao backup |
@@ -1854,14 +1871,25 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
   2. IAFront e LiveMonitor juntos, com proxy no IAFront; **a API e o CORS não mudam** (D1).
   3. Gravar usa **exatamente o perfil simulado**: `simulacaoId` obrigatório com período, sem recalcular; `409` se o id venceu ou se o perfil atual mudou desde a simulação (D2 = 27.3a).
   4. Tabela de versões do perfil **na demo**, com backup antes da migration, nos padrões da 35.1 e da 35.2 (D3 = 27.3b).
-  5. **Limites dos avisos: proposta para aprovação** (`PLANO_PRODUTO.md` §3.2). Calibrada com o `dados/cp300_09a13nov.csv`: janelas de 24 h e de 3 h, limpas e com falha, com o mesmo IQR do treino. O script reproduz o `p3b_sem.stdout`. Foi só leitura do CSV, sem compilar, testar, rodar replay nem chamar a API.
+  5. **Limites dos avisos: proposta para aprovação** (`PLANO_PRODUTO.md` §3.2). **[17/11] ✅ Aprovados**, configuráveis por cliente (seção `TreinoPerfil`, §9.2). Calibrada com o `dados/cp300_09a13nov.csv`: janelas de 24 h e de 3 h, limpas e com falha, com o mesmo IQR do treino. O script reproduz o `p3b_sem.stdout`. Foi só leitura do CSV, sem compilar, testar, rodar replay nem chamar a API.
      - **Bloqueios:** período invertido ou no futuro; mais de 7 dias; menos de 720 pontos (recusaria o treino de 30/10).
      - **Avisos:** menos de 24 h; buraco ≥ 15 min ou cobertura < 95 %; zeros > 50 % (pega TAG28 77 % e TAG32 97 % de 30/10, sem avisar o rodízio normal, que chega a 39 %); valor constante não nulo ≥ 15 min (limpas: até 5; congelamentos do preset 3: 20 e 30); IQR remove ≥ 10 % (pega o P01 da TAG24, 21 %); ≥ 1 anomalia registrada no período; mudança grande (|Δmédia| > 2 desvios ou razão de desvios fora de [0,5; 2]).
      - **Achado:** zeros e outliers não distinguem uma janela limpa de uma com falha. No runtime, só o congelamento e as anomalias registradas indicam contaminação; a trava da TAG73 continua offline.
      - **Limite da evidência:** dados do simulador; os limites ficam por cliente, em configuração, e devem ser recalibrados com dados da planta.
   6. Regime na demo: configurar e simular pela tela. **Ativar só se a RC-12 passar num ensaio antes da demo** (D8 ganha o ensaio da RC-12; D9 ativa só se ele passar e com aprovação no dia).
-     - **Em aberto:** a tarefa 6 continua como pré-requisito da RC-12 e não está feita. A responsável decide antes da D8 se a mantém (a ativação provavelmente fica fora da demo) ou se a dispensa só para o ensaio e a demo.
-- **Ainda pendente:** aprovar os limites do §3.2; nomes das rotas, da tabela de versões e da seção de configuração dos avisos; tempo de vida da simulação (15 min?); confirmar que, com período, o `Gravar = true` que recalculava sai do contrato da 27.3.
+     - ~~**Em aberto:** a tarefa 6 continua como pré-requisito da RC-12 e não está feita. A responsável decide antes da D8 se a mantém (a ativação provavelmente fica fora da demo) ou se a dispensa só para o ensaio e a demo.~~ **[17/11] Resolvido:** da tarefa 6, a RC-12 depende só da 6.0b (feita), com o `HistoricoCausal` ligado; a 6.1–6.3 fica pausada.
+- **Segunda rodada de decisões (17/11; `PLANO_PRODUTO.md` §9):**
+  7. Limites do §3.2 aprovados, configuráveis por cliente; bloqueios (7 dias, 720 pontos) também configuráveis.
+  8. Nomes escolhidos por Claude seguindo o padrão do projeto (§9.2):
+     - treino: `POST /api/tags/treinar-perfil` (sem período = hoje; com `inicio`/`fim` = simula; com `simulacaoId` + `gravar: true` = grava o simulado), `GET /api/tags/perfis/{clienteId}/{tagName}`, `POST /api/tags/perfis/{clienteId}/{tagName}/restaurar-anterior`;
+     - versões: tabela `PerfisVersoesIa` (entidade `TagPerfilVersaoIa`), migration `T37_AddTagPerfilVersao`;
+     - regime: `api/regimes-operacionais` (`GET {clienteId}`, `GET {clienteId}/{tagName}`, `POST`, `PUT {id}`, `POST simular`, `PATCH {id}/ativar`, `PATCH {id}/desativar`, `DELETE {id}`);
+     - limites: seção `TreinoPerfil` (`Limites`, `LimitesPorCliente`, `SimulacaoValidadeMinutos`), fora de `AnomalyDetection`, padrões na classe, `appsettings.json` sem mudança.
+  9. Validade da simulação: 15 min.
+  10. Leitura do §3.3 confirmada: com período, gravar exige `simulacaoId`; o `Gravar = true` que recalculava sai.
+  11. Script de calibração em `tools/CalibracaoAvisosTreino/` com README: **feito em 17/11** (cópia sem mudança; saída com `dados/cp300_09a13nov.csv` conferida idêntica à da calibração).
+  12. e 13. Tarefa 6 e RC-12: ver a decisão registrada na tarefa 6 e na linha RC-12.
+- ~~**Ainda pendente:** aprovar os limites do §3.2; nomes das rotas, da tabela de versões e da seção de configuração dos avisos; tempo de vida da simulação (15 min?); confirmar que, com período, o `Gravar = true` que recalculava sai do contrato da 27.3.~~ **[17/11] Tudo decidido** (itens 7 a 13 acima). Nenhum passo de implementação aprovado.
 - **Onde fica a tela:** no **IAFront** (`..\IAFront`; React 19, Vite, MUI, Recharts; repositório git próprio; último commit em 28/07/2026).
   - É a interface do produto. Cliente fixo `"PK7"`, com o comentário "virá do login"; chama a API direto em `http://localhost:5145/api`.
   - O **LiveMonitor continua só de leitura**: a lista fechada de GETs e o `405` para outros métodos são a garantia dele. Escrita ali criaria uma configuração em paralelo.
@@ -1889,10 +1917,10 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
   - **D5** API de regime, só cadastro: sempre salva inativo, recusa editar configuração ativa e valida reaproveitando a RC-4 e a RC-7;
   - **D6** prévia de cobertura do regime (só leitura; 4 consultas de 24 h por tag de bomba);
   - **D7** tela do regime;
-  - **D8** ensaio geral autorizado (27.5 + regime inativo + pré-requisitos da RC-12);
+  - **D8** ensaio geral autorizado (27.5 + regime inativo + pré-requisitos da RC-12; IAApi em Development com `-HistoricoCausal -ReusarHistorico`; medir o tempo de ciclo com o regime ligado, `PLANO_PRODUTO.md` §9.3);
   - **D9** demo.
-  - **Ativar** o regime (`PATCH …/ativar`) é a RC-12. A ativação recusa configuração com mais de 1 componente ou com mapa quando a chave está desligada.
-  - **Recomendação:** na demo, o regime é **configurado e simulado, sem ativar**, a não ser que a RC-12 seja aprovada na sessão e haja decisão sobre a tarefa 6, que é pré-requisito dela.
+  - **Ativar** o regime (`PATCH /api/regimes-operacionais/{id}/ativar`) é a RC-12. A ativação recusa configuração com mais de 1 componente ou com mapa quando a chave está desligada.
+  - **Recomendação:** na demo, o regime é **configurado e simulado, sem ativar**, a não ser que a RC-12 seja aprovada na sessão e haja decisão sobre a tarefa 6, que é pré-requisito dela. **[17/11]** A decisão sobre a 6 foi tomada (6.0b basta); falta passar no ensaio da D8 e a aprovação no dia.
 - **Fica para o produto:**
   - **P1** autenticação e política por cliente (P34 definitiva) e login no IAFront;
   - **P2** histórico de treinos (tela sobre a mesma tabela de versões do D3);
@@ -1914,6 +1942,52 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 - **Risco:** médio (o prazo; a carga no Bridge durante as simulações; a demo ao vivo). **Esforço:** G no total (D2–D7 são M cada).
 - **Rollback:** reverter cada commit (IAApi e IAFront separadamente); `Down` da migration das versões; dados do perfil pela tela ou pelo backup Q3; regime com `Ativo = false` e a chave em `false`.
 
+### 38. (Desempenho, preparação da RC-12) Buscar o histórico de cada tag de regime uma vez por ciclo e por cliente e reaproveitar entre as tags que dependem dela — ⏳ **ABERTA (registrada em 2026-11-17 a pedido da responsável; não implementar sem aprovação)**
+- **Problema [código]:**
+  - com o regime combinado ligado, o `OperationalRegimeBaselineProvider` faz 1 `BuscarHistoricoPorPeriodo` por componente, de forma síncrona e em sequência (`OperationalRegimeBaselineProvider.cs:335-341` e `:389-409`);
+  - as 6 tags de bomba do PK2 usam **as mesmas 3 tags de estado** (TAG42, TAG43 e TAG46; só a ordem muda, `PLANO_REGIME_COMBINADO.md` §7.9);
+  - resultado: 18 requisições por ciclo para buscar 3 séries.
+- **Efeito esperado [inferência, não medido]:** com o custo fixo de ~4 s por requisição (6.0b), 18 → 3 tira ~15 × 4,3 ≈ 64 s do ciclo do PK2 com regime: de ~140 s para ~75 s. O intervalo por tag ficaria em ~2,4 min, em vez de ~3,5 min (hoje, sem regime, 2,2 min).
+- **Fatos do código que o desenho usa:**
+  - **A janela muda de tag para tag** (`OperationalRegimeBaselineProvider.cs:273-320`): o início é o primeiro ponto do histórico da tag analisada − `LagMinutos` − `ToleranciaAlinhamentoMinutos`; o fim é o maior entre (instante da leitura − lag) e (último ponto da tag − lag). Por isso, um cache com chave exata (tag, início, fim) quase nunca acertaria. É preciso buscar uma janela que cubra as outras e recortar.
+  - **Dentro do lote de um cliente, o instante da leitura vem do mesmo `/valores-atuais`** (`MonitoramentoTagsService.cs:54-55`, `:106-108`; `CurrentValuePredictionService.cs:83-84`). O fim da janela tende a ser o mesmo para todas as tags com o mesmo lag. O início varia pouco: o histórico de 24 h de cada tag é buscado em momentos diferentes do ciclo.
+  - **O monitor já cria um escopo de DI por ciclo** (`MonitoramentoTagsService.cs:30`), e o provider é `Scoped` (`AnomalyDetectionServiceCollectionExtensions.cs:87-88`). Um cache `Scoped` vive exatamente um ciclo, sem tempo de expiração para gerenciar. Numa requisição HTTP (`POST /api/anomalias/tag`), o escopo tem uma predição só, e nada muda.
+  - O filtro do `BuscarHistoricoPorPeriodo` é `>= inicio` e `<= fim`, com deduplicação por `DataHora`, ordenação e exceção quando não há pontos (`BridgeHistoricoService.cs:165-190`). O recorte do cache tem de repetir exatamente isso, inclusive a exceção (o provider transforma a exceção em fallback global com motivo).
+- **Por que algo novo (regra do `CLAUDE.md`):**
+  - o `PredictionRawHistorySnapshot` é, de propósito, de uma predição só (`Docs/prediction-history-reuse-experiment.md`), e o `PredictionHistoryReuse` reaproveita dentro da mesma predição, não entre tags;
+  - o decorador da 6.1/6.4 (janela incremental **entre** ciclos) está pausado e resolve outro problema;
+  - esta tarefa segue o mesmo espírito do `PredictionHistoryReuse`: reaproveitar uma busca já feita, sem mudar `IHistoricoService`, o `BridgeHistoricoService`, os detectores nem o contrato HTTP.
+  - **Plano de remoção:** se a 6.4 for retomada como decorador de `IHistoricoService` para as tags de regime, decidir na época se este cache continua (deduplicação dentro do ciclo) ou é absorvido pelo decorador.
+- **Onde entra no código:**
+  1. **Novo** `Services/AnomalyDetection/OperationalRegimeHistoryCycleCache.cs`, registrado como `Scoped`, com chave **(cliente, tag de regime)**. Isolamento por cliente: nada é compartilhado entre clientes, mesmo com o mesmo nome de tag (mesmo critério da 6.1).
+     - **1ª busca do ciclo** para a chave: `BuscarHistoricoPorPeriodo(cliente, tagRegime, inicio − margem, fim)`, com margem de 10 min (mesmo valor aprovado para a sobreposição da 6.1). Guarda os pontos e o intervalo coberto.
+     - **Buscas seguintes:** se `[inicio, fim]` cabe no intervalo coberto, devolve **uma cópia** do recorte (mesmo filtro e ordem; exceção igual se ficar vazio). Se não cabe (fim depois do coberto, lag diferente, início antes da margem), faz a busca direta, como hoje, sem guardar. O caminho seguro é sempre o de hoje.
+  2. **Novo** `Services/AnomalyDetection/OperationalRegimeHistoryReuseOptions.cs` (padrão `RegimeCombinadoOptions`): seção `AnomalyDetection:RegimeOperacional:ReusoHistoricoNoCiclo`, com `Modo = Desligado | Comparar | Usar` (padrão `Desligado`) e `MargemMinutos = 10`. Padrões na classe; o `appsettings.json` não muda.
+  3. `OperationalRegimeBaselineProvider.cs`: as duas chamadas (`:335-341` e `:389-409`) passam por um método privado que usa o cache quando ele existe e o modo não é `Desligado`. O cache entra como **parâmetro opcional do construtor** (`= null`, mesmo padrão das opções da RC-7 e da RC-8), para que o replay (`tools/Cp300OfflineReplay`) e os testes atuais continuem construindo o provider sem mudança.
+  4. `Services/AnomalyDetection/DependencyInjection/AnomalyDetectionServiceCollectionExtensions.cs` (perto da linha 87): `AddScoped` do cache e ligação das opções.
+  5. **PERF_DIAG:** marcar cada busca de regime como `Fetched` ou `Reused`, no mesmo padrão do `HistorySource=ReusedPredictionRaw` da 6.0b, para contar as requisições no log.
+  6. Opcional: um switch `-ReusarHistoricoRegime` no `tools/Start-IAApiComLog.ps1` (padrão do `-ReusarHistorico`, tarefa 36.2).
+  7. **Sem mudança** no `MonitoramentoTagsService.cs`: o escopo por ciclo já existe. Um teste fixa essa premissa (se alguém passar a criar um escopo por tag, o reuso some, mas sem risco).
+- **Modo Comparar (primeira etapa, sem mudar a decisão e sem requisição extra):** a decisão usa a busca direta, como hoje (18 requisições). A primeira busca de cada chave fica guardada, e as seguintes são comparadas com o recorte no trecho comum. O log registra pontos a mais, a menos e com valor diferente, e se a chave de regime atual mudaria.
+- **Muda a decisão?**
+  - `Desligado` e `Comparar`: não.
+  - `Usar`: só se o Bridge devolver dados diferentes, para o mesmo trecho, entre a 1ª busca e as seguintes do mesmo ciclo (segundos a ~1 min depois). Exemplo: ponto do último minuto que ainda não tinha chegado. O modo Comparar mede isso antes.
+- **Testes offline** (dublês já existentes, como `RecordingHistory` e `StubHistory`, e o `FakeBridgeHandler` da tarefa 22):
+  - 6 tags com a configuração alvo da §7.9: **3 chamadas** com `Usar` e **18** com `Desligado`/`Comparar`; resoluções (`Applied`, `RegimeKey`, estatísticas, motivo) **idênticas** às da busca direta;
+  - recorte com início e fim diferentes por tag, fim fora do coberto (cai na busca direta), lags diferentes, recorte vazio (mesma exceção e o mesmo fallback);
+  - mesma tag de regime em dois clientes: duas buscas, nada compartilhado;
+  - falha na 1ª busca: nada guardado; a tag seguinte busca de novo (igual a hoje);
+  - cópia: alterar a lista devolvida não altera o cache;
+  - regressão: testes do provider (RC-7, RC-8), `PredictionHistoryReuseTests`, `PerformanceDiagnosticsTests`, `HistoricoCausalTests` e suíte completa; `Compare-Replay.ps1` com **0 diferenças em 12 execuções** (o replay não liga o cache).
+- **Medição ao vivo:** só é possível com o regime **ativo**, ou seja, dentro da sessão da RC-12. Proposta para o ensaio da 37-D8:
+  - primeiro trecho em `Comparar` (18 requisições, diferenças registradas);
+  - depois `Usar` (3 requisições);
+  - aceite: 0 diferenças na chave de regime atual em `Comparar`; requisições de regime por ciclo = 3 em `Usar`; tempo de ciclo e idade p95 da leitura medidos nas duas fases.
+- **Rollback:** `Modo = Desligado` (ou sem a seção) e reiniciar. Código: reverter o commit.
+- **Risco:** baixo com `Desligado`/`Comparar`; médio em `Usar` (afeta o regime só no caso de borda acima).
+- **Esforço:** **P a M.** Código P (2 classes pequenas, 2 pontos no provider, DI e marcador de PERF_DIAG); testes M (equivalência, borda e isolamento). Cabe numa sessão de código, mais os dois trechos no ensaio da D8.
+- **Depende de:** RC-8 (feita). **Não depende** da 6.1–6.4 (pausadas) nem da investigação do custo fixo do Bridge. **Preparação da RC-12:** recomendada antes do ensaio da 37-D8; não é pré-requisito formal enquanto a responsável não decidir.
+
 ---
 
 *Tarefas RC-0 a RC-12 acrescentadas em 2026-11-12: implementação do item 12 (Opção A, regime combinado com 3 componentes). O detalhe de cada uma (objetivo, arquivos, aceite) está em `PLANO_REGIME_COMBINADO.md` §6. Cada tarefa cabe numa sessão e exige aprovação própria.*
@@ -1934,4 +2008,4 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 | RC-9 | ✅ **Concluída (2026-11-13).** `BaselineDiagnostic.RegimeKey` (parâmetro opcional no fim do construtor; espaços ⇒ nula) com `[JsonIgnore(WhenWritingNull)]` na propriedade. Assim ela fica fora do JSON quando nula nos dois pontos de serialização levantados: o exportador JSONL (`JsonIgnoreCondition.Never`) e o endpoint `GET /intelligence-lab/diagnostics/{id}` (padrão web do `AddControllers`). A cópia do `InMemoryDiagnosticCollector` só repassa o objeto. `PrepararAsync` preenche a chave só com o regime aplicado (vinda da RC-8); a linha `BASELINE POR REGIME APLICADO` ganha `Chave=…` só quando ela existe. Não entra em nenhuma decisão. 12 testes novos: JSON do baseline sem chave igual ao literal do contrato anterior, no JSONL e no padrão web; com chave, `regimeKey` no fim; preparação de ponta a ponta com a chave desligada (sem chave no diagnóstico, no JSON e no log) e ligada; regime não aplicado sem chave. Mutação (sem o `JsonIgnore`): 3 testes falham. Relacionados 505/505; `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal`; suíte completa **999/999**. Ver `PLANO_REGIME_COMBINADO.md` §6.3, RC-9 | `DiagnosticContracts.cs`, `PredictionDetectionPreparationService.cs` | JSON e log iguais com a chave desligada; RC-2 com 0 diferenças | RC-8 | só com a chave (observabilidade) |
 | RC-10 | ✅ **Concluída (2026-11-13).** Replay com `--regime-combinado` (liga `RegimeCombinado:Habilitado` só no provider do replay, com TAG60–TAG81 na lista de tags proibidas do cliente), `--regime TAG27=TAG42+TAG43+TAG46` (componente 1 na linha principal com `MapaEstados`; 2..N em `TagsRegimesComponentesIa`) e `--regime-mapa "TAG42=2:2;*:0"`. Sem a opção, `+` e `--regime-mapa` são recusados (código 2) e o provider é construído como antes. Recusa TAG60–TAG81 em qualquer componente, componente ausente do CSV, repetido ou igual à tag analisada, e mapa inválido ou de tag que não é componente. Coluna `chave_regime` (de `BaselineEfetivo.RegimeKey`) só com a opção; no log, cobertura por chave no treino e na primeira janela móvel, com valores fora do mapa. 11 testes novos (parse, rótulo nas posições 1–3, recusas, 1 componente = golden RC-2 + coluna vazia, golden novo `replay_bombas_regime_combinado.csv` sem/com `HistoricoCausal`, cobertura no log). Mutação (coluna sempre vazia): os 2 goldens novos falham. Ferramenta 44/44; `Compare-Replay.ps1`: **0 diferenças em 12 execuções**, sem e com `-HistoricoCausal`; suíte completa **1010/1010**. Ver `PLANO_REGIME_COMBINADO.md` §6.3, RC-10 | `tools/Cp300OfflineReplay/` + testes | `tools/Cp300OfflineReplay/` + testes | sem a opção, saída idêntica; TAG60–81 recusada em qualquer componente | RC-8, RC-9 | não (ferramenta) |
 | RC-11 | ⚠️ **Aprovada com ressalvas (2026-11-16).** ✅ **Decisão da responsável (2026-11-16): 3 componentes** (estado da própria bomba, estado da outra bomba e TAG46), com os mapas de §6.2 (`PLANO_REGIME_COMBINADO.md` §7.9). Replay com `--regime-combinado --historico-causal` sobre `dados/cp300_09a13nov.csv` em 5 cenários (preset 1, madrugada de 11/11, preset 6, 18 h normais de 12/11 e preset 3 de 13/11), com 3 componentes (`combr`) e 2 componentes (`comb2r`): 10 execuções, 0 erros e 0 divergências.<br>**(1)** `Compare-Replay.ps1`: 0 diferenças em 12 execuções, sem e com `-HistoricoCausal`.<br>**(2)** Equivalência: 0 linhas diferentes em 8 comparações (`rc0_*_combs`/`comb`, `p3_combs`, `p3b_combs`).<br>**(3)** Metas de §3.1 atendidas: B-01 no preset 1 = 4; B-01 na madrugada = **30 (no limite)**; B-02 no failover = 0; TAG29 com 1º alarme às 15:32 e 0 antes da falha. **Fallbacks por poucos pontos: 174 minutos-tag nas bombas (72 com alarme)**, sempre na 1ª noite com 380 depois de um rodízio: 11/11 00:43–00:45 (9, B-01) e 13/11 00:47–01:12 (63, B-02; classe com 14–29 pontos). Mais 12 na TAG26 (transição da válvula). Foram para o item 24.<br>**(4)** TAG29 às 15:33/15:34: chave `TAG42=2\|TAG43=0\|TAG46=450`, média 169,9/170,1, desvio 27,4/27,7, 434/435 pontos, `OperationalRegime`; **confirmada às 15:37 (no limite)**.<br>**(5)** Custo do preset 6 em Release: 15,2 s com a chave desligada (`combs`) contra 16,4 s ligada (`combr`), +8 %, dentro da variação. I/O (3 consultas por tag) não medido.<br>**Com × sem set-point:** total 830 × 1.028; preset 3 com 5 × 4 de 7 falhas e 37 × 62 falsos; sem set-point falham B-01 no preset 1 (6) e B-02 no failover (40). Nas madrugadas, cada um ganha numa: 11/11 74 × 58; 13/11 113 × 110, com a B-01 16 × 78. Recomendação: 3 componentes. Ver `PLANO_REGIME_COMBINADO.md` §7.<br>**Escopo original:** Equivalência com a etapa 0, metas de §3.1, critério da TAG29 e custo. **Acrescentado em 2026-11-13 (saída da RC-0): antes de decidir os componentes, comparar o regime combinado com e sem set-point.** São 2 componentes (própria bomba e outra bomba, equivale a `comb`) contra 3 (mais TAG46, equivale a `combs`), de dia (preset 1 e preset 6) e de madrugada, nos CSVs de 10–11/11 e de 09–13/11. Medir: alarmes da B-01 e da B-02, falsos fora da falha, failover do preset 6, TAG29 e `origem_baseline = Global`. **Motivo:** com a noite anterior, `comb` teve menos alarmes na madrugada (58 contra 74; B-01 0 contra 30). Mas o set-point ainda foi necessário para a B-02 no failover do preset 6 (40 → 0) (`PLANO_REGIME_COMBINADO.md` §5.7.4). A escolha não exige código: a RC-10 aceita N componentes. Os fallbacks por poucos pontos que sobrarem vão para o item 24 | nenhum código; resultado em `PLANO_REGIME_COMBINADO.md` §7 | regressão byte a byte; mesmas decisões que `e0_*_combs` (3 componentes) e `e0_*_comb` (2 componentes); **TAG29 com detecção confirmada até 15:37 no preset 6** (decisão (a), §5.6.2); se depois, documentar a causa e parar; **tabela com e sem set-point (dia e madrugada) e decisão dos componentes registrada pela responsável antes da RC-12** | RC-0, RC-1, RC-10 | não |
-| RC-12 | ⏳ **NÃO aprovada (2026-11-16).** Por decisão da responsável, fica para **depois da tarefa 6** (cadência do ciclo) e **da tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25). Componentes: os 3 decididos na RC-11 (`PLANO_REGIME_COMBINADO.md` §7.9).<br>**[17/11, proposta da tarefa 37, não aprovada]:** o cadastro dos componentes e mapas passaria a ser feito pela tela do IAFront (37-D5 a D7, sempre salvo inativo), e não direto no banco. A RC-12 fica só com a ativação. **Atenção [código]:** uma linha com `Ativo = true` e a chave desligada aplica só o componente 1, sem mapa.<br>Ativação no ambiente de teste do PK2 | banco e configuração do PK2 | `RegimeKey` no diagnóstico durante presets 1 e 6; alarmes na ordem do replay; tempo de ciclo com 3 consultas por tag de bomba; validação no simulador, não em planta | RC-11 + tarefas 6, 27 e **35** (P43: banco com a migration RC-5; **35.1 feita em 17/11**, falta a 35.2) + aprovação | **sim** |
+| RC-12 | ⏳ **NÃO aprovada (2026-11-16).** Por decisão da responsável, fica para **depois da tarefa 6** (cadência do ciclo) e **da tarefa 27** (retreino do perfil do PK2). Será feita numa **sessão acompanhada**, junto com a ativação da chave `AnomalyDetection:HistoricoCausal` (tarefa 25). Componentes: os 3 decididos na RC-11 (`PLANO_REGIME_COMBINADO.md` §7.9).<br>**[17/11, segunda rodada, decisão da responsável]:** a RC-12 **deixa de depender da 6.1–6.3** (pausadas). Da tarefa 6, o pré-requisito passa a ser a **6.0b (feita)**, com o **`HistoricoCausal` ligado** na sessão (e o reuso do histórico, em Development). Isso substitui o pré-requisito "tarefa 6" do `PLANO_REGIME_COMBINADO.md` §7.9. Ensaio antes da demo (37-D8); ativação na demo só se o ensaio passar. **Atenção [inferência, não medido]:** as 3 consultas do regime por tag de bomba são síncronas [código]; com ~4 s por requisição, o ciclo do PK2 pode ir de ~61 s para ~140 s (~3,5 min por tag). Medir no ensaio (`PLANO_PRODUTO.md` §9.3). **Preparação recomendada: tarefa 38** (18 → 3 requisições por ciclo, buscando cada tag de regime uma vez por ciclo e por cliente). Pré-requisitos revistos também em `PLANO_REGIME_COMBINADO.md` §7.9.1.<br>**[17/11, proposta da tarefa 37, não aprovada]:** o cadastro dos componentes e mapas passaria a ser feito pela tela do IAFront (37-D5 a D7, sempre salvo inativo), e não direto no banco. A RC-12 fica só com a ativação. **Atenção [código]:** uma linha com `Ativo = true` e a chave desligada aplica só o componente 1, sem mapa.<br>Ativação no ambiente de teste do PK2 | banco e configuração do PK2 | `RegimeKey` no diagnóstico durante presets 1 e 6; alarmes na ordem do replay; tempo de ciclo com 3 consultas por tag de bomba; validação no simulador, não em planta | RC-11 + ~~tarefas 6,~~ **6.0b (feita) + `HistoricoCausal` ligado (25)** + 27 e **35** (P43: banco com a migration RC-5; **35.1 e 35.2 feitas em 17/11**) + ensaio da 37-D8 + aprovação | **sim** |
