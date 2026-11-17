@@ -15,7 +15,8 @@ export function settings(env: Env) {
   if (!/^[+-](0\d|1[0-4]):[0-5]\d$/.test(sourceOffset)) throw new Error('Offset inválido.');
   return { target, key, public: {
     client: env.MONITOR_CLIENT || 'PK2', pollMs: integer(env.MONITOR_POLL_MS, 2000, 1000),
-    historyMs: integer(env.MONITOR_HISTORY_MS, 15000, 5000),
+    // 34.4 (P42): padrão de 60 s (era 15 s); o gráfico tem 1 ponto por minuto.
+    historyMs: integer(env.MONITOR_HISTORY_MS, 60000, 5000),
     staleMs: integer(env.MONITOR_STALE_MS, 180000, 10000), sourceOffset,
     diagnosticsConfigured: Boolean(key), apiOrigin: target.origin,
   } };
@@ -45,8 +46,35 @@ export function upstreamPath(url: URL): string | null {
   }
 }
 
+export const TIMEOUT_MS = 12000;
+// 34.4 (P42): o histórico não é abandonado enquanto a IAApi ainda busca no
+// Bridge. A IAApi espera até 60 s por chamada ao Bridge (BridgeHistoricoService)
+// e, com período vazio ou erro do Bridge, faz uma segunda (24 h; 34.3): até
+// 120 s. O proxy só desiste depois disso, e o fechamento da página não cancela
+// a chamada à IAApi (cancelar aqui não cancela o Bridge).
+export const HISTORY_TIMEOUT_MS = 125000;
+type Upstream = { status: number; body?: unknown };
+
 export function createMiddleware(env: Env) {
   const config = settings(env);
+  // 34.4 (P42): no máximo uma consulta de histórico por cliente/tag em curso na
+  // IAApi. Um pedido que chega enquanto a anterior roda espera a mesma resposta.
+  const historyInFlight = new Map<string, Promise<Upstream>>();
+  const callUpstream = async (path: string, signal: AbortSignal, headers: Record<string, string>): Promise<Upstream> => {
+    const response = await fetch(new URL(path, config.target), { method: 'GET', redirect: 'error', signal, headers });
+    return response.ok ? { status: 200, body: await response.json() } : { status: response.status };
+  };
+  const sharedHistory = (path: string) => {
+    let pending = historyInFlight.get(path);
+    if (!pending) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), HISTORY_TIMEOUT_MS);
+      pending = callUpstream(path, controller.signal, {})
+        .finally(() => { clearTimeout(timeout); historyInFlight.delete(path); });
+      historyInFlight.set(path, pending);
+    }
+    return pending;
+  };
   return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     if (!req.url?.startsWith('/monitor-api')) return next();
     const reply = (status: number, body: unknown) => {
@@ -68,17 +96,16 @@ export function createMiddleware(env: Env) {
     if (!path) return reply(404, { error: 'Rota não permitida.' });
     const protectedRoute = path.startsWith('/api/intelligence-lab/');
     if (protectedRoute && !config.key) return reply(404, { error: 'Diagnósticos não configurados no monitor.' });
+    const history = url.pathname === '/monitor-api/history';
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = history ? undefined : setTimeout(() => controller.abort(), TIMEOUT_MS);
     const abort = () => { if (!res.writableEnded) controller.abort(); };
-    res.on('close', abort);
+    if (!history) res.on('close', abort);
     try {
-      const response = await fetch(new URL(path, config.target), {
-        method: 'GET', redirect: 'error', signal: controller.signal,
-        headers: protectedRoute ? { 'X-Intelligence-Lab-Key': config.key } : {},
-      });
-      if (!response.ok) return reply(response.status, { error: `IAApi respondeu HTTP ${response.status}.` });
-      let body: unknown = await response.json();
+      const response = history ? await sharedHistory(path)
+        : await callUpstream(path, controller.signal, protectedRoute ? { 'X-Intelligence-Lab-Key': config.key } : {});
+      if (response.status !== 200) return reply(response.status, { error: `IAApi respondeu HTTP ${response.status}.` });
+      let body: unknown = response.body;
       // Reduzir transferência ao navegador. Em decisions a IAApi já filtra por
       // cliente (34.2); o filtro fica como defesa, para IAApi sem o parâmetro.
       if (Array.isArray(body) && ['tags', 'decisions'].some(s => url.pathname.endsWith('/' + s))) {
@@ -87,7 +114,7 @@ export function createMiddleware(env: Env) {
       }
       reply(200, body);
     } catch {
-      reply(502, { error: 'IAApi inacessível ou consulta excedeu 12 segundos.' });
+      reply(502, { error: `IAApi inacessível ou consulta excedeu ${(history ? HISTORY_TIMEOUT_MS : TIMEOUT_MS) / 1000} segundos.` });
     } finally {
       clearTimeout(timeout); res.off('close', abort);
     }

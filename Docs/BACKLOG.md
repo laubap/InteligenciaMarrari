@@ -1456,7 +1456,7 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
 - **Rollback:** desligar a chave e reiniciar a API (o detector deixa de ser registrado); no código, reverter os commits de cada passo.
 
 
-### 34. (Robustez, demo) LiveMonitor sem sobrecarregar o Bridge e o banco (P42) — ⏳ **EM ANDAMENTO: 34.1 e 34.2 concluídas em 2026-11-17 (sem commit); faltam 34.3, 34.4 e a sessão de aceite; PRIORIDADE ALTA: antes da demo e das sessões 6.0b, 6.1 e 6.2**
+### 34. (Robustez, demo) LiveMonitor sem sobrecarregar o Bridge e o banco (P42) — ⏳ **EM ANDAMENTO: 34.1 a 34.4 concluídas em 2026-11-17 (sem commit); falta a sessão de aceite; PRIORIDADE ALTA: antes da demo e das sessões 6.0b, 6.1 e 6.2**
 - **Problema** (P42; mecanismo confirmado no código, efeito confirmado em log em 16/11):
   - Para um gráfico de 2 h, o `TagHistoricoController` busca **24 h** no Bridge por tag. O LiveMonitor pede isso a cada 15 s, 3 de cada vez. O proxy desiste em 12 s, mas a busca síncrona continua: foram **até 12 simultâneas**, com 36,6 s em média e 4 timeouts.
   - `GET /api/anomalias` devolve **todas** as decisões de todos os clientes e faz **uma consulta de feedback por linha** (~3.200 por chamada). O LiveMonitor chama a cada 2 s; foram ~958 mil consultas em 19 min.
@@ -1524,26 +1524,66 @@ Detalha a tarefa **10** (P12) e trata o P07 para esses dois casos **sem mexer no
       - `desde` é comparado como texto no SQLite, no formato do EF (`yyyy-MM-dd HH:mm:ss.FFFFFFF`). Não foi verificado se o banco real tem linhas gravadas fora do EF, em outro formato **[a validar]**. Se tiver, a IAApi pode não devolvê-las, e o filtro local do export não recupera o que não veio.
       - Linha gravada mais de 5 min depois do seu `DataDeteccao` só chega ao LiveMonitor quando ele for reaberto. Hoje `DataDeteccao = DateTime.Now` logo antes do `SaveChanges` (`AnomaliaHistoricoService`).
       - Efeito em sessão real (consultas por chamada, tempo do monitor) **não medido**: é o aceite de sessão desta tarefa.
-  - **34.3 Histórico do controller só no período pedido:**
+  - **34.3 Histórico do controller só no período pedido:** ✅ **concluída em 2026-11-17 (sem commit)**
     - `TagHistoricoController` usa `BuscarHistoricoPorPeriodo(cliente, tag, agora − horas, agora)` no lugar das 24 h;
     - preservar o formato da resposta, a ordem, o filtro de `NaN`/infinito e o fallback "últimas 20 leituras";
     - se o período vier vazio (hoje `BuscarHistoricoPorPeriodo` lança exceção para trecho vazio, ver 6.1), cair no caminho atual de 24 h, com o mesmo resultado de hoje;
     - conferir que o período vai ao Bridge com a mesma convenção de hora (`DateTime.Now`, sem fuso) já usada pelo `OperationalRegimeBaselineProvider`;
     - esperado: ~120 pontos em vez de ~1.437 por chamada. O ganho de tempo no Bridge fica a medir (P10: pedaço de 2 h em 1–5 s com o Bridge livre);
     - o `TagTendenciaController` fica como está (o LiveMonitor não o chama).
-  - **34.4 LiveMonitor sem abandonar buscas no Bridge:**
+    - **Feito (confirmado no código e em teste):**
+      - `TagHistoricoController` primeiro chama `BuscarHistoricoPorPeriodo(cliente, tag, agora − horas, agora)`. Depois aplica o filtro de `NaN`/infinito, a ordem e o mesmo corte `DateTime.Now − horas` de antes, calculado depois da busca, como antes. O tipo anônimo da resposta e a ordem dos campos não mudaram.
+      - **Hora:** `agora` é `DateTime.Now` com `Kind = Unspecified`. Assim o formato `"O"` vai ao Bridge sem offset (`2026-11-17T11:00:00.0000000`), como as datas vindas do próprio Bridge que o `OperationalRegimeBaselineProvider` repassa. Com `Kind = Local`, a URL levaria `-03:00`. O Bridge (`PowerServerCurrentTagsPropGet/Program.cs`, só leitura) lê com `DateTime.TryParse` e, na mesma máquina, consulta o mesmo intervalo nos dois casos.
+      - **Volta ao caminho de antes** (`BuscarHistorico`, 24 h), **sem mudança nele**, quando:
+        - `horas ≤ 0`, ou maior que `Bridge:HorasHistorico` (lida como no `BridgeHistoricoService`, padrão 24). O caminho de antes nunca mostrava mais do que essa janela. Também cobre `horas` enorme, que antes dava 400;
+        - o período falha com exceção que não seja de transporte. Inclui o trecho vazio (`InvalidOperationException`) e o HTTP de erro do Bridge (ex.: o 500 "open operation … 00:00:03" de 16/11), que antes também ia para as 24 h;
+        - nada sobra depois do corte. Aí vale o "últimas 20 leituras" das 24 h, como antes.
+      - **Tempo limite ou Bridge inacessível** (`TaskCanceledException`/`HttpRequestException` como exceção interna): **não** tenta as 24 h, porque usaria o mesmo transporte e só dobraria a espera. Devolve o mesmo 400 de antes, com a mesma mensagem.
+      - `IHistoricoService`, `BridgeHistoricoService`, o `TagTendenciaController` e o laço do monitor não mudaram. O construtor do controller ganhou `IConfiguration`, que já está na DI.
+      - O IAFront (`TendenciaAnomaliaCard.tsx`) chama `/tags/historico?tagName=…`, outra rota, sem o cliente no caminho. Não passa por este controller.
+    - **Testes** (`IAApi.Tests/TagHistoricoPeriodoTests.cs`, **130/130**, offline):
+      - **referência congelada:** cópia do `TagHistoricoController` do commit `45f17fa`, rodada sobre os mesmos dados;
+      - **120 combinações** (5 conjuntos × 8 valores de `horas` × 3 valores de `Bridge:HorasHistorico`): status e JSON iguais aos de antes. Conjuntos: 30 h com `NaN`/±infinito; período vazio; últimas 2 h só com `NaN`; nada nas últimas 25 h, com exceção ou com lista vazia (404). `horas`: 2, 1, 6, 24, 25, 0, −3 e `int.MaxValue`. `HorasHistorico`: ausente, 12 e inválido;
+      - nas mesmas combinações, as chamadas: **1 período de exatamente `horas` e nenhuma de 24 h** quando o período tem leitura válida; 1 + 1 quando não tem; só a de 24 h com `horas` fora do intervalo;
+      - período sem fuso (`Kind = Unspecified`), terminando no momento da chamada; resposta de 2 h com 100–120 pontos;
+      - timeout e conexão recusada: o mesmo 400 de antes, **sem** a segunda busca; HTTP 500 do Bridge no período: cai nas 24 h, com o mesmo 200;
+      - um `IHistoricoService` que devolve leituras fora do período: o mesmo corte de antes;
+      - **com o `BridgeHistoricoService` real** e o `FakeBridgeHandler` (transporte falso, nada sai do processo): **1 requisição** `/historico?tagName=…&inicio=…&fim=…`, sem `horas` e sem offset, com 2 h entre `inicio` e `fim` (antes: `?tagName=…&horas=24`), e o mesmo JSON de antes. Também o período vazio (2 requisições, a 2ª com `horas=24`), o timeout (1 requisição) e o HTTP 500 no período;
+      - **mutação** (7 alterações no controller, cada uma desfeita em seguida): `Kind` Local → 2 testes falham; sem a volta às 24 h → 26; volta às 24 h também no timeout → 3; sem o teto de `Bridge:HorasHistorico` → 20; sem o corte depois da busca → 1; sem o filtro de `NaN` no período → 23. Um corte 1 min mais cedo não muda o resultado (o período já começa depois dele), e nenhum teste falha.
+    - **Limitações:**
+      - Ganho no Bridge **não medido**: são ~120 pontos em vez de ~1.437 por chamada, mas o tempo com o Bridge real é o aceite de sessão.
+      - Leitura com data posterior ao `agora` da IAApi (relógios diferentes entre IAApi e Bridge) ficaria de fora no período e entraria nas 24 h. Na mesma máquina não deve ocorrer **[a validar]**.
+      - Com período vazio ou HTTP de erro, são duas buscas (2 h + 24 h), até 2 × 60 s. O proxy do LiveMonitor espera por isso (34.4).
+  - **34.4 LiveMonitor sem abandonar buscas no Bridge:** ✅ **concluída em 2026-11-17 (sem commit)**
     - na rota de histórico, timeout do proxy ≥ o da IAApi (60 s; sugestão de 65 s), para não disparar uma nova busca da mesma tag enquanto a anterior roda;
     - intervalo padrão de histórico maior (sugestão de 60 s; o gráfico tem 1 ponto/min);
     - testes em `tests/proxy.test.ts` e no *polling*.
     - **Fora do escopo:** cancelamento de ponta a ponta no `BridgeHistoricoService` (síncrono; mexe no histórico de toda leitura; ver tarefa 22, passo 3).
-- **Arquivos:** `Controllers/AnomaliaController.cs`, `Services/FeedbackAnomaliaAnaliseService.cs`, `Controllers/TagHistoricoController.cs`, `tools/IAApi.LiveMonitor/server/proxy.ts`, `src/api.ts`, `src/useMonitor.ts` (se preciso), `tools/Cp300Export/Export-AnomaliasIaReal.ps1` e README; testes novos em `IAApi.Tests/` e `tools/IAApi.LiveMonitor/tests/`.
+    - **Mudou na execução:**
+      - **timeout de 125 s em vez de 65 s:** com a 34.3, a IAApi pode fazer duas buscas no Bridge (período vazio ou HTTP de erro → 24 h), de até 60 s cada. Para o proxy só desistir depois da IAApi, ele espera 2 × 60 s + 5 s;
+      - **uma busca por tag no proxy**, além do timeout: se um pedido de histórico de um cliente/tag chega enquanto outro está em curso na IAApi, ele espera a mesma resposta, sem nova chamada. O fechamento da página não cancela mais a chamada de histórico à IAApi (cancelar no proxy não cancelava o Bridge; só abria caminho para uma busca repetida). Isso cobre também troca de seleção de tags, recarga da página e duas abas abertas.
+    - **Feito (confirmado no código e em teste):**
+      - `server/proxy.ts`: rota de histórico com `HISTORY_TIMEOUT_MS = 125000` e a busca única por caminho (`historyInFlight`). As outras rotas continuam com 12 s (`TIMEOUT_MS`) e são canceladas quando a página fecha. A mensagem do 502 diz o tempo da rota.
+      - Padrão de `MONITOR_HISTORY_MS`: **60 s** (era 15 s); o mínimo de 5 s continua. Para voltar ao de antes, `MONITOR_HISTORY_MS=15000` no `.env`.
+      - Navegador (`useMonitor`, `polling.ts`) sem mudança: o ciclo do histórico só começa o próximo depois de terminar, com até 3 tags em paralelo.
+      - `README.md` do LiveMonitor atualizado (tabela de variáveis e parágrafo do histórico).
+      - **Cancelamento de ponta a ponta continua fora do escopo** (ver acima).
+    - **Testes** (`npx vitest run`): **39/39** (eram 32) e `tsc --noEmit` sem erro. Novos:
+      - `proxy.test.ts`: padrão de 60 s e mínimo de 5 s; histórico **não** aborta aos 120 s e aborta aos 125 s (502 com "125 segundos"); decisões continuam abortando em 12 s; 2 pedidos da mesma tag → **1** chamada à IAApi e a mesma resposta, outra tag → outra chamada, e um pedido depois do fim → nova chamada; página fechada → chamada à IAApi **não** abortada, e o pedido seguinte da mesma tag se junta a ela; decisões continuam abortadas quando a página fecha;
+      - `polling.test.ts`: 12 tags com busca de 36,6 s (a média de 16/11), 10 min de *polling*: no máximo **3** simultâneas e **nenhuma** tag repetida enquanto a anterior roda;
+      - **mutação** (cada uma desfeita em seguida): timeout de 65 s → 1 teste falha; sem a busca única → 2; fechar a página volta a cancelar a chamada (código de antes, com 125 s) → 3; padrão de 15 s → 1.
+    - **Limitações:**
+      - A busca única vale por processo do LiveMonitor. Dois LiveMonitors abertos (ou outro cliente da rota) ainda somam buscas.
+      - Uma resposta da IAApi que demore mais de 125 s (não deveria, pelos timeouts de 60 s) seria abandonada como antes.
+      - Com o padrão de 60 s, o gráfico e o "último valor recebido do histórico" atualizam a cada ~1 min em vez de ~15 s. As decisões continuam a cada 2 s.
+- **Arquivos:** `Controllers/AnomaliaController.cs`, `Services/FeedbackAnomaliaAnaliseService.cs`, `Controllers/TagHistoricoController.cs`, `tools/IAApi.LiveMonitor/server/proxy.ts`, `src/api.ts`, `src/useMonitor.ts` (se preciso), `tools/Cp300Export/Export-AnomaliasIaReal.ps1` e README; testes novos em `IAApi.Tests/` e `tools/IAApi.LiveMonitor/tests/`. **[17/11] 34.3–34.4:** `Controllers/TagHistoricoController.cs`, `tools/IAApi.LiveMonitor/server/proxy.ts` e `README.md`; testes em `IAApi.Tests/TagHistoricoPeriodoTests.cs` (novo), `tests/proxy.test.ts` e `tests/polling.test.ts`. `src/` não mudou.
 - **Não muda:** a decisão de anomalia, o laço do monitor, `IHistoricoService`, `BridgeHistoricoService` e o contrato HTTP quando os parâmetros novos não são enviados.
 - **Aceite:**
   - **offline:**
     - ✅ (17/11) JSON de `GET /api/anomalias` igual ao atual numa base de teste com feedbacks (comparação de ouro);
     - ✅ (17/11) número de comandos SQL por chamada constante (≤ 2), sem crescer com o número de linhas, contado por *interceptor* ou *logger* no teste;
-    - histórico com 1 chamada `BuscarHistoricoPorPeriodo` de ~2 h e nenhuma de 24 h, com a mesma resposta numa base fixa, inclusive período vazio;
-    - testes do LiveMonitor; suíte completa (isolamento conferido antes); `Compare-Replay.ps1` com 0 diferenças, como sanidade. ✅ **Para 34.1–34.2 (17/11):** LiveMonitor 32/32; suíte completa **1168/1168**; `Compare-Replay.ps1` **0 diferenças em 12 execuções, sem e com `-HistoricoCausal`**;
+    - ✅ (17/11) histórico com 1 chamada `BuscarHistoricoPorPeriodo` de ~2 h e nenhuma de 24 h, com a mesma resposta numa base fixa, inclusive período vazio;
+    - testes do LiveMonitor; suíte completa (isolamento conferido antes); `Compare-Replay.ps1` com 0 diferenças, como sanidade. ✅ **Para 34.1–34.2 (17/11):** LiveMonitor 32/32; suíte completa **1168/1168**; `Compare-Replay.ps1` **0 diferenças em 12 execuções, sem e com `-HistoricoCausal`**. ✅ **Para 34.3–34.4 (17/11):** LiveMonitor **39/39**; suíte completa **1298/1298** (1168 + 130 da 34.3); `Compare-Replay.ps1` **0 diferenças em 12 execuções, sem e com `-HistoricoCausal`**;
   - **sessão** (com aprovação): 30 min com o LiveMonitor aberto nas 12 tags e PERF_DIAG.
     - `Preparation.History` do monitor dentro de ±20 % do valor sem o LiveMonitor (4,9 s em 16/11);
     - 0 timeouts; histórico do LiveMonitor com ≤ 3 buscas simultâneas no Bridge;

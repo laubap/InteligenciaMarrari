@@ -35,7 +35,7 @@ Edite `.env` e reinicie o monitor:
 | `IAAPI_URL` | `http://localhost:5145` | Origem HTTP(S) da IAApi; sem usuário/senha na URL |
 | `MONITOR_CLIENT` | `PK2` | Cliente consultado |
 | `MONITOR_POLL_MS` | `2000` | Intervalo entre o fim de uma consulta de decisões e o início da próxima; mínimo 1 s |
-| `MONITOR_HISTORY_MS` | `15000` | Histórico do Bridge, mais caro; mínimo 5 s |
+| `MONITOR_HISTORY_MS` | `60000` | Histórico do Bridge, mais caro; mínimo 5 s. Era 15000 até a tarefa 34.4; o gráfico tem 1 ponto por minuto |
 | `MONITOR_STALE_MS` | `180000` | Limite para considerar leitura ou análise antiga |
 | `MONITOR_SOURCE_OFFSET` | `-03:00` | Offset das datas da API/Bridge que chegam sem fuso |
 | `IAAPI_DIAGNOSTICS_KEY` | vazio | Opcional, chave **já existente** no Intelligence Lab |
@@ -100,7 +100,7 @@ Referências relativas à raiz da IAApi:
 
 **Não há garantia de uma análise exata por minuto.** Para cada tag, o intervalo do serviço é aproximadamente **60 s + tempo de processamento de todas as tags**, incluindo chamadas ao Bridge, histórico e pós-processamento. Uma mudança no CP300 pode esperar quase um ciclo completo antes de ser observada, além do tempo de aquisição/detecção. O polling acrescenta normalmente até cerca de **2 s + tempo de resposta HTTP** após a persistência, sem sobrepor consultas. Atrasos da aba em segundo plano/suspensão do computador também aumentam esse tempo.
 
-O histórico é consultado em ciclo separado a cada 15 s + duração das consultas, com até 3 tags em paralelo; assim, histórico lento não bloqueia consulta de decisões. Seu endpoint busca inicialmente a janela configurada no Bridge (padrão 24 h no serviço), mesmo com `horas=2`, antes de filtrar a resposta. A consulta do monitor tem timeout de 12 s; a IAApi pode continuar trabalhando em uma chamada síncrona ao Bridge até o próprio timeout, pois esse caminho não propaga o cancelamento HTTP.
+O histórico é consultado em ciclo separado a cada 60 s (`MONITOR_HISTORY_MS`) + duração das consultas, com até 3 tags em paralelo; assim, histórico lento não bloqueia consulta de decisões. Com `horas=2`, a IAApi busca no Bridge só as últimas 2 h (tarefa 34.3); se esse trecho vier vazio ou o Bridge responder com erro, ela cai na janela configurada (padrão 24 h) e responde como antes. A IAApi não propaga o cancelamento HTTP até o Bridge (chamada síncrona, até 60 s cada, no máximo duas). Por isso, na rota de histórico, o proxy espera até 125 s e não cancela a chamada à IAApi quando a página fecha; enquanto uma busca de uma tag está em curso, um novo pedido da mesma tag espera a mesma resposta, sem nova chamada à IAApi (tarefa 34.4). As outras rotas continuam com timeout de 12 s e são canceladas quando a página fecha.
 
 Tempos apresentados: leitura → conclusão/registro; conclusão/registro → **primeira recepção da decisão** no dashboard; leitura → recepção. O primeiro recebimento é preservado na deduplicação. Em registros carregados ao abrir a tela, essa diferença inclui a idade histórica, não mede apenas latência de rede. Sem timestamp da leitura, essas diferenças ficam indisponíveis. Diferenças negativas indicam possível dessincronização de relógios. Datas sem offset usam a configuração explícita `MONITOR_SOURCE_OFFSET`.
 

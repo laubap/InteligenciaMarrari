@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createMiddleware, settings, upstreamPath } from '../server/proxy';
+import { createMiddleware, HISTORY_TIMEOUT_MS, settings, TIMEOUT_MS, upstreamPath } from '../server/proxy';
 
 afterEach(() => vi.unstubAllGlobals());
 const key = 'test-only-secret-not-a-real-api-key';
@@ -67,5 +67,94 @@ describe('proxy local somente leitura', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('private details')));
     const result = await request('/monitor-api/decisions');
     expect(result.status).toBe(502); expect(result.body).not.toContain('private details');
+  });
+});
+
+// 34.4 (P42): o histórico não é abandonado enquanto a IAApi ainda busca no Bridge.
+describe('histórico sem buscas abandonadas (34.4)', () => {
+  afterEach(() => vi.useRealTimers());
+  const open = (middleware: ReturnType<typeof createMiddleware>, path: string) => {
+    const req = { url: path, method: 'GET', headers: { host: '127.0.0.1:5173' }, socket: { remoteAddress: '127.0.0.1' } } as unknown as IncomingMessage;
+    const state = { status: 0, body: '' };
+    const res = Object.assign(new EventEmitter(), { writableEnded: false,
+      writeHead: (s: number) => { state.status = s; }, end: (s: string) => { state.body = s; res.writableEnded = true; } });
+    const done = middleware(req, res as unknown as ServerResponse, () => {});
+    return { state, done, close: () => res.emit('close') };
+  };
+  const pendingFetch = () => {
+    const calls: { url: string; signal: AbortSignal; resolve: (body: unknown) => void }[] = [];
+    const fetch = vi.fn((url: URL, init: RequestInit) => new Promise((resolve, reject) => {
+      init.signal!.addEventListener('abort', () => reject(new Error('aborted')));
+      calls.push({ url: String(url), signal: init.signal!, resolve: body => resolve({ ok: true, json: async () => body }) });
+    }));
+    vi.stubGlobal('fetch', fetch);
+    return calls;
+  };
+  it('padrão do intervalo de histórico é 60 s, e o mínimo continua 5 s', () => {
+    expect(settings({}).public.historyMs).toBe(60000);
+    expect(settings({ MONITOR_HISTORY_MS: '15000' }).public.historyMs).toBe(15000);
+    expect(settings({ MONITOR_HISTORY_MS: '1000' }).public.historyMs).toBe(5000);
+  });
+  it('espera a IAApi além dos 12 s e só desiste depois dela (2 × 60 s + margem)', async () => {
+    vi.useFakeTimers();
+    const calls = pendingFetch();
+    const history = open(createMiddleware({}), '/monitor-api/history?client=PK2&tag=PK2.TAG31');
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(calls[0].signal.aborted).toBe(false);
+    expect(HISTORY_TIMEOUT_MS).toBeGreaterThanOrEqual(2 * 60000);
+    await vi.advanceTimersByTimeAsync(HISTORY_TIMEOUT_MS - 120000);
+    await history.done;
+    expect(calls[0].signal.aborted).toBe(true);
+    expect(history.state.status).toBe(502);
+    expect(JSON.parse(history.state.body).error).toContain('125 segundos');
+  });
+  it('as outras rotas continuam desistindo em 12 s', async () => {
+    vi.useFakeTimers();
+    const calls = pendingFetch();
+    const decisions = open(createMiddleware({}), '/monitor-api/decisions?client=PK2');
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await decisions.done;
+    expect(calls[0].signal.aborted).toBe(true);
+    expect(JSON.parse(decisions.state.body).error).toContain('12 segundos');
+  });
+  it('uma busca por tag: pedido repetido espera a mesma resposta, sem nova chamada à IAApi', async () => {
+    const calls = pendingFetch();
+    const middleware = createMiddleware({});
+    const first = open(middleware, '/monitor-api/history?client=PK2&tag=PK2.TAG31');
+    const second = open(middleware, '/monitor-api/history?client=PK2&tag=PK2.TAG31');
+    const other = open(middleware, '/monitor-api/history?client=PK2&tag=PK2.TAG33');
+    await Promise.resolve();
+    expect(calls.map(c => new URL(c.url).pathname)).toEqual(['/api/tags/historico/PK2/PK2.TAG31', '/api/tags/historico/PK2/PK2.TAG33']);
+    calls[0].resolve({ tagName: 'PK2.TAG31', historico: [] }); calls[1].resolve({ tagName: 'PK2.TAG33', historico: [] });
+    await Promise.all([first.done, second.done, other.done]);
+    expect([first.state.status, second.state.status, other.state.status]).toEqual([200, 200, 200]);
+    expect(first.state.body).toBe(second.state.body);
+    // Terminada a busca, o próximo ciclo chama a IAApi de novo.
+    const next = open(middleware, '/monitor-api/history?client=PK2&tag=PK2.TAG31');
+    await Promise.resolve();
+    expect(calls).toHaveLength(3);
+    calls[2].resolve({ historico: [] }); await next.done;
+  });
+  it('fechar a página não cancela a busca na IAApi; o pedido seguinte da mesma tag se junta a ela', async () => {
+    const calls = pendingFetch();
+    const middleware = createMiddleware({});
+    const abandoned = open(middleware, '/monitor-api/history?client=PK2&tag=PK2.TAG31');
+    await Promise.resolve();
+    abandoned.close();
+    expect(calls[0].signal.aborted).toBe(false);
+    const again = open(middleware, '/monitor-api/history?client=PK2&tag=PK2.TAG31');
+    await Promise.resolve();
+    expect(calls).toHaveLength(1);
+    calls[0].resolve({ historico: [] });
+    await Promise.all([abandoned.done, again.done]);
+    expect(again.state.status).toBe(200);
+  });
+  it('decisões continuam canceladas quando a página fecha', async () => {
+    const calls = pendingFetch();
+    const decisions = open(createMiddleware({}), '/monitor-api/decisions?client=PK2');
+    await Promise.resolve();
+    decisions.close();
+    await decisions.done;
+    expect(calls[0].signal.aborted).toBe(true);
   });
 });
